@@ -26,6 +26,13 @@ tauri-build = "2"
 tempfile = "3"
 uuid = { version = "1", features = ["v4"] }
 windows-sys = "0.61"
+# Used by owlbum-fixtures to write its synthetic albums.
+image = { version = "0.25", default-features = false }
+png = "0.18"
+zune-core = "0.5"
+zune-jpegxl = "0.5"
+jxl-oxide = "0.12"
+nom-exif = "3.8"
 
 [workspace.lints.rust]
 unsafe_code = "deny"
@@ -40,3 +47,32 @@ debug = "line-tables-only"
 
 [profile.dev.package."*"]
 debug = false
+
+# The fixture generator paints and encodes pictures. Unoptimised it takes
+# seconds per album, and many tests make one. Optimising changes no bytes.
+[profile.dev.package.owlbum-fixtures]
+opt-level = 3
+
+[profile.dev.package.image]
+opt-level = 3
+
+[profile.dev.package.png]
+opt-level = 3
+
+[profile.dev.package.fdeflate]
+opt-level = 3
+
+[profile.dev.package.miniz_oxide]
+opt-level = 3
+
+[profile.dev.package.image-webp]
+opt-level = 3
+
+[profile.dev.package.gif]
+opt-level = 3
+
+[profile.dev.package.color_quant]
+opt-level = 3
+
+[profile.dev.package.zune-jpegxl]
+opt-level = 3

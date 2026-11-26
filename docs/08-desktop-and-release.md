@@ -906,10 +906,11 @@ Tests run locally, on Windows and on Linux under WSL. There are no CI test jobs 
 
 ```text
 cargo run -p owlbum-fixtures -- trip <folder>
-cargo run -p owlbum-fixtures -- large 100000 <folder>
+cargo run -p owlbum-fixtures -- large 100000 <folder> [--seed <n>]
+cargo run -p owlbum-fixtures -- extras <folder>
 ```
 
-The same seed gives the same bytes on Windows and Linux. A test pins the `trip` album's file list and sizes so that an accidental change to the generator is noticed.
+The folder must be missing or empty; the generator never writes over existing files. The same seed gives the same bytes on Windows and Linux. A test pins the `trip` album's file list, sizes and a hash of every byte, so that an accidental change to the generator is noticed. The generator and the image crates it uses are built optimised even in the dev profile (a `trip` album takes about half a second); `large 100000` took 103 seconds on Windows and about 430 MB of disk (mostly file-system overhead: the files average 1.5 KB).
 
 ### Definition of done
 

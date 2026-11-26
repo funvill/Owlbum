@@ -1,11 +1,28 @@
-//! `cargo run -p owlbum-fixtures -- trip <folder>` or
-//! `cargo run -p owlbum-fixtures -- large <count> <folder>`.
+//! `cargo run -p owlbum-fixtures -- trip <folder>`,
+//! `cargo run -p owlbum-fixtures -- large <count> <folder> [--seed <n>]` or
+//! `cargo run -p owlbum-fixtures -- extras <folder>`.
+//! See docs/08-desktop-and-release.md, "Fixtures".
 
 use std::process::ExitCode;
 
+use owlbum_fixtures::cli;
+
 fn main() -> ExitCode {
-    eprintln!(
-        "usage: owlbum-fixtures trip <folder>\n       owlbum-fixtures large <count> <folder>\n\nThe generator is not built yet (roadmap issue 2)."
-    );
-    ExitCode::from(2)
+    let command = match cli::parse(std::env::args().skip(1)) {
+        Ok(c) => c,
+        Err(message) => {
+            eprintln!("{message}");
+            return ExitCode::from(2);
+        }
+    };
+    match cli::run(command) {
+        Ok(line) => {
+            println!("{line}");
+            ExitCode::SUCCESS
+        }
+        Err(e) => {
+            eprintln!("owlbum-fixtures: {e}");
+            ExitCode::FAILURE
+        }
+    }
 }

@@ -10,6 +10,16 @@ authors.workspace = true
 publish = false
 
 [dependencies]
+image = { workspace = true, features = ["jpeg", "png", "gif", "webp", "tiff", "bmp"] }
+png.workspace = true
+zune-core.workspace = true
+zune-jpegxl.workspace = true
+
+[dev-dependencies]
+# Prove the generated files decode with the readers Owlbum uses.
+jxl-oxide.workspace = true
+nom-exif.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

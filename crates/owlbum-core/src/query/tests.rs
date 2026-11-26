@@ -629,6 +629,62 @@ fn locate_finds_every_tile_and_nothing_else() {
     assert_eq!(engine.locate(&r.token, i64::MAX).unwrap(), None);
 }
 
+// ---- query_ids ----
+
+#[test]
+fn ids_match_the_rows_of_the_same_range() {
+    let tmp = tempfile::tempdir().unwrap();
+    let album = album(tmp.path());
+    let names: Vec<String> = (0..20).map(|i| format!("p{i:02}.jpg")).collect();
+    let photos: Vec<P<'_>> = names.iter().map(|n| p(n, None)).collect();
+    add(&album, &photos);
+    let engine = QueryEngine::new();
+    let r = run(&engine, &album, &default_query());
+    let o = Overlay::default();
+    for (offset, limit) in [(0, 3), (9, 2), (18, 5), (20, 5), (500, 5), (0, 0), (0, 20)] {
+        let rows: Vec<i64> = engine
+            .window(&album, &o, &r.token, offset, limit)
+            .unwrap()
+            .into_iter()
+            .map(|r| r.id)
+            .collect();
+        assert_eq!(
+            engine.ids(&r.token, offset, limit).unwrap(),
+            rows,
+            "offset {offset}, limit {limit}"
+        );
+    }
+}
+
+#[test]
+fn ids_have_no_limit_and_leave_out_hidden_photos() {
+    let tmp = tempfile::tempdir().unwrap();
+    let album = album(tmp.path());
+    let names: Vec<String> = (0..700).map(|i| format!("p{i:04}.jpg")).collect();
+    let mut photos: Vec<P<'_>> = names.iter().map(|n| p(n, None)).collect();
+    photos.push(hidden("zz-hidden.jpg", None));
+    let ids = add(&album, &photos);
+    let engine = QueryEngine::new();
+    let r = run(&engine, &album, &default_query());
+    let all = engine.ids(&r.token, 0, u32::MAX).unwrap();
+    assert_eq!(
+        all.len(),
+        700,
+        "more than one window's worth, and not the hidden one"
+    );
+    assert_eq!(all[..500], tile_ids(&engine, &album, &r.token));
+    assert!(!all.contains(&ids[700]));
+}
+
+#[test]
+fn ids_of_a_dropped_token_answer_query_expired() {
+    let tmp = tempfile::tempdir().unwrap();
+    let album = album(tmp.path());
+    small(&album);
+    let engine = QueryEngine::new();
+    assert_eq!(code(engine.ids("q-none", 0, 10)), ErrorCode::QueryExpired);
+}
+
 // ---- keep: the pure rules ----
 
 fn keep(current: Option<(i64, u32)>, anchor: Option<i64>, selection: &[i64]) -> Keep {

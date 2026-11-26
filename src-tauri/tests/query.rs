@@ -58,6 +58,10 @@ fn the_query_commands_without_an_album_answer_no_album() {
             json!({ "token": "q1", "offset": 0, "limit": 10 }),
         ),
         ("query_locate", json!({ "token": "q1", "id": 1 })),
+        (
+            "query_ids",
+            json!({ "token": "q1", "offset": 0, "limit": 10 }),
+        ),
     ] {
         let err = invoke(&window, command, args).unwrap_err();
         assert_eq!(err["code"], "no_album", "{command}");
@@ -88,7 +92,7 @@ fn a_query_with_a_value_not_allowed_answers_bad_query() {
 }
 
 #[test]
-fn run_window_and_locate_work_together() {
+fn run_window_locate_and_ids_work_together() {
     let tmp = tempfile::tempdir().unwrap();
     let (app, window) = app_window();
     open_trip(&app, tmp.path());
@@ -126,6 +130,23 @@ fn run_window_and_locate_work_together() {
     .deserialize()
     .unwrap();
     assert_eq!(missing, Value::Null);
+
+    let ids: Vec<i64> = invoke(
+        &window,
+        "query_ids",
+        json!({ "token": r.token, "offset": 0, "limit": 100_000 }),
+    )
+    .unwrap()
+    .deserialize()
+    .unwrap();
+    assert_eq!(ids, rows.iter().map(|row| row.id).collect::<Vec<_>>());
+    let err = invoke(
+        &window,
+        "query_ids",
+        json!({ "token": "no-such-token", "offset": 0, "limit": 10 }),
+    )
+    .unwrap_err();
+    assert_eq!(err["code"], "query_expired");
 
     let again = run(
         &window,

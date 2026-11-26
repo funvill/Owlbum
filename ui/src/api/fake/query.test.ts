@@ -103,6 +103,19 @@ describe("the fake query commands", () => {
     await expect(fake.invoke("query_locate", { token: r.token, id: 4 })).resolves.toBeNull();
   });
 
+  it("answer the ids of a range, in order, with no limit", async () => {
+    const { fake } = setup();
+    const r = await fake.invoke("query_run", { query: defaultQuery(), keep: null });
+    const rows = await fake.invoke("query_window", { token: r.token, offset: 1, limit: 3 });
+    await expect(fake.invoke("query_ids", { token: r.token, offset: 1, limit: 3 })).resolves.toEqual(
+      rows.map((row) => row.id),
+    );
+    await expect(fake.invoke("query_ids", { token: r.token, offset: 0, limit: 100_000 })).resolves.toHaveLength(r.count);
+    await expect(fake.invoke("query_ids", { token: "q-none", offset: 0, limit: 1 })).rejects.toMatchObject({
+      code: "query_expired",
+    });
+  });
+
   it("settle keep by the four rules and move the revision on changes", async () => {
     const { album, fake } = setup();
     const first = await fake.invoke("query_run", { query: defaultQuery(), keep: null });

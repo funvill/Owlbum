@@ -170,10 +170,13 @@ describe("opening a folder", () => {
     });
     act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
     await bodySays(albumText.lookingForPhotos);
+    expect(screen.queryByRole("search", { name: "Sort and filter" })).toBeNull();
     status = { ...status, photos: 3 };
     act(() => fake.emit("album_changed", { revision: 1, reason: "scan" }));
     expect(await screen.findByRole("region", { name: albumText.photosRegion }, { timeout: 3000 })).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toBeInTheDocument();
+    // The filter bar shows once the album holds photos.
+    expect(screen.getByRole("search", { name: "Sort and filter" })).toBeInTheDocument();
   });
 
   it("does nothing when the folder already open is opened again", async () => {

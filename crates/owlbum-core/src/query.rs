@@ -17,6 +17,7 @@ pub mod arg;
 mod engine;
 mod keep;
 pub mod shape;
+pub mod sort;
 pub mod support;
 
 pub use arg::Arg;

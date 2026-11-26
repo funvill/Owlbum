@@ -278,18 +278,6 @@ fn parts_not_built_yet_answer_bad_query() {
             ..default_query()
         },
         Query {
-            sort: QuerySort::Score,
-            ..default_query()
-        },
-        Query {
-            sort: QuerySort::Interesting,
-            ..default_query()
-        },
-        Query {
-            sort: QuerySort::Colour,
-            ..default_query()
-        },
-        Query {
             search: Some("lake".to_owned()),
             ..default_query()
         },
@@ -365,12 +353,190 @@ fn a_refused_query_makes_no_token() {
     let first = run(&engine, &album, &default_query());
     for _ in 0..TOKENS_KEPT {
         let bad = Query {
-            sort: QuerySort::Score,
+            view: QueryView::Timeline,
             ..default_query()
         };
         assert!(engine.run(&album, &bad, None).is_err());
     }
     assert!(engine.locate(&first.token, 1).is_ok());
+}
+
+// ---- Sorting ----
+
+/// One analysed photo for the sort tests: its path, date, sharpness, mean
+/// luma, average colour and star.
+struct A<'a> {
+    path: &'a str,
+    date: Option<&'a str>,
+    analysis: Option<(f64, f64, Option<[u8; 3]>)>,
+    star: bool,
+}
+
+/// Inserts photos with an analysis, through the writer.
+fn add_analysed(album: &Album, photos: &[A<'_>]) -> Vec<i64> {
+    let rows: Vec<(String, Option<String>, Option<String>, bool)> = photos
+        .iter()
+        .map(|a| {
+            let json = a.analysis.map(|(sharpness, luma, avg)| {
+                let mut v = json!({
+                    "sharpness": sharpness, "mean_luma": luma,
+                    "clipped_shadows": 0.0, "clipped_highlights": 0.0,
+                    "saliency_x": 0.5, "saliency_y": 0.5,
+                });
+                if let Some(c) = avg {
+                    v["avg_colour"] = json!(c);
+                }
+                v.to_string()
+            });
+            (a.path.to_owned(), a.date.map(str::to_owned), json, a.star)
+        })
+        .collect();
+    album
+        .write_photos(move |tx, touched| {
+            let mut ids = Vec::new();
+            for (path, date, analysis, star) in &rows {
+                let (dir, name) = path.rsplit_once('/').unwrap_or(("", path));
+                tx.execute(
+                    "INSERT INTO photos (rel_path, rel_dir, file_name, size, mtime_ms, file_key, thumb_key, kind, format, width, height, scan_version, captured_at, analysis, star)
+                     VALUES (?1, ?2, ?3, 1, 1, 'fk', 'tk-' || ?3, 'image', 'jpeg', 4000, 3000, 1, ?4, ?5, ?6)",
+                    (path, dir, name, date, analysis, star),
+                )
+                .map_err(sqlite_error(text::album::WRITING_DATABASE))?;
+                let id = tx.last_insert_rowid();
+                touched.photo(id);
+                ids.push(id);
+            }
+            Ok(ids)
+        })
+        .unwrap()
+}
+
+/// Five photos that each sort lists in a different order. Answers their
+/// ids by letter: a, b, c, d, e.
+fn sortable(album: &Album) -> [i64; 5] {
+    let ids = add_analysed(
+        album,
+        &[
+            // a: sharpest, well exposed, a darker red.
+            A {
+                path: "x/IMG_9.jpg",
+                date: Some("2024-06-01T10:00:00"),
+                analysis: Some((100.0, 0.48, Some([200, 30, 30]))),
+                star: false,
+            },
+            // b: blue.
+            A {
+                path: "x/img_10.jpg",
+                date: Some("2024-06-01T09:00:00"),
+                analysis: Some((50.0, 0.48, Some([30, 30, 200]))),
+                star: false,
+            },
+            // c: undated, blurriest, dark, starred, a lighter red; same
+            // file name as a in a later folder.
+            A {
+                path: "y/IMG_9.jpg",
+                date: None,
+                analysis: Some((10.0, 0.1, Some([250, 30, 30]))),
+                star: true,
+            },
+            // d: not analysed.
+            A {
+                path: "x/b.jpg",
+                date: Some("2024-05-01T00:00:00"),
+                analysis: None,
+                star: false,
+            },
+            // e: as sharp as b, no average colour, the same time as a.
+            A {
+                path: "x/a.jpg",
+                date: Some("2024-06-01T10:00:00"),
+                analysis: Some((50.0, 0.48, None)),
+                star: false,
+            },
+        ],
+    );
+    album.index().rescore();
+    [ids[0], ids[1], ids[2], ids[3], ids[4]]
+}
+
+fn sorted(engine: &QueryEngine, album: &Album, sort: QuerySort) -> Vec<i64> {
+    let r = run(
+        engine,
+        album,
+        &Query {
+            sort,
+            ..default_query()
+        },
+    );
+    tile_ids(engine, album, &r.token)
+}
+
+#[test]
+fn each_sort_gives_its_written_out_order() {
+    let tmp = tempfile::tempdir().unwrap();
+    let album = album(tmp.path());
+    let [a, b, c, d, e] = sortable(&album);
+    let engine = QueryEngine::new();
+    // Name order: a.jpg, b.jpg, IMG_9.jpg (x, then y), img_10.jpg.
+    assert_eq!(sorted(&engine, &album, QuerySort::Name), [e, d, a, c, b]);
+    // Oldest first; a and e share a time and tie by name; undated last.
+    assert_eq!(sorted(&engine, &album, QuerySort::Date), [d, b, e, a, c]);
+    // Scores: a 65, c 63 (13 + 50 for the star), b and e 42 (tie by
+    // name), d none yet, so last.
+    assert_eq!(sorted(&engine, &album, QuerySort::Score), [a, c, e, b, d]);
+    // Interesting: a 0.8, b and e 0.57 (tie by name), c 0.2 (dark, least
+    // quality); d not analysed, so last. The star does not count.
+    assert_eq!(
+        sorted(&engine, &album, QuerySort::Interesting),
+        [a, e, b, c, d]
+    );
+    // Colour: red (darker a, then lighter c), blue; then the photos with
+    // no average colour, by name.
+    assert_eq!(sorted(&engine, &album, QuerySort::Colour), [a, c, b, e, d]);
+}
+
+#[test]
+fn every_sort_is_total_and_leaves_out_hidden_photos() {
+    let tmp = tempfile::tempdir().unwrap();
+    let album = album(tmp.path());
+    let ids = sortable(&album);
+    // Photos that match on every key but the name.
+    let same: Vec<A<'_>> = ["z/p1.jpg", "z/p01.jpg", "w/p1.jpg", "z/P2.jpg"]
+        .iter()
+        .map(|path| A {
+            path,
+            date: Some("2024-06-02T00:00:00"),
+            analysis: Some((50.0, 0.48, Some([0, 200, 0]))),
+            star: false,
+        })
+        .collect();
+    let twins = add_analysed(&album, &same);
+    change(
+        &album,
+        &format!("UPDATE photos SET hidden = 1 WHERE id = {}", ids[1]),
+        &[ids[1]],
+    );
+    album.index().rescore();
+    let engine = QueryEngine::new();
+    for sort in [
+        QuerySort::Date,
+        QuerySort::Score,
+        QuerySort::Interesting,
+        QuerySort::Colour,
+        QuerySort::Name,
+    ] {
+        let once = sorted(&engine, &album, sort);
+        assert_eq!(once.len(), 8, "{sort:?}");
+        assert!(!once.contains(&ids[1]), "{sort:?}: hidden");
+        assert_eq!(once, sorted(&engine, &album, sort), "{sort:?}: stable");
+        // The twins keep the name order: p1 (w), p1 (z), p01, P2.
+        let order: Vec<i64> = once
+            .iter()
+            .copied()
+            .filter(|id| twins.contains(id))
+            .collect();
+        assert_eq!(order, [twins[2], twins[0], twins[1], twins[3]], "{sort:?}");
+    }
 }
 
 // ---- Revision ----

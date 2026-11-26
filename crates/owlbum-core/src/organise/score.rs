@@ -79,14 +79,14 @@ pub fn percentile(sorted: &[f32], v: f32) -> f64 {
 
 /// Colour variety: the mean distance of the 9 grid colours from their mean
 /// colour, over the largest possible RGB distance; 0 with no grid.
-fn variety(grid: Option<&[u8; 27]>) -> f64 {
+pub(crate) fn variety(grid: Option<&[u8; 27]>) -> f64 {
     let Some(grid) = grid else { return 0.0 };
-    let cells: Vec<[f64; 3]> = grid
-        .as_chunks::<3>()
-        .0
-        .iter()
-        .map(|c| [f64::from(c[0]), f64::from(c[1]), f64::from(c[2])])
-        .collect();
+    // An array, not a Vec: the Most interesting sort calls this for every
+    // photo, and 100,000 allocations cost a few milliseconds.
+    let mut cells = [[0.0_f64; 3]; 9];
+    for (cell, c) in cells.iter_mut().zip(grid.as_chunks::<3>().0) {
+        *cell = [f64::from(c[0]), f64::from(c[1]), f64::from(c[2])];
+    }
     let mut mean = [0.0; 3];
     for c in &cells {
         for i in 0..3 {

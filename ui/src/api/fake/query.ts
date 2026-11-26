@@ -33,6 +33,13 @@ export interface FakePhoto {
   height?: number;
   duration_ms?: number | null;
   score?: number | null;
+  /** "Interesting", 0 to 1; absent or null when the photo is not analysed. */
+  interesting?: number | null;
+  /**
+   * The Main colour: the bucket's place in the order red (0) to neutral (8),
+   * and the lightness; absent or null when there is no average colour.
+   */
+  colour?: { bucket: number; lightness: number } | null;
   /** The plan for the stored edit; null (no edit) when absent. */
   edit_plan?: JsonValue | null;
 }
@@ -120,6 +127,31 @@ function dateOrder(a: FakePhoto, b: FakePhoto): number {
   return nameOrder(a, b);
 }
 
+/** Sorts by `key` (absent keys last, then ascending), ties by the name order. */
+function keyOrder(key: (p: FakePhoto) => number[] | null): (a: FakePhoto, b: FakePhoto) => number {
+  return (a, b) => {
+    const ka = key(a);
+    const kb = key(b);
+    if (ka === null || kb === null) {
+      if (ka !== kb) return ka === null ? 1 : -1;
+      return nameOrder(a, b);
+    }
+    for (let i = 0; i < ka.length; i++) {
+      if (ka[i] !== kb[i]) return ka[i]! - kb[i]!;
+    }
+    return nameOrder(a, b);
+  };
+}
+
+/** The five sorts of docs/05-organising.md, "Sorting", as Rust runs them. */
+const ORDERS: Record<Query["sort"], (a: FakePhoto, b: FakePhoto) => number> = {
+  date: dateOrder,
+  name: nameOrder,
+  score: keyOrder((p) => (p.score === undefined || p.score === null ? null : [-p.score])),
+  interesting: keyOrder((p) => (p.interesting === undefined || p.interesting === null ? null : [-p.interesting])),
+  colour: keyOrder((p) => (p.colour === undefined || p.colour === null ? null : [p.colour.bucket, p.colour.lightness])),
+};
+
 function filterIsOn(filter: Filter): boolean {
   return Object.entries(filter).some(
     ([, v]) => v !== undefined && v !== null && v !== false && !(Array.isArray(v) && v.length === 0),
@@ -136,9 +168,6 @@ function check(query: Query): void {
     throw appError("bad_query", `Owlbum can't show ${what} yet.`);
   };
   if (query.view === "timeline") refuse("the timeline view");
-  if (query.sort === "score") refuse("photos sorted by score");
-  if (query.sort === "interesting") refuse("photos sorted by how interesting they are");
-  if (query.sort === "colour") refuse("photos sorted by colour");
   if (filterIsOn(query.filter)) refuse("filtered photos");
   if (isSearch(query.search)) refuse("search results");
   if (query.want_facets) refuse("counts beside the filters");
@@ -191,7 +220,7 @@ function row(id: number, p: FakePhoto | undefined): Row {
 
 /**
  * A stateful fake of the query engine over `photos`, behaving like Rust:
- * the default view only (every photo not hidden, by date or by name), the
+ * the default view only (every photo not hidden, in any of the five sorts), the
  * last four results kept under tokens, rows read as they are now, and
  * `keep` settled by the four rules. What Rust does not run yet answers
  * `bad_query` here too.
@@ -212,7 +241,7 @@ export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
       check(query);
       const old = keep === null ? undefined : held.find((h) => h.token === keep.token)?.tiles;
       const shown = list.filter((p) => !(p.hidden ?? false));
-      shown.sort(query.sort === "name" ? nameOrder : dateOrder);
+      shown.sort(ORDERS[query.sort]);
       const tiles = shown.map((p) => p.id);
       const token = `q${nextToken++}`;
       held.push({ token, tiles });

@@ -1,0 +1,19 @@
+/* docs/05-organising.md, "The filter bar"; docs/09-visual-design.md: 48 px. */
+.ow-filter-bar {
+  position: relative;
+  z-index: var(--z-bar);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--size-bar);
+  padding: 0 var(--space-4);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* The label sits beside its control here, not above it. */
+.ow-filter-bar .ow-field {
+  flex-direction: row;
+  align-items: center;
+}

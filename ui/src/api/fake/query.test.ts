@@ -41,11 +41,24 @@ describe("the fake query commands", () => {
     expect(await ids(fake, r.token)).toEqual([2, 1]);
   });
 
+  it("sort by score, interest and colour, missing values last, ties by name", async () => {
+    const { fake } = setup([
+      { id: 1, rel_path: "b.jpg", score: 40, interesting: 0.2, colour: { bucket: 5, lightness: 0.3 } },
+      { id: 2, rel_path: "a.jpg", score: 40, interesting: 0.9, colour: null },
+      { id: 3, rel_path: "c.jpg", score: null, interesting: null, colour: { bucket: 0, lightness: 0.6 } },
+      { id: 4, rel_path: "d.jpg", score: 70, interesting: 0.5, colour: { bucket: 0, lightness: 0.2 } },
+    ]);
+    const order = async (sort: Query["sort"]) =>
+      ids(fake, (await fake.invoke("query_run", { query: { ...defaultQuery(), sort }, keep: null })).token);
+    expect(await order("score")).toEqual([4, 2, 1, 3]);
+    expect(await order("interesting")).toEqual([2, 4, 1, 3]);
+    expect(await order("colour")).toEqual([4, 3, 1, 2]);
+  });
+
   it("answer bad_query for parts not built yet, like Rust", async () => {
     const { fake } = setup();
     const refused: Query[] = [
       { ...defaultQuery(), view: "timeline" },
-      { ...defaultQuery(), sort: "score" },
       { ...defaultQuery(), search: "lake" },
       { ...defaultQuery(), want_facets: true },
       { ...defaultQuery(), filter: { star: "yes" } },

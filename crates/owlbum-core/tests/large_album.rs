@@ -141,6 +141,17 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
     let run_name = t.elapsed();
     let count = by_date.count;
     assert_eq!(count, by_name.count);
+    let mut other_sorts = Vec::new();
+    for sort in [QuerySort::Score, QuerySort::Interesting, QuerySort::Colour] {
+        let q = Query {
+            sort,
+            ..Query::default()
+        };
+        let t = Instant::now();
+        let r = engine.run(&album, &q, None).unwrap();
+        other_sorts.push((sort, t.elapsed()));
+        assert_eq!(r.count, count);
+    }
 
     // A re-run that keeps the place: a current photo near the end and a
     // selection of a thousand, as after an `album_changed`.
@@ -224,6 +235,9 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
     println!("  reopen: walk and compare (target 15 s) {walk_took:?}");
     println!("  query_run, date (target 30 ms) {}", ms(run_date));
     println!("  query_run, name (target 30 ms) {}", ms(run_name));
+    for (sort, took) in other_sorts {
+        println!("  query_run, {sort:?} (target 30 ms) {}", ms(took));
+    }
     println!(
         "  query_run, date, keeping place and 1,000 selected {}",
         ms(run_keep)

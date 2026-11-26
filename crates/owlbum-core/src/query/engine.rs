@@ -8,8 +8,8 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use rusqlite::OptionalExtension;
 
 use super::keep::settle;
-use super::shape::{Keep, Located, Query, QueryResult, QuerySort, Row};
-use super::support;
+use super::shape::{Keep, Located, Query, QueryResult, Row};
+use super::{sort, support};
 use crate::album::{Album, sqlite_error};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::index::{Kind, Photo};
@@ -88,14 +88,8 @@ impl QueryEngine {
         // may drop it.
         let old = keep.and_then(|k| self.find(&k.token));
         let (tiles, album_photos) = album.index().read(|v| {
-            let mut shown: Vec<&Photo> = v.photos().iter().filter(|p| !p.hidden()).collect();
-            match query.sort {
-                QuerySort::Name => shown.sort_unstable_by_key(|p| p.name_rank),
-                // `check` lets only Date and Name through.
-                _ => shown.sort_unstable_by_key(|p| (p.date, p.name_rank)),
-            }
-            let tiles: Vec<u32> = shown.iter().map(|p| p.id).collect();
-            (tiles, v.len())
+            let shown: Vec<&Photo> = v.photos().iter().filter(|p| !p.hidden()).collect();
+            (sort::order(v, &shown, query.sort), v.len())
         });
         let kept = keep.map(|k| settle(k, old.as_deref().map(|h| h.tiles.as_slice()), &tiles));
         let count = count(tiles.len());

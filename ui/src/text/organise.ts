@@ -1,7 +1,20 @@
 // Text shown by the organise feature (src/features/organise).
-// docs/05-organising.md, "Star and hide".
+// docs/05-organising.md, "Star and hide", "Sorting" and "The filter bar".
 
 export const organiseText = {
+  /** The filter bar (docs/05-organising.md, "The filter bar"). */
+  bar: {
+    label: "Sort and filter",
+    sort: "Sort",
+  },
+  /** The Sort control's options, in their order (docs/05-organising.md, "Sorting"). */
+  sorts: {
+    date: "Date taken",
+    score: "Photo score",
+    interesting: "Most interesting",
+    colour: "Main colour",
+    name: "File name",
+  },
   /** The mark that plays after a key changed a photo's star or hidden flag. */
   mark: {
     starred: "Starred",

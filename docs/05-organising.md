@@ -356,12 +356,14 @@ Rust works out the name order once and stores each photo's position as `name_ran
 | Option | Key | Order |
 |---|---|---|
 | Date taken (default) | `date` | Effective date, oldest first. Photos with no date come last. Ties by name order. |
-| Photo score | `score` | Highest score first. Ties by name order. |
+| Photo score | `score` | Scored photos first; then score, highest first; ties by name order. A photo not analysed yet ("–") has no score and comes after every scored one. |
 | Most interesting | `interesting` | Analysed photos first; then `interesting`, highest first; ties by name order. |
 | Main colour | `colour` | Photos with an average colour first; then bucket in the order red, orange, yellow, green, cyan, blue, purple, pink, neutral; then lightness, darkest first; ties by name order. |
 | File name | `name` | Name order. |
 
-The sort is saved in the album's session and restored on reopening. Changing it scrolls the grid to the top and keeps the selection. In the timeline view the order is always `date`; the Sort control is disabled there.
+Rust works the keys of `interesting` and `colour` out from the album index each time it sorts (`quality`, the dark and bright flags, the burst keeper and the average colour), so they always match the index as it is; the range of `quality` is taken over every analysed photo in the index, never over the filtered list. Over 100,000 photos each sort takes under 16 ms on a release build.
+
+The sort is saved in the album's session and restored on reopening. Changing it keeps the selection and scrolls as [Browsing](04-browsing.md#when-the-result-changes) says for any change the user makes: to the current photo, or to the top when there is none. In the timeline view the order is always `date`; the Sort control is disabled there.
 
 ## The filter bar
 

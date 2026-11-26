@@ -18,12 +18,6 @@ pub const READING_ROWS: &str = "reading the photos to show";
 /// What a query asks for that is not built yet, for [`not_yet`].
 pub const TIMELINE: &str = "the timeline view";
 /// See [`TIMELINE`].
-pub const SORT_SCORE: &str = "photos sorted by score";
-/// See [`TIMELINE`].
-pub const SORT_INTERESTING: &str = "photos sorted by how interesting they are";
-/// See [`TIMELINE`].
-pub const SORT_COLOUR: &str = "photos sorted by colour";
-/// See [`TIMELINE`].
 pub const FILTERS: &str = "filtered photos";
 /// See [`TIMELINE`].
 pub const SEARCH: &str = "search results";

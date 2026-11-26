@@ -742,7 +742,7 @@ Each section has a header button with a chevron (down when open, right when fold
 | Exposure | "+0.7 EV", "−1 EV" (a real minus sign) or "0 EV". |
 | Flash | "Fired" or "Did not fire". |
 
-**Place rows.** **Country** is the country that contains the photo's effective place, or "…" while it is being looked up, or absent when none is found. **Coordinates** is latitude then longitude, each to 5 decimals.
+**Place rows.** **Country** is the country that contains the photo's effective place, or "…" while it is being looked up, or absent when none is found. A place at sea within 12 nautical miles (22.2 km) of a coast is in that coast's country, which also covers the simplified coastline (see [Country search](#how-typed-fields-save)); farther out there is none. **Coordinates** is latitude then longitude, each to 5 decimals.
 
 ### Histogram
 
@@ -803,7 +803,9 @@ No time zone is ever applied. When a typed date exists, a link **Use the camera'
 
 Each coordinate has spaces removed from its ends; an empty box counts as absent. A decimal comma is accepted. Only the first error is shown, under the group.
 
-**Country search.** Typing in "Search for a country…" lists up to 6 countries whose name contains the text, ignoring case (`app_place_search`). The Country row and this search both use the Natural Earth low-resolution country outlines that [Architecture](01-architecture.md#dependencies-chosen) bundles, with a point-in-outline lookup in Rust; nothing is fetched. Choosing one puts its name in Place name. If the latitude and longitude boxes are empty, it also fills them with the country's central point. Then the group saves.
+**Country search.** Typing in "Search for a country…" lists up to 6 countries whose name contains the text, ignoring case and accents (`app_place_search`): names that start with the text first, then names with a word that starts with it, then the rest, each group in name order. Up and Down move through the list, Enter or a click chooses, Esc closes it. The Country row and this search both use the Natural Earth country outlines that [Architecture](01-architecture.md#dependencies-chosen) bundles, with a point-in-outline lookup in Rust; nothing is fetched. Choosing one puts its name in Place name. If the latitude and longitude boxes are empty, it also fills them with the country's central point (Natural Earth's label point, or a point on the largest island when that lies at sea). Then the group saves.
+
+**Which country.** Every Natural Earth admin-0 feature counts as a country, under its English name, so dependencies and territories (Greenland, Puerto Rico, Hong Kong) have their own. Where outlines overlap, the smaller one wins. Disputed areas follow Natural Earth's default view, the side that administers an area on the ground: Crimea is in Russia, each side of the Kashmir Line of Control is in India or Pakistan and Aksai Chin in China, Laayoune is in Morocco; areas Natural Earth draws on their own keep their own name (Western Sahara east of the berm, Kosovo, Northern Cyprus, Somaliland, Taiwan, Palestine, Siachen Glacier). Owlbum takes no position on any dispute.
 
 **Text is never lost.**
 
@@ -1068,7 +1070,7 @@ Names follow the prefixes in [Architecture](01-architecture.md). Every command a
 | `app_recent_remove` | `root` | `Recent[]` | |
 | `app_pick_folder` | none | `string \| null` | Shows the native folder dialog. Defined in 08; listed here because this part calls it. |
 | `app_session_save` | `Session` with `selected_id` | nothing | Stores against the open album's folder. A no-op when no album is open. |
-| `app_place_search` | `text` | `{ name, lat, lon }[]`, at most 6 | Countries whose name contains the text. |
+| `app_place_search` | `text` | `CountryMatch[]` = `{ name, lat, lon }[]`, at most 6 | Countries whose name contains the text, in the order [Country search](#how-typed-fields-save) gives; empty text answers `[]`. |
 | `album_open` | `path`, `options?: { take_lock?, view_only?, restore_backup? }` | `{ status: AlbumStatus, session: Session \| null }` | Closes any open album first. It returns as soon as the database is open and starts the scan in the background. Errors: the shared `not_a_folder` and `folder_unreadable`, and this part's `album_lock_stale` and `album_damaged`, each with a `details` object. |
 | `album_close` | none | nothing | Releases the lock. Drops every token. |
 | `album_status` | none | `AlbumStatus \| null` | Null when no album is open. |
@@ -1158,6 +1160,7 @@ type Session = {
 - **Map points.** Only photos with a valid effective place are in `points`; a typed place wins over GPS; `unlocated` is the rest; stacks are unfolded.
 - **Typed info.** Each date form in the date table is accepted or refused as stated; 30 February and year 1700 are refused; a date equal to the camera's clears the override. Each location rule in the table. People: trimming, case-insensitive de-duplication, first spelling wins across photos. Empty text is stored as NULL. Every change answers `view_only` in a view-only album and writes nothing.
 - **Photo detail.** Effective date and place follow the override rules; `country` is right for a point inside a country and null in mid-ocean; a video has `duration_ms`; an unknown id answers `photo_not_found`.
+- **Country outlines.** Cities, points a few kilometres either side of a border, enclaves (Lesotho, San Marino, Vatican City, Monaco), mid-ocean (none), the sea near a coast, both sides of the antimeridian and longitude ±180, the poles, bad input, and each disputed area named in [Which country](#how-typed-fields-save). Every country's central point is inside it. 100,000 lookups take well under a second. The search's matching, order and limit.
 - **Histogram.** A pure red fixture puts every red count in the last bin; an edited photo's histogram equals the unedited file's, because the histogram describes the file.
 - **Album status.** Each row of the locking table in [Data](02-data.md) gives the matching `view_only` value; a conflict-named file beside the database sets `conflict_file`; a scoped open reports `root` and `scope`; a failed `quick_check` answers `album_damaged`, and `restore_backup` renames the damaged file and opens for writing.
 - **Problems.** The fixture's unsupported and unreadable files are counted, listed by `album_unsupported` and `album_scan_errors`, and absent from every result.

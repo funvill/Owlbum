@@ -1,0 +1,13 @@
+Natural Earth
+
+Owlbum's country outlines (crates/owlbum-core/data/countries.bin), used for
+the Country row and the country search, are made from Natural Earth's
+1:10m Admin 0 - Countries, version 5.1.2 (https://www.naturalearthdata.com),
+simplified by scripts/countries.mjs.
+
+Natural Earth data is in the public domain. No permission is needed to use
+it. Made with Natural Earth. Free vector and raster map data @
+naturalearthdata.com.
+
+Borders follow Natural Earth's default view, which shows the side that
+administers an area on the ground. Owlbum takes no position on any dispute.

@@ -134,6 +134,41 @@ function simplify(ring, tolerance) {
   return kept.length >= 4 ? kept : ring;
 }
 
+/** Even-odd over every ring, as the Rust lookup does. */
+function insideAny(rings, [x, y]) {
+  let inside = false;
+  for (const ring of rings) {
+    for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+      const [xi, yi] = ring[i];
+      const [xj, yj] = ring[j];
+      if (yi > y !== yj > y && x < ((xj - xi) * (y - yi)) / (yj - yi) + xi) inside = !inside;
+    }
+  }
+  return inside;
+}
+
+/**
+ * A central point for a country whose label point lies at sea (Natural
+ * Earth puts some between islands): the middle of the widest stretch of
+ * land across the largest ring, at that ring's middle latitude.
+ */
+function innerPoint(rings) {
+  const area = (r) => Math.abs(r.reduce((s, [x, y], i) => s + x * r[(i + 1) % r.length][1] - r[(i + 1) % r.length][0] * y, 0));
+  const ring = rings.reduce((a, b) => (area(b) > area(a) ? b : a));
+  const ys = ring.map(([, y]) => y);
+  const y = Math.round((Math.min(...ys) + Math.max(...ys)) / 2) + 0.5;
+  const xs = [];
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const [xi, yi] = ring[i];
+    const [xj, yj] = ring[j];
+    if (yi > y !== yj > y) xs.push(((xj - xi) * (y - yi)) / (yj - yi) + xi);
+  }
+  xs.sort((a, b) => a - b);
+  let best = [xs[0], xs[1]];
+  for (let i = 0; i + 1 < xs.length; i += 2) if (xs[i + 1] - xs[i] > best[1] - best[0]) best = [xs[i], xs[i + 1]];
+  return [Math.round((best[0] + best[1]) / 2), Math.round(y - 0.5)];
+}
+
 /** The outlines as `{ name, label: [lon, lat], rings: [[lon, lat][]] }`, in units. */
 export function buildCountries(geojson, tolerance) {
   const countries = [];
@@ -158,7 +193,9 @@ export function buildCountries(geojson, tolerance) {
         if (ring.length >= 3) rings.push(ring);
       }
     }
-    countries.push({ name, label: [Math.round(p.LABEL_X * UNIT), Math.round(p.LABEL_Y * UNIT)], rings });
+    const label = [Math.round(p.LABEL_X * UNIT), Math.round(p.LABEL_Y * UNIT)];
+    const atSea = !insideAny(rings, label);
+    countries.push({ name, label: atSea ? innerPoint(rings) : label, labelMoved: atSea, rings });
   }
   countries.sort((a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0));
   return countries;
@@ -230,6 +267,8 @@ async function main() {
     `${out}: ${countries.length} countries, ${rings} rings, ${points} points, ${bytes.length} bytes ` +
       `(Natural Earth ${RELEASE} ${args.scale}, tolerance ${args.tolerance} degree)`,
   );
+  const moved = countries.filter((c) => c.labelMoved).map((c) => c.name);
+  if (moved.length > 0) console.log(`Central point moved onto land: ${moved.join(", ")}`);
 }
 
 if (process.argv[1] !== undefined && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

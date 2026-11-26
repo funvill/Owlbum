@@ -57,8 +57,8 @@ fn points_a_few_kilometres_either_side_of_a_border() {
         ((42.3600, -83.0800), "United States of America"),
         ((42.2900, -83.0000), "Canada"),
         // Narva and Ivangorod.
-        ((59.3772, 28.1903), "Estonia"),
-        ((59.3700, 28.2300), "Russia"),
+        ((59.3700, 28.1200), "Estonia"),
+        ((59.3700, 28.3000), "Russia"),
     ];
     for ((lat, lon), want) in cases {
         assert_eq!(at(lat, lon), Some(want), "{lat}, {lon}");
@@ -135,7 +135,10 @@ fn disputed_areas_follow_natural_earths_default_view() {
         ((35.9208, 74.3089), "Pakistan"),
         ((35.0, 79.3), "China"),
         ((35.4210, 77.1094), "Siachen Glacier"),
-        ((27.1536, -13.2033), "Western Sahara"),
+        // Laayoune, west of the berm, is administered by Morocco; Tifariti,
+        // east of it, is in the area Natural Earth draws as Western Sahara.
+        ((27.1536, -13.2033), "Morocco"),
+        ((26.1580, -10.5670), "Western Sahara"),
         ((42.6629, 21.1655), "Kosovo"),
         ((35.3364, 33.3182), "Northern Cyprus"),
         ((31.9038, 35.2034), "Palestine"),
@@ -149,8 +152,9 @@ fn disputed_areas_follow_natural_earths_default_view() {
     }
 }
 
-/// Natural Earth 5.1.2's admin-0 countries draw Crimea inside Ukraine.
-const CRIMEA: &str = "Ukraine";
+/// Natural Earth 5.1.2's default view draws Crimea inside Russia, the side
+/// that administers it; its Ukrainian point-of-view files are not bundled.
+const CRIMEA: &str = "Russia";
 
 #[test]
 fn every_central_point_is_in_its_own_country() {
@@ -167,6 +171,14 @@ fn every_central_point_is_in_its_own_country() {
 
 #[test]
 fn a_hundred_thousand_lookups_are_quick() {
+    let start = std::time::Instant::now();
+    let o = parse(DATA).unwrap();
+    eprintln!(
+        "read {} countries, {} band edges in {:?}",
+        o.countries.len(),
+        o.edges.len(),
+        start.elapsed()
+    );
     outlines();
     // A fixed spread of points: half on land near cities, half anywhere.
     let mut seed: u64 = 7;
@@ -191,6 +203,7 @@ fn a_hundred_thousand_lookups_are_quick() {
         .filter(|(lat, lon)| country_at(*lat, *lon).is_some())
         .count();
     let took = start.elapsed();
+    eprintln!("100,000 lookups in {took:?}");
     assert!(found > 50_000);
     // Unoptimised test builds are several times slower than the release
     // build; a release build does this in a small fraction of the bound.
@@ -199,9 +212,8 @@ fn a_hundred_thousand_lookups_are_quick() {
 
 #[test]
 fn search_lists_names_containing_the_text() {
-    let names = |text: &str| -> Vec<String> {
-        place_search(text).into_iter().map(|m| m.name).collect()
-    };
+    let names =
+        |text: &str| -> Vec<String> { place_search(text).into_iter().map(|m| m.name).collect() };
     assert_eq!(names("france"), ["France"]);
     assert_eq!(names("FRANCE"), ["France"]);
     assert_eq!(names("  fran "), ["France"]);
@@ -209,23 +221,23 @@ fn search_lists_names_containing_the_text() {
     assert!(names("   ").is_empty());
     assert!(names("zzz").is_empty());
     // Accents are ignored too.
-    assert_eq!(names("aland"), ["Åland"]);
+    assert_eq!(names("aland"), ["Åland", "New Zealand"]);
     assert_eq!(names("sao tome"), ["São Tomé and Príncipe"]);
     assert_eq!(names("curaçao"), ["Curaçao"]);
     // Names that start with the text first, then names with a word that
     // starts with it, then the rest; each group in name order. At most 6.
+    assert_eq!(names("ger"), ["Germany", "Algeria", "Niger", "Nigeria"]);
     assert_eq!(
-        names("ger"),
-        ["Germany", "Algeria", "Niger", "Nigeria"]
+        names("in"),
+        [
+            "India",
+            "Indonesia",
+            "Australian Indian Ocean Territories",
+            "British Indian Ocean Territory",
+            "United Nations Buffer Zone in Cyprus",
+            "Argentina",
+        ]
     );
-    assert_eq!(names("in"), [
-        "India",
-        "Indonesia",
-        "Australian Indian Ocean Territories",
-        "British Indian Ocean Territory",
-        "Argentina",
-        "Bosnia and Herzegovina",
-    ]);
     assert_eq!(names("land").len(), 6);
 }
 
@@ -237,5 +249,8 @@ fn search_answers_each_countrys_central_point() {
     assert_eq!(m.name, "Japan");
     assert_eq!(country_at(m.lat, m.lon), Some("Japan"));
     // Natural Earth's label point, to 4 decimals.
-    assert!((m.lat - 36.9).abs() < 2.0 && (m.lon - 138.4).abs() < 2.0, "{m:?}");
+    assert!(
+        (m.lat - 36.9).abs() < 2.0 && (m.lon - 138.4).abs() < 2.0,
+        "{m:?}"
+    );
 }

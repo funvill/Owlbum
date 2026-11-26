@@ -37,8 +37,12 @@ fn app_formats_answers_the_registry() {
 #[test]
 fn app_place_search_answers_countries_with_their_central_points() {
     let (_app, window) = app_window();
-    let reply = invoke(&window, "app_place_search", serde_json::json!({ "text": "Fran" }))
-        .expect("app_place_search answers");
+    let reply = invoke(
+        &window,
+        "app_place_search",
+        serde_json::json!({ "text": "Fran" }),
+    )
+    .expect("app_place_search answers");
     let found: Vec<CountryMatch> = reply.deserialize().unwrap();
     assert_eq!(found.len(), 1);
     assert_eq!(found[0].name, "France");
@@ -47,8 +51,12 @@ fn app_place_search_answers_countries_with_their_central_points() {
         Some("France")
     );
 
-    let reply = invoke(&window, "app_place_search", serde_json::json!({ "text": "a" }))
-        .expect("app_place_search answers");
+    let reply = invoke(
+        &window,
+        "app_place_search",
+        serde_json::json!({ "text": "a" }),
+    )
+    .expect("app_place_search answers");
     let found: Vec<CountryMatch> = reply.deserialize().unwrap();
     assert_eq!(found.len(), 6);
 }

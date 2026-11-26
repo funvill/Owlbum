@@ -152,6 +152,9 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
         other_sorts.push((sort, t.elapsed()));
         assert_eq!(r.count, count);
     }
+    // The engine holds only a few results, and the runs above pushed the
+    // date-sorted one out: run it again for the re-run below.
+    let by_date = engine.run(&album, &date, None).unwrap();
 
     // A re-run that keeps the place: a current photo near the end and a
     // selection of a thousand, as after an `album_changed`.

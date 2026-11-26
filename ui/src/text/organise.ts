@@ -16,6 +16,13 @@ export const organiseText = {
     /** "2,140 photos" while no filter is on. */
     count: (n: number) => (n === 1 ? "1 photo" : `${group(n)} photos`),
   },
+  /** The search box and its hint line (docs/05-organising.md, "The filter bar"). */
+  search: {
+    label: "Search photos",
+    placeholder: "Search names, people, places, notes and keywords",
+    try: "Try",
+    examples: ["star:yes", "shape:portrait", "from:2024-06-01", "has:people", "tag:lake"],
+  },
   /** The filtered row (docs/05-organising.md, "The filtered row"). */
   filtered: {
     label: "Active filters",

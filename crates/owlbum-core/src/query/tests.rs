@@ -13,6 +13,7 @@ use crate::scan::{Request, ScanEnv, Scanner};
 use crate::text;
 
 mod filters;
+mod search;
 mod timeline;
 
 // ---- Helpers ----
@@ -263,23 +264,6 @@ fn values_the_doc_treats_as_absent_are_accepted() {
         ..default_query()
     };
     assert_eq!(engine.run(&album, &none, None).unwrap().count, 4);
-}
-
-#[test]
-fn parts_not_built_yet_answer_bad_query() {
-    let tmp = tempfile::tempdir().unwrap();
-    let album = album(tmp.path());
-    small(&album);
-    let engine = QueryEngine::new();
-    let refused = [Query {
-        search: Some("lake".to_owned()),
-        ..default_query()
-    }];
-    for q in refused {
-        let err = engine.run(&album, &q, None).unwrap_err();
-        assert_eq!(err.code, ErrorCode::BadQuery, "{q:?}");
-        assert!(err.message.contains("yet"), "{}", err.message);
-    }
 }
 
 #[test]

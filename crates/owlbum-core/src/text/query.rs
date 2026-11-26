@@ -15,9 +15,6 @@ pub const EXPIRED: &str = "The list of photos changed. Showing it again.";
 /// What was being done, for an `internal` error while reading rows.
 pub const READING_ROWS: &str = "reading the photos to show";
 
-/// What a query asks for that is not built yet, for [`not_yet`].
-pub const SEARCH: &str = "search results";
-
 /// `bad_query`: a filter value that is not allowed (a date that is not a
 /// real day, a blank tag or person).
 pub fn bad_value(value: &str) -> String {
@@ -60,5 +57,45 @@ pub mod chip {
             (None, Some(to)) => format!("Until {to}"),
             (None, None) => String::new(),
         }
+    }
+}
+
+/// The search box's query words (docs/05-organising.md, "Query words in the
+/// search box").
+pub mod words {
+    /// The hint line's message for a word with a known key and a bad value.
+    pub fn error(word: &str, hint: &str) -> String {
+        format!("\"{word}\" isn't a filter: {hint}")
+    }
+
+    /// `star:`.
+    pub const STAR: &str = "try star:yes or star:no";
+    /// `shape:`.
+    pub const SHAPE: &str = "try shape:portrait or shape:landscape";
+    /// `hidden:`.
+    pub const HIDDEN: &str = "try hidden:show or hidden:only";
+    /// `from:`.
+    pub const FROM: &str = "try from:YYYY-MM-DD";
+    /// `to:`.
+    pub const TO: &str = "try to:YYYY-MM-DD";
+    /// `from:` after `to:`, or `to:` before `from:`.
+    pub const FROM_AFTER_TO: &str = "from must not be after to";
+    /// `has:`.
+    pub const HAS: &str = "try has:location or has:people";
+    /// `is:`.
+    pub const IS: &str = "try is:lowquality or is:duplicate";
+    /// `tag:`.
+    pub const TAG: &str = "try tag:<word>";
+    /// `object:`.
+    pub const OBJECT: &str = "try object:<word>";
+
+    /// `folder:` naming no folder.
+    pub fn no_folder(value: &str) -> String {
+        format!("no folder named {value}")
+    }
+
+    /// `person:` naming nobody in the album.
+    pub fn no_person(value: &str) -> String {
+        format!("no person named {value}")
     }
 }

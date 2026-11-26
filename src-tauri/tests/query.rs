@@ -118,6 +118,37 @@ fn a_filtered_query_answers_chips_and_query_facets_its_counts() {
 }
 
 #[test]
+fn query_parse_reads_the_box_and_search_text_filters() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (app, window) = app_window();
+    let err = invoke(
+        &window,
+        "query_parse",
+        json!({ "text": "x", "enter": false, "filter": null }),
+    )
+    .unwrap_err();
+    assert_eq!(err["code"], "no_album");
+    open_trip(&app, tmp.path());
+    let parsed: owlbum_core::query::ParsedBox = invoke(
+        &window,
+        "query_parse",
+        json!({ "text": "star:no folder:DAY1 img_0002", "enter": true, "filter": {} }),
+    )
+    .unwrap()
+    .deserialize()
+    .unwrap();
+    assert!(parsed.taken);
+    assert_eq!(parsed.set.folder.as_deref(), Some("day1"));
+    assert_eq!(parsed.search.as_deref(), Some("img_0002"));
+    let mut q = default_query();
+    q["search"] = json!(parsed.search);
+    let r = run(&window, json!({ "query": q }));
+    assert!(r.filtered);
+    assert_eq!(r.photos, 1, "the file name is searchable");
+    app.state::<owlbum_lib::session::Session>().close();
+}
+
+#[test]
 fn run_window_locate_and_ids_work_together() {
     let tmp = tempfile::tempdir().unwrap();
     let (app, window) = app_window();

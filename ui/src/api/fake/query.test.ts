@@ -55,10 +55,9 @@ describe("the fake query commands", () => {
     expect(await order("colour")).toEqual([4, 3, 1, 2]);
   });
 
-  it("answer bad_query for parts not built yet, like Rust", async () => {
+  it("answer bad_query for a value not allowed, like Rust", async () => {
     const { fake } = setup();
     const refused: Query[] = [
-      { ...defaultQuery(), search: "lake" },
       { ...defaultQuery(), filter: { from: "2024-02-30" } },
     ];
     for (const query of refused) {
@@ -101,6 +100,34 @@ describe("the fake query commands", () => {
     };
     expect(await span("2026-04-01T23:00:00")).toBe("day");
     expect(await span("2026-04-02T00:00:00")).toBe("month");
+  });
+
+  it("search text and query words like Rust", async () => {
+    const { fake } = setup([
+      { id: 1, rel_path: "Lake/IMG_1234.jpg", people: ["José"] },
+      { id: 2, rel_path: "Trip/lakeside.jpg", keywords: ["boat"] },
+      { id: 3, rel_path: "c.jpg", hidden: true, objects: ["lake"] },
+    ]);
+    const find = async (search: string) =>
+      ids(fake, (await fake.invoke("query_run", { query: { ...defaultQuery(), search }, keep: null })).token);
+    expect(await find("lak")).toEqual([2]);
+    expect(await find("img_12 jose")).toEqual([1]);
+    expect(await find("ake")).toEqual([]);
+    const parse = (text: string, enter: boolean) => fake.invoke("query_parse", { text, enter, filter: null });
+    expect(await parse("star:yes lake shape:Portrait", true)).toMatchObject({
+      taken: true,
+      set: { star: "yes", shape: "portrait" },
+      rest: "lake",
+      search: "lake",
+    });
+    expect(await parse("folder:trip person:JOSÉ tag:Boat ", false)).toMatchObject({
+      set: { folder: "Trip" },
+      add_people: ["José"],
+      add_tags: [{ kind: "keyword", value: "Boat" }],
+      rest: "",
+    });
+    expect((await parse("star:maybe lake", true)).error).toBe(`"star:maybe" isn't a filter: try star:yes or star:no`);
+    expect(await parse("star:yes shape:por", false)).toMatchObject({ rest: "shape:por", search: null });
   });
 
   it("filter like Rust, with chips, X of Y and facets", async () => {

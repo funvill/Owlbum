@@ -194,6 +194,34 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
     let run_timeline = t.elapsed();
     let groups = r.groups.unwrap_or_default();
     assert_eq!(groups.iter().map(|g| g.count).sum::<u32>(), count);
+    // Search text (#32): `IMG_00` matches the names up to IMG_009999, about
+    // 10,000 of 100,000 (the fixture names its files `IMG_NNNNNN.jpg`);
+    // `img` matches every photo. Then `query_parse` of a box with four
+    // query words, a folder and some text.
+    let mut searches = Vec::new();
+    let mut last_search = String::new();
+    for text in ["IMG_00", "img"] {
+        let q = Query {
+            search: Some(text.to_owned()),
+            ..Query::default()
+        };
+        let t = Instant::now();
+        let r = engine.run(&album, &q, None).unwrap();
+        searches.push((text, r.photos, t.elapsed()));
+        assert!(r.filtered && r.photos <= count);
+        last_search = r.token;
+    }
+    let folder = engine
+        .window(&album, &reopened.overlay(), &last_search, 0, 1)
+        .unwrap()[0]
+        .rel_path
+        .rsplit_once('/')
+        .map_or(String::new(), |(dir, _)| dir.to_owned());
+    let words = format!("star:yes shape:portrait from:2020-01-01 folder:\"{folder}\" lake img");
+    let t = Instant::now();
+    let parsed = owlbum_core::query::parse_box(&album, &words, true, &Filter::default()).unwrap();
+    let parse_took = t.elapsed();
+    assert!(parsed.taken && parsed.error.is_none(), "{parsed:?}");
     // The engine holds only a few results, and the runs above pushed the
     // date-sorted one out: run it again for the re-run below.
     let by_date = engine.run(&album, &date, None).unwrap();
@@ -292,6 +320,16 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
         ms(run_faceted)
     );
     println!("  query_facets of that result {}", ms(facets_took));
+    for (text, matched, took) in searches {
+        println!(
+            "  query_run, search {text:?} matching {matched} (target 100 ms) {}",
+            ms(took)
+        );
+    }
+    println!(
+        "  query_parse of four words, a folder and text (target 2 ms) {}",
+        ms(parse_took)
+    );
     println!(
         "  query_run, timeline by day, {} groups (target 100 ms) {}",
         groups.len(),

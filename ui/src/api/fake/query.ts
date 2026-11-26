@@ -11,15 +11,13 @@ import type { Group } from "../bindings/Group";
 import type { GroupUnit } from "../bindings/GroupUnit";
 import type { AreaHandlers } from "./types";
 import { chips, folderOf, normalised, pass, validate } from "./queryFilter";
+import { isSearch, parseBox, textMatches } from "./querySearch";
 
 /** How many results are kept, as in Rust. An older token answers `query_expired`. */
 export const TOKENS_KEPT = 4;
 
 /** The most rows one `query_window` answers, as in Rust. */
 export const WINDOW_MAX = 500;
-
-/** The fewest letters or digits search text needs to be a filter. */
-export const SEARCH_MIN = 2;
 
 /** A photo of the fake album. Only `id` and `rel_path` are required. */
 export interface FakePhoto {
@@ -163,18 +161,6 @@ const ORDERS: Record<Query["sort"], (a: FakePhoto, b: FakePhoto) => number> = {
   colour: keyOrder((p) => (p.colour === undefined || p.colour === null ? null : [p.colour.bucket, p.colour.lightness])),
 };
 
-function isSearch(search: string | null): boolean {
-  return (search?.match(/[\p{L}\p{N}]/gu)?.length ?? 0) >= SEARCH_MIN;
-}
-
-/** Refuses what Rust does not run yet (owlbum_core::query::support), with Rust's messages. */
-function check(query: Query): void {
-  const refuse = (what: string) => {
-    throw appError("bad_query", `Owlbum can't show ${what} yet.`);
-  };
-  if (isSearch(query.search)) refuse("search results");
-}
-
 /** Days from 1970-01-01 of a `YYYY-MM-DD…` date, read as written. */
 function dayNumber(date: string): number {
   return Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10))) / 86_400_000;
@@ -255,7 +241,7 @@ function row(id: number, p: FakePhoto | undefined): Row {
 export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
   let list = [...photos];
   let revision = 0;
-  const held: { token: string; tiles: number[]; filter: Query["filter"] }[] = [];
+  const held: { token: string; tiles: number[]; filter: Query["filter"]; text: Set<number> | null }[] = [];
 
   const heldOf = (token: string) => {
     const h = held.find((x) => x.token === token);
@@ -266,17 +252,17 @@ export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
 
   const handlers: AreaHandlers<QueryCommands> = {
     query_run: ({ query, keep }) => {
-      check(query);
       const filter = normalised(query.filter);
       validate(filter);
       const old = keep === null ? undefined : held.find((h) => h.token === keep.token)?.tiles;
-      const passed = pass(list, filter, "", query.want_facets);
+      const text = textMatches(list, query.search);
+      const passed = pass(list, filter, "", query.want_facets, text);
       const shown = passed.shown;
       const timeline = query.view === "timeline";
       shown.sort(ORDERS[timeline ? "date" : query.sort]);
       const tiles = shown.map((p) => p.id);
       const token = `q${nextToken++}`;
-      held.push({ token, tiles, filter });
+      held.push({ token, tiles, filter, text });
       while (held.length > TOKENS_KEPT) held.shift();
       const chipList = chips(filter, "");
       return {
@@ -299,7 +285,8 @@ export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
       const byId = new Map(list.map((p) => [p.id, p]));
       return tiles.slice(offset, offset + Math.min(limit, WINDOW_MAX)).map((id) => row(id, byId.get(id)));
     },
-    query_facets: ({ token }) => pass(list, heldOf(token).filter, "", true).facets!,
+    query_facets: ({ token }) => pass(list, heldOf(token).filter, "", true, heldOf(token).text).facets!,
+    query_parse: ({ text, enter, filter }) => parseBox(list, text, enter, normalised(filter ?? {})),
     query_ids: ({ token, offset, limit }) => tilesOf(token).slice(offset, offset + limit),
     query_locate: ({ token, id }) => {
       const index = tilesOf(token).indexOf(id);

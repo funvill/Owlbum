@@ -150,6 +150,52 @@ describe("FilterBar", () => {
     expect(grid().facets).toBeNull();
   });
 
+  it("has the search box with its hint line", async () => {
+    const { container } = render(<FilterBar />);
+    const box = screen.getByRole("searchbox", { name: "Search photos" });
+    expect(box).toHaveAttribute("placeholder", "Search names, people, places, notes and keywords");
+    expect(screen.getByText("star:yes")).toBeInTheDocument();
+    expect(focusOf(box)).not.toBe("grid");
+    expect(await seriousFindings(container)).toEqual([]);
+  });
+
+  it("turns query words into chips and the rest into search text", async () => {
+    await grid().start();
+    render(<FilterBar />);
+    const box = screen.getByRole("searchbox", { name: "Search photos" });
+    await userEvent.type(box, "ann star:no ");
+    await vi.waitFor(() => expect(grid().query.filter).toEqual({ star: "no" }));
+    expect(box).toHaveValue("ann ");
+    const row = await screen.findByRole("region", { name: "Active filters" });
+    expect(within(row).getByText("Not starred")).toBeInTheDocument();
+    // The search text re-runs the query after a pause.
+    await vi.waitFor(() => expect(grid().query.search).toBe("ann"));
+    await vi.waitFor(() => expect(within(row).getByText("Showing 1 of 3")).toBeInTheDocument());
+
+    await userEvent.type(box, "has:people");
+    expect(grid().query.filter).toEqual({ star: "no" });
+    await userEvent.keyboard("{Enter}");
+    await vi.waitFor(() => expect(grid().query.filter).toEqual({ star: "no", has_people: true }));
+    expect(box).toHaveValue("ann");
+
+    await userEvent.click(within(row).getByRole("button", { name: "Clear filter" }));
+    await vi.waitFor(() => expect(grid().query).toMatchObject({ filter: {}, search: null }));
+    expect(box).toHaveValue("");
+  });
+
+  it("shows a bad query word's error and searches its text", async () => {
+    await grid().start();
+    render(<FilterBar />);
+    const box = screen.getByRole("searchbox", { name: "Search photos" });
+    await userEvent.type(box, "star:maybe lake{Enter}");
+    expect(await screen.findByText(`"star:maybe" isn't a filter: try star:yes or star:no`)).toBeInTheDocument();
+    expect(screen.queryByText("star:yes")).not.toBeInTheDocument();
+    await vi.waitFor(() => expect(grid().query.search).toBe("star:maybe lake"));
+    expect(grid().query.filter).toEqual({});
+    await userEvent.type(box, "s");
+    expect(screen.getByText("star:yes")).toBeInTheDocument();
+  });
+
   it("never sets From after To", async () => {
     await grid().start();
     render(<FilterBar />);

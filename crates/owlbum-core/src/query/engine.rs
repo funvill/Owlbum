@@ -1,7 +1,7 @@
 //! The query engine: runs queries over the album index and keeps their
 //! results under tokens (docs/05-organising.md, "How Rust runs a query").
 
-use std::collections::{HashMap, VecDeque};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -10,7 +10,7 @@ use rusqlite::OptionalExtension;
 use super::filter::{self, Content, Matcher};
 use super::keep::settle;
 use super::shape::{Facets, Filter, Keep, Located, Query, QueryResult, QuerySort, QueryView, Row};
-use super::{sort, support, timeline};
+use super::{search, sort, support, timeline};
 use crate::album::{Album, sqlite_error};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::index::Kind;
@@ -42,6 +42,8 @@ struct Held {
     /// tag ids, for `query_facets`.
     filter: Filter,
     content: Content,
+    /// The photos its search text matched; None without search text.
+    text: Option<HashSet<u32>>,
 }
 
 /// Runs queries for one open album and keeps the last [`TOKENS_KEPT`]
@@ -84,10 +86,24 @@ impl QueryEngine {
     /// `query_run`: works out the ordered tiles of `query`, keeps them
     /// under a new token, and settles `keep` against them.
     pub fn run(&self, album: &Album, query: &Query, keep: Option<&Keep>) -> AppResult<QueryResult> {
+        self.run_with(album, &Overlay::default(), query, keep)
+    }
+
+    /// [`Self::run`] for an album that may hold rows in memory: those rows
+    /// are not in the `search` table, so search text matches them on their
+    /// file name.
+    pub fn run_with(
+        &self,
+        album: &Album,
+        overlay: &Overlay,
+        query: &Query,
+        keep: Option<&Keep>,
+    ) -> AppResult<QueryResult> {
         support::check(query)?;
         let filter = query.filter.normalised();
         filter::validate(&filter)?;
         let content = filter::content(album, &filter)?;
+        let text = search::matching(album, overlay, query.search.as_deref())?;
         // Read before the index: a change landing in between makes this
         // result newer than its revision says, never older, so the page's
         // "is the event newer" test can only re-run once too often.
@@ -104,7 +120,7 @@ impl QueryEngine {
             query.sort
         };
         let (tiles, album_photos, total, facets, chips, grouped) = album.index().read(|v| {
-            let matcher = Matcher::new(v, &filter, &content);
+            let matcher = Matcher::new(v, &filter, &content, &text);
             let passed = filter::pass(v, &matcher, query.want_facets);
             let tiles = sort::order(v, &passed.shown, order);
             let grouped = is_timeline.then(|| timeline::groups(v, &tiles, query.timeline_unit));
@@ -129,6 +145,7 @@ impl QueryEngine {
             folded: HashMap::new(),
             filter,
             content,
+            text,
         });
         Ok(QueryResult {
             token,
@@ -152,7 +169,7 @@ impl QueryEngine {
     pub fn facets(&self, album: &Album, token: &str) -> AppResult<Facets> {
         let held = self.held(token)?;
         Ok(album.index().read(|v| {
-            let matcher = Matcher::new(v, &held.filter, &held.content);
+            let matcher = Matcher::new(v, &held.filter, &held.content, &held.text);
             filter::pass(v, &matcher, true).facets.unwrap_or_default()
         }))
     }

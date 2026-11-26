@@ -2,13 +2,15 @@
 
 use crate::session::Session;
 use crate::{area, command};
-use owlbum_core::query::{Arg, Facets, Keep, Located, Query, QueryResult, Row};
+use owlbum_core::query::{
+    Arg, Facets, Filter, Keep, Located, ParsedBox, Query, QueryResult, Row, parse_box,
+};
 use owlbum_core::{AppError, text};
 use tauri::State;
 
 area! {
     prefix: "query",
-    commands: [query_facets, query_ids, query_locate, query_run, query_window],
+    commands: [query_facets, query_ids, query_locate, query_parse, query_run, query_window],
     events: [],
 }
 
@@ -22,7 +24,25 @@ command! {
         let query = query.get()?;
         let keep = keep.map(Arg::get).transpose()?;
         let (scanner, queries) = session.queries()?;
-        blocking(move || queries.run(scanner.album(), &query, keep.as_ref())).await
+        blocking(move || {
+            let overlay = scanner.overlay();
+            queries.run_with(scanner.album(), &overlay, &query, keep.as_ref())
+        })
+        .await
+    }
+}
+
+command! {
+    /// Reads the search box: turns its `key:value` words into filters and
+    /// answers what the box should hold and the search text. `enter` is
+    /// true when Enter was pressed, so the unfinished last word is read
+    /// too. `filter` is the filter the page holds, for the order of `from`
+    /// and `to` and for tags and people already in it. `no_album` when no
+    /// album is open.
+    pub async fn query_parse(text: String, enter: bool, filter: Option<Arg<Filter>>; session: State<'_, Session>) -> ParsedBox {
+        let filter = filter.map(Arg::get).transpose()?.unwrap_or_default();
+        let (scanner, _) = session.queries()?;
+        blocking(move || parse_box(scanner.album(), &text, enter, &filter)).await
     }
 }
 

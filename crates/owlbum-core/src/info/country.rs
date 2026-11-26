@@ -381,7 +381,7 @@ pub fn place_search(text: &str) -> Vec<CountryMatch> {
 
 /// Lower case, with the accents of Latin letters removed, so "aland" finds
 /// "Åland".
-fn fold(text: &str) -> String {
+pub(crate) fn fold(text: &str) -> String {
     text.chars()
         .flat_map(char::to_lowercase)
         .map(|c| match c {

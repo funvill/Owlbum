@@ -7,6 +7,7 @@ import { organiseText as t } from "../../text/organise";
 import { useGridStore } from "../grid";
 import { FilterChip } from "./FilterChip";
 import { FilterPanel } from "./FilterPanel";
+import { QueryBox, clearQueryBox } from "./QueryBox";
 import "./FilterBar.css";
 
 type Sort = Query["sort"];
@@ -24,8 +25,8 @@ function setFilter(filter: Filter): void {
  * landmark above the body while an album with photos is open. It holds the
  * Sort control (#29), the Filters button with its panel, and the count; a
  * second row, "Active filters", shows the chips, "Showing X of Y" and Clear
- * filter while a filter is on (#31). Stack similar (#30) and the search
- * box (#32) join it with their issues.
+ * filter while a filter is on (#31), and the search box with its hint line
+ * (#32). Stack similar (#30) joins it with its issue.
  *
  * Every number and chip comes from the result: the page never counts or
  * builds chip text itself. A change of sort or filter re-runs the query
@@ -78,6 +79,7 @@ export function FilterBar() {
             grid.setQuery({ ...grid.query, sort: sort as Sort });
           }}
         />
+        <QueryBox />
         <span className="ow-filter-bar__spacer" />
         <div
           ref={area}
@@ -117,6 +119,7 @@ export function FilterBar() {
           <Button
             size="sm"
             onClick={() => {
+              clearQueryBox();
               const grid = useGridStore.getState();
               grid.setQuery({ ...grid.query, filter: {}, search: null });
             }}

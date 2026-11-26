@@ -527,12 +527,12 @@ Rules for values:
 
 ### Parsing rules
 
-`query_parse(text, final)` splits the box into finished words and one unfinished last word (the text after the last space that is outside quotes).
+`query_parse(text, enter, filter)` splits the box into finished words and one unfinished last word (the text after the last space that is outside quotes). `enter` is true when Enter was pressed (the doc's earlier name `final` is a Rust keyword). `filter` is the filter the page holds: a `from` or `to` word is checked against its other end, and a tag or person already in it is not added again.
 
 | Case | Result |
 |---|---|
-| `final` is false (typing) | The unfinished last word is left alone and stays in the box. |
-| `final` is true (Enter) | The last word is parsed too. |
+| `enter` is false (typing) | The unfinished last word is left alone and stays in the box. |
+| `enter` is true (Enter) | The last word is parsed too. |
 | A word whose key is not known (`http://x`, `a:b`) | Plain text. It stays in the box. No error. |
 | A known key with a good value | The word is taken out of the box and its filter is set. |
 | The same single-value filter twice (`star:yes star:no`) | The later word wins. No error. |
@@ -541,6 +541,8 @@ Rules for values:
 | A space inside an open quote (`folder:"Day `) | The word is not finished, so nothing is taken. The space after the closing quote finishes it. |
 
 The error message is `"{word}" isn't a filter: {hint}`, for example `"star:maybe" isn't a filter: try star:yes or star:no`.
+
+**The rest** is the box with the taken words removed, trimmed; while typing, when the box ended with a finished word, it keeps one trailing space so the next letter starts a new word.
 
 **The search text** that results is the box with the taken words removed, trimmed. While typing, a trailing unfinished word that starts with a known `key:` is also left out of the search text, so typing `lake star:ye` searches for `lake` and not for `star:ye`. On Enter a bad word becomes part of the search text.
 
@@ -562,8 +564,9 @@ interface ParsedBox {
 
 | Moment | What the page does |
 |---|---|
-| Any change to the box | Clears the error. If the text ends with a space outside quotes, calls `query_parse(text, false)`. Otherwise it only asks for the search text (the same command; `taken` is false). |
+| Any change to the box | Clears the error and calls `query_parse(text, false)`. A reply's error is shown only when the text ends with a space outside quotes; otherwise the error stays cleared while a word is being typed. |
 | Enter | Calls `query_parse(text, true)`. |
+| A reply to text the box no longer holds | Dropped, so a slow reply never overwrites what is being typed. |
 | A reply with `taken` | Merges `set`, `add_tags` and `add_people` into the filter, replaces the box text with `rest`, shows `error`, and uses `search` as the search text. |
 | A reply without `taken` | Shows `error` and uses `search` as the search text. The box text is not touched. |
 | The search text changes from elsewhere (Clear filter, a restored session) | The box is replaced with the new text, unless what it holds already gives that search text. |
@@ -622,7 +625,7 @@ The old program searched only descriptions, notes, keywords and objects, and loo
 - Text search is one more filter. A photo must match the text **and** pass every other filter. It does not reveal hidden photos.
 - It counts as "filtered": the filtered row and Clear filter appear. It has no chip, because the box already shows it.
 - **Search by meaning** ([Tagging](07-tagging.md#search-by-meaning)) adds to it. After `query_run` has answered, the page calls `search_meaning(token)`. Rust finds photos close in meaning to the same search text, keeps those that are not already word matches and that pass every other filter (the text filter is left out for this check), and appends them to the end of the list held under that token: the **meaning segment**. They are in score order, best first, and are never stacked. The reply gives `meaning_start`, the index of the first of them, and the new `count` and `photos`; the page never holds a list of ids. The grid starts the segment on a fresh row under the note "Also matching by meaning". The photos count in X, and the viewer and the keys step through them. A new `query_run` makes a new token with no meaning segment until `search_meaning` is called for it.
-- **Rows held only in memory** (a view-only album whose database does not know some files) are not in the `search` table. They are matched on file name only, by the same folding and prefix rule.
+- **Rows held only in memory** (a view-only album whose database does not know some files) are not in the `search` table. They are matched on file name only, by the same prefix rule; their folding is lower case plus the accents of Latin letters (the country search's folding), not the tokeniser's full rule.
 
 ## The `Query`
 
@@ -792,7 +795,7 @@ Measured on the `large-100000` fixture, on a release build, on a local SSD.
 
 The first three rows are the common queries: they are what "stays quick" in the [README](README.md)'s principles means for 100,000 photos. A benchmark for each row lives in `owlbum-core` and is run before a release. It is not a pass-or-fail test, because timings depend on the machine.
 
-**Measured (#26).** `crates/owlbum-core/tests/large_album.rs` opens and scans the `large-100000` fixture, reopens it with its thumbnails kept and times the commands the grid uses (its header says how to run it). Windows development machine, release build, local SSD, one run each, after the two fixes below: `query_run` 1.9 ms by date and 5.3 ms by name; the same re-run keeping the current photo and 1,000 selected, 2.0 ms; `query_window` of 200 rows 0.4 to 1.0 ms; `query_locate` of the last photo 0.1 ms; `query_ids` of the whole result 0.2 ms; one star written through `Album::write_photos`, index included, 8.9 ms (the star command itself is #27). Loading the album index took 0.76 to 1.2 s inside an `Album::open` of 1.0 to 3.0 s, which also runs `quick_check` (0.3 to 0.5 s). After #124 the index is read beside `quick_check`, its name sort takes 86 ms rather than about 300 ms, and `Album::open` takes 0.54 to 0.58 s. Before the fixes, `query_window` took 65 to 110 ms, because each of its 200 lookups was its own read transaction; it now reads the window in one. A re-run with `keep` took 42 ms, almost all of it a hash map of 100,000 places; `settle` now uses a table indexed by id. The rows for filters, search, facets, `query_parse`, the other sorts and the derived rebuild are measured when #28 to #32 build them (#125). #31 added three rows to the benchmark (four column filters at once, the same with `want_facets`, and `query_facets` on that result); on the 300-photo album the test runs by default they take 0.1, 0.5 and 0.3 ms, and they are still to be measured at 100,000 photos (#125).
+**Measured (#26).** `crates/owlbum-core/tests/large_album.rs` opens and scans the `large-100000` fixture, reopens it with its thumbnails kept and times the commands the grid uses (its header says how to run it). Windows development machine, release build, local SSD, one run each, after the two fixes below: `query_run` 1.9 ms by date and 5.3 ms by name; the same re-run keeping the current photo and 1,000 selected, 2.0 ms; `query_window` of 200 rows 0.4 to 1.0 ms; `query_locate` of the last photo 0.1 ms; `query_ids` of the whole result 0.2 ms; one star written through `Album::write_photos`, index included, 8.9 ms (the star command itself is #27). Loading the album index took 0.76 to 1.2 s inside an `Album::open` of 1.0 to 3.0 s, which also runs `quick_check` (0.3 to 0.5 s). After #124 the index is read beside `quick_check`, its name sort takes 86 ms rather than about 300 ms, and `Album::open` takes 0.54 to 0.58 s. Before the fixes, `query_window` took 65 to 110 ms, because each of its 200 lookups was its own read transaction; it now reads the window in one. A re-run with `keep` took 42 ms, almost all of it a hash map of 100,000 places; `settle` now uses a table indexed by id. The rows for filters, search, facets, `query_parse`, the other sorts and the derived rebuild are measured when #28 to #32 build them (#125). #31 added three rows to the benchmark (four column filters at once, the same with `want_facets`, and `query_facets` on that result); on the 300-photo album the test runs by default they take 0.1, 0.5 and 0.3 ms, and they are still to be measured at 100,000 photos (#125). #32 added three more: `query_run` with the search text `IMG_00` (about 10,000 matches at 100,000 photos) and `img` (every photo), and `query_parse` of a box with four query words, a folder and text; on the 300-photo album they take 1.8, 0.9 and 0.3 ms, also still to be measured at 100,000 photos (#125).
 
 ## Undo (Ctrl+Z)
 
@@ -940,7 +943,7 @@ Commands this document adds or defines. All follow the rules in [Architecture](0
 | `query_window` | `token, offset, limit` | `Row[]` | `limit` is at most 500. Fewer rows than asked only at the end of the result. |
 | `query_locate` | `token, id` | `{ index: number } \| { folded_in: number } \| null` | `folded_in` is the id of the closed stack that holds the photo. `null`: not in the result. |
 | `query_facets` | `token` | `Facets` | For the query the token was made from. |
-| `query_parse` | `text, final` | `ParsedBox` | Needs an open album, for folder and people names. |
+| `query_parse` | `text, enter, filter?` | `ParsedBox` | Needs an open album, for folder and people names. `filter` is the filter the page holds. |
 | `photo_set_info` | `ids, patch` | `{ changed: number[], revision: number }` | Defined in [Browsing](04-browsing.md#commands-and-events), which owns the typed fields. This document uses `{ star }` and `{ hidden }`. |
 | `photo_nudge` | `ids, delta` | `{ changed: number[], total: number \| null, revision: number }` | `delta` is `1` or `-1`; the current photo goes first and `total` is its new score. |
 | `photo_score` | `id` | `{ total, analysed, lines: { label, why, points }[] }` | The score card's breakdown. |

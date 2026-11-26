@@ -17,6 +17,8 @@ const HAS_PEOPLE = 64;
 const CONTENT = 128;
 const LOW_QUALITY = 256;
 const NEAR_DUPLICATES = 512;
+/** Search text: no group, so a photo failing it counts in no facet. */
+const TEXT = 1024;
 
 export function folderOf(relPath: string): string {
   const at = relPath.lastIndexOf("/");
@@ -64,7 +66,7 @@ function shapeOf(p: FakePhoto): "portrait" | "landscape" | null {
 const hasPeople = (p: FakePhoto) => (p.people ?? []).length > 0;
 
 /** The filters `p` fails, one bit each. `filter` is normalised. */
-function fails(p: FakePhoto, filter: Filter): number {
+function fails(p: FakePhoto, filter: Filter, text: Set<number> | null): number {
   let mask = 0;
   const fail = (bit: number, passes: boolean) => {
     if (!passes) mask |= bit;
@@ -91,15 +93,20 @@ function fails(p: FakePhoto, filter: Filter): number {
   if (filter.people !== undefined || filter.tags !== undefined) fail(CONTENT, people && tags);
   if (filter.low_quality) fail(LOW_QUALITY, p.low_quality ?? false);
   if (filter.near_duplicates) fail(NEAR_DUPLICATES, p.burst ?? false);
+  if (text !== null) fail(TEXT, text.has(p.id));
   return mask;
 }
 
-/** What one pass gives: the photos that pass, Y, and the facets when asked for. */
+/**
+ * What one pass gives: the photos that pass, Y, and the facets when asked for.
+ * `text` holds the ids the search text matches; null without search text.
+ */
 export function pass(
   photos: FakePhoto[],
   filter: Filter,
   scope: string,
   wantFacets: boolean,
+  text: Set<number> | null = null,
 ): { shown: FakePhoto[]; total: number; facets: Facets | undefined } {
   const shown: FakePhoto[] = [];
   let total = 0;
@@ -116,7 +123,7 @@ export function pass(
   const folders = new Map<string, number>();
   for (const p of photos) {
     if (filter.hidden !== undefined || !(p.hidden ?? false)) total += 1;
-    const mask = fails(p, filter);
+    const mask = fails(p, filter, text);
     if (mask === 0) shown.push(p);
     if (!wantFacets) continue;
     const counts = (bit: number) => (mask & ~bit) === 0;

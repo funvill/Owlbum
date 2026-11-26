@@ -38,6 +38,8 @@ const HAS_PEOPLE: u16 = 1 << 6;
 const CONTENT: u16 = 1 << 7;
 const LOW_QUALITY: u16 = 1 << 8;
 const NEAR_DUPLICATES: u16 = 1 << 9;
+/// Search text: no group, so a photo failing it counts in no facet.
+const TEXT: u16 = 1 << 10;
 
 /// The photo ids of the people and tags of a filter: those with every
 /// listed person and every listed tag. None when neither is on.
@@ -72,7 +74,7 @@ pub(super) fn validate(filter: &Filter) -> AppResult<()> {
 
 /// A `YYYY-MM-DD` day as days from 1970-01-01; None when it is not a real
 /// calendar day.
-fn day_of(day: &str) -> Option<i64> {
+pub(super) fn day_of(day: &str) -> Option<i64> {
     if day.len() != 10 {
         return None;
     }
@@ -152,13 +154,22 @@ pub(super) struct Matcher<'a> {
     has_location: bool,
     has_people: bool,
     content: Option<&'a HashSet<u32>>,
+    /// The photos the search text matches; None when there is no search
+    /// text.
+    text: Option<&'a HashSet<u32>>,
     low_quality: bool,
     near_duplicates: bool,
 }
 
 impl<'a> Matcher<'a> {
-    /// The matcher for a [`validate`]d, normalised `filter` over `view`.
-    pub(super) fn new(view: &IndexView<'_>, filter: &Filter, content: &'a Content) -> Self {
+    /// The matcher for a [`validate`]d, normalised `filter` over `view`,
+    /// with the ids of its people and tags and of its search text.
+    pub(super) fn new(
+        view: &IndexView<'_>,
+        filter: &Filter,
+        content: &'a Content,
+        text: &'a Option<HashSet<u32>>,
+    ) -> Self {
         let Filter {
             star,
             shape,
@@ -193,6 +204,7 @@ impl<'a> Matcher<'a> {
             has_location: has_location.unwrap_or(false),
             has_people: has_people.unwrap_or(false),
             content: content.as_ref(),
+            text: text.as_ref(),
             low_quality: low_quality.unwrap_or(false),
             near_duplicates: near_duplicates.unwrap_or(false),
         }
@@ -238,6 +250,9 @@ impl<'a> Matcher<'a> {
         }
         if let Some(ids) = self.content {
             fail(CONTENT, ids.contains(&p.id));
+        }
+        if let Some(ids) = self.text {
+            fail(TEXT, ids.contains(&p.id));
         }
         if self.low_quality {
             fail(LOW_QUALITY, p.derived.quality_flags != 0);

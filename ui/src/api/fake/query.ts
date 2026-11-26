@@ -231,6 +231,7 @@ export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
       const byId = new Map(list.map((p) => [p.id, p]));
       return tiles.slice(offset, offset + Math.min(limit, WINDOW_MAX)).map((id) => row(id, byId.get(id)));
     },
+    query_ids: ({ token, offset, limit }) => tilesOf(token).slice(offset, offset + limit),
     query_locate: ({ token, id }) => {
       const index = tilesOf(token).indexOf(id);
       return index < 0 ? null : { index };

@@ -219,6 +219,19 @@ impl QueryEngine {
             .collect())
     }
 
+    /// `query_ids`: the ids of the tiles at `offset`, at most `limit`, in
+    /// order. There is no cap: Ctrl+A asks for the whole result at once.
+    /// Fewer only at the end of the result.
+    pub fn ids(&self, token: &str, offset: u32, limit: u32) -> AppResult<Vec<i64>> {
+        let held = self.held(token)?;
+        let start = (offset as usize).min(held.tiles.len());
+        let end = start.saturating_add(limit as usize).min(held.tiles.len());
+        Ok(held.tiles[start..end]
+            .iter()
+            .map(|&id| i64::from(id))
+            .collect())
+    }
+
     /// `query_locate`: where photo `id` sits in a result; None when it is
     /// not in it.
     pub fn locate(&self, token: &str, id: i64) -> AppResult<Option<Located>> {

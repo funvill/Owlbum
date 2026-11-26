@@ -30,6 +30,25 @@ export interface Selected {
   selection: number[];
 }
 
+/**
+ * A selection change waiting on the backend: a step onto a row not fetched
+ * yet, or a range whose ids come from `query_ids`. Until it settles, the
+ * grid outlines `index` as the current photo and shows `first`..`last`
+ * selected by index. The committed `current`, `anchor` and `selection`
+ * stay as they were, and are what the next `query_run` keeps; a new result
+ * drops whatever is pending.
+ */
+export interface Pending {
+  /** Where the current photo is going. */
+  index: number;
+  first: number;
+  last: number;
+  /** Whether the committed selection still shows beside the range (Ctrl+Shift). */
+  add: boolean;
+  /** `row`: a plain step, settled when the row at `index` arrives. `ids`: a range, settled by `query_ids`. */
+  wait: "row" | "ids";
+}
+
 /** A request for the grid to scroll, after a change the user made. */
 export interface ScrollRequest {
   to: "current" | "top";
@@ -55,6 +74,8 @@ export interface GridState extends Selected {
   /** The chosen thumbnail size, 96 to 320. */
   thumbSize: number;
   scroll: ScrollRequest | null;
+  /** A selection change waiting on the backend; see `Pending`. */
+  pending: Pending | null;
   /** Moves on when the formats from `app_formats` arrive. */
   formats: number;
   /** Runs the query and follows `album_changed`. Calling it again does nothing. */
@@ -65,8 +86,15 @@ export interface GridState extends Selected {
   setQuery(query: Query): void;
   /** Sets the thumbnail size at once and saves it 300 ms after the last change. */
   setThumbSize(size: number): void;
-  /** Sets the current photo, anchor and selection (#19's clicks and keys). */
+  /** Sets the current photo, anchor and selection, dropping anything pending. */
   setSelection(selected: Selected): void;
+  /** Marks a selection change as waiting on the backend, and scrolls to where it goes. */
+  setPending(pending: Pending): void;
+  /**
+   * Runs the query again now, keeping the selection (as after
+   * `album_changed`). For a `photo_not_found` answer, which this settles.
+   */
+  refresh(): Promise<void>;
 }
 
 type Cause = "first" | "user" | "change";
@@ -75,6 +103,8 @@ interface Session {
   client: QueryClient;
   ready: Promise<void>;
   unlisten: Unlisten | null;
+  /** Stops watching the block store for a pending step's row. */
+  unwatch: () => void;
   busy: () => boolean;
   /** Why the newest call was made. */
   cause: Cause;
@@ -151,7 +181,7 @@ export const useGridStore = create<GridState>()((set, get) => {
       kept === null ? {} : { current: kept.current, anchor: kept.anchor, selection: kept.selection };
     const current = kept === null ? get().current : kept.current;
     const scroll = s.cause === "user" ? nextScroll(current === null ? "top" : "current") : get().scroll;
-    set({ result, error: null, ...selected, scroll });
+    set({ result, error: null, ...selected, scroll, pending: null });
   };
 
   const run = async (s: Session, cause: Cause) => {
@@ -190,6 +220,16 @@ export const useGridStore = create<GridState>()((set, get) => {
     }
   };
 
+  /** A pending step settles when its row arrives. */
+  const settleStep = () => {
+    const p = get().pending;
+    if (p === null || p.wait !== "row" || !blocks.fresh(p.index)) return;
+    const row = blocks.row(p.index);
+    if (row === undefined) return;
+    const at = { id: row.id, index: p.index };
+    set({ current: at, anchor: at, selection: [row.id], pending: null });
+  };
+
   rerunExpired = () => {
     if (session !== null) rerun(session);
   };
@@ -201,6 +241,7 @@ export const useGridStore = create<GridState>()((set, get) => {
     thumbSize: THUMB_DEFAULT,
     scroll: null,
     formats: 0,
+    pending: null,
     ...empty,
 
     start(options = {}) {
@@ -215,6 +256,7 @@ export const useGridStore = create<GridState>()((set, get) => {
         }),
         ready: Promise.resolve(),
         unlisten: null,
+        unwatch: blocks.subscribe(settleStep),
         busy: options.busy ?? (() => false),
         cause: "first",
         lastRerun: Number.NEGATIVE_INFINITY,
@@ -245,11 +287,12 @@ export const useGridStore = create<GridState>()((set, get) => {
       session = null;
       if (s !== null) {
         s.unlisten?.();
+        s.unwatch();
         clearTimeout(s.rerunTimer);
         if (s.frame !== undefined) cancelAnimationFrame(s.frame);
       }
       blocks.clear();
-      set({ result: null, error: null, query: defaultQuery(), scroll: null, ...empty });
+      set({ result: null, error: null, query: defaultQuery(), scroll: null, pending: null, ...empty });
     },
 
     setQuery(query) {
@@ -278,7 +321,19 @@ export const useGridStore = create<GridState>()((set, get) => {
       const moved =
         selected.current !== null &&
         (before === null || before.id !== selected.current.id || before.index !== selected.current.index);
-      set({ ...selected, scroll: moved ? nextScroll("current") : get().scroll });
+      set({ ...selected, pending: null, scroll: moved ? nextScroll("current") : get().scroll });
+    },
+
+    setPending(pending) {
+      set({ pending, scroll: nextScroll("current") });
+      settleStep();
+    },
+
+    async refresh() {
+      const s = session;
+      if (s === null) return;
+      await s.ready;
+      if (session === s) await run(s, "change");
     },
   };
 });

@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import { albumText } from "../../text/album";
-import { Grid, useGridStore } from "../grid";
+import { BrowseGrid, useGridStore } from "../grid";
 import { useAlbumStore } from "./session";
 import { StartScreen } from "./StartScreen";
 
@@ -50,7 +50,7 @@ export function Body() {
       {state === "empty" && <p className="ow-body__message">{albumText.noPhotos}</p>}
       {state === "review" && (
         <section className="ow-review" aria-label={albumText.photosRegion}>
-          <Grid busy={scanRunning} />
+          <BrowseGrid busy={scanRunning} />
         </section>
       )}
       {dropOver && (

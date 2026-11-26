@@ -8,6 +8,7 @@ import type { QueryResult } from "./QueryResult";
 import type { Row } from "./Row";
 
 export type QueryCommands = {
+  query_ids: { args: { token: string; offset: number; limit: number }; result: Array<number> };
   query_locate: { args: { token: string; id: number }; result: Located | null };
   query_run: { args: { query: Query; keep: Keep | null }; result: QueryResult };
   query_window: { args: { token: string; offset: number; limit: number }; result: Array<Row> };

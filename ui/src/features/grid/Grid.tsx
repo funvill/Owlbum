@@ -50,6 +50,7 @@ export function Grid(props: GridProps) {
   const current = useGridStore((s) => s.current);
   const anchor = useGridStore((s) => s.anchor);
   const selection = useGridStore((s) => s.selection);
+  const pending = useGridStore((s) => s.pending);
   const scroll = useGridStore((s) => s.scroll);
   useGridStore((s) => s.formats);
   const editTarget = useSettingsStore((s) => s.settings?.edit_target ?? "album");
@@ -76,10 +77,12 @@ export function Grid(props: GridProps) {
   const [range, setRange] = useState<VisibleRange>(() => visibleRange(layout, 0, 0, count));
 
   // The latest values, for the handlers attached once.
-  const live = useRef({ layout, size, count, current, anchor, real: 0, direction: 1 as 1 | -1, frame: 0 });
+  // `at` is where the current photo is, or is going while a step waits on its row.
+  const at = pending?.index ?? current?.index ?? null;
+  const live = useRef({ layout, size, count, at, anchor, real: 0, direction: 1 as 1 | -1, frame: 0 });
   // Kept up to date before any other effect of this render reads it.
   useLayoutEffect(() => {
-    Object.assign(live.current, { layout, size, count, current, anchor });
+    Object.assign(live.current, { layout, size, count, at, anchor });
   });
 
   /** The first row drawn, as committed: rows are placed relative to it. */
@@ -116,7 +119,7 @@ export function Grid(props: GridProps) {
       last: next.lastIndex,
       span: Math.max(1, Math.ceil(viewport / v.layout.stride) * v.layout.cols),
       direction: v.direction,
-      current: v.current?.index ?? null,
+      current: v.at,
       anchor: v.anchor?.index ?? null,
     });
   }, [blocks, placeLayer]);
@@ -181,8 +184,8 @@ export function Grid(props: GridProps) {
     if (old !== null && old.width > 0 && layout.width > 0 && (old.cols !== layout.cols || old.stride !== layout.stride)) {
       scrollReal(anchorAfterResize(old, layout, v.real));
       v.real = realScroll(boxRef.current?.scrollTop ?? 0, layout, v.size.height);
-      if (old.cols !== layout.cols && v.current !== null) {
-        const to = scrollToShow(v.current.index, layout, v.real, v.size.height);
+      if (old.cols !== layout.cols && v.at !== null) {
+        const to = scrollToShow(v.at, layout, v.real, v.size.height);
         if (to !== null) scrollReal(to);
       }
     } else {
@@ -199,8 +202,8 @@ export function Grid(props: GridProps) {
     if (scroll === null) return;
     const v = live.current;
     if (scroll.to === "top") scrollReal(0);
-    else if (v.current !== null) {
-      const to = scrollToShow(v.current.index, v.layout, v.real, v.size.height);
+    else if (v.at !== null) {
+      const to = scrollToShow(v.at, v.layout, v.real, v.size.height);
       if (to !== null) scrollReal(to);
     }
     update();
@@ -209,7 +212,15 @@ export function Grid(props: GridProps) {
   // The current photo or the anchor moved: their blocks are wanted and kept.
   useEffect(() => {
     update();
-  }, [current, anchor, update]);
+  }, [at, anchor, update]);
+
+  // Keyboard focus inside the grid follows the current photo.
+  useEffect(() => {
+    const el = boxRef.current;
+    if (el === null || at === null || !el.contains(document.activeElement)) return;
+    const tile = el.querySelector<HTMLElement>(`[data-index="${at}"]`);
+    if (tile !== null && tile !== document.activeElement) tile.focus({ preventScroll: true });
+  }, [at, range]);
 
   // New rows are drawn: place the layer for them.
   useLayoutEffect(() => {
@@ -264,10 +275,10 @@ export function Grid(props: GridProps) {
   }
 
   const thumb = thumbFor(layout.side, globalThis.devicePixelRatio || 1);
-  const focusIndex =
-    current !== null && current.index >= range.firstIndex && current.index <= range.lastIndex
-      ? current.index
-      : range.firstIndex;
+  const focusIndex = at !== null && at >= range.firstIndex && at <= range.lastIndex ? at : range.firstIndex;
+  // While a change waits on the backend, its range shows selected by index.
+  const shownByIndex = (i: number) => pending !== null && i >= pending.first && i <= pending.last;
+  const others = pending === null || pending.add;
   const rows = [];
   for (let r = range.firstRow; r < range.endRow; r++) {
     const cells = [];
@@ -282,8 +293,8 @@ export function Grid(props: GridProps) {
           x={PAD + (i - r * layout.cols) * layout.stride}
           side={layout.side}
           thumb={thumb}
-          selected={row !== undefined && selected.has(row.id)}
-          current={current !== null && current.index === i}
+          selected={shownByIndex(i) || (others && row !== undefined && selected.has(row.id))}
+          current={at === i}
           tabbable={i === focusIndex}
           editTarget={editTarget}
           animatedLabel={row === undefined ? null : animatedLabel(row.file_name)}

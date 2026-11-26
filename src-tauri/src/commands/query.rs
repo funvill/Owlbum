@@ -8,7 +8,7 @@ use tauri::State;
 
 area! {
     prefix: "query",
-    commands: [query_locate, query_run, query_window],
+    commands: [query_ids, query_locate, query_run, query_window],
     events: [],
 }
 
@@ -47,6 +47,17 @@ command! {
     pub fn query_locate(token: String, id: i64; session: State<'_, Session>) -> Option<Located> {
         let (_, queries) = session.queries()?;
         queries.locate(&token, id)
+    }
+}
+
+command! {
+    /// The ids of the tiles at `offset` of a result, at most `limit`, in
+    /// order: one per tile, so a closed stack's face and not its folded
+    /// members. No cap on `limit`. `query_expired` for a token that was
+    /// dropped.
+    pub fn query_ids(token: String, offset: u32, limit: u32; session: State<'_, Session>) -> Vec<i64> {
+        let (_, queries) = session.queries()?;
+        queries.ids(&token, offset, limit)
     }
 }
 

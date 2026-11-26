@@ -74,6 +74,7 @@ export const Tile = memo(function Tile({
     return (
       <div
         role="gridcell"
+        data-index={index}
         aria-selected={selected}
         aria-label={gridText.loading}
         tabIndex={tabbable ? 0 : -1}
@@ -105,6 +106,7 @@ export const Tile = memo(function Tile({
     <Tooltip text={row.rel_path}>
       <div
         role="gridcell"
+        data-index={index}
         aria-selected={selected}
         aria-label={name}
         tabIndex={tabbable ? 0 : -1}

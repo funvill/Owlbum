@@ -473,13 +473,13 @@ A click or double-click on the star button or the stack count is not a click on 
 | Shift | The selection becomes every photo from the anchor to the clicked photo, inclusive. The clicked photo becomes the current photo. The anchor does not move. With no anchor, Shift-click is a plain click. |
 | Ctrl+Shift | The same range is added to the selection instead of replacing it. |
 
-A Shift range is worked out by index. Ids for rows the page already holds are read from them; the rest come from one `query_ids(token, offset, limit)` call. Until it answers, the tiles in the range that are on screen are shown selected by index.
+A Shift range is worked out by index. Ids for rows the page already holds are read from them; the rest come from one `query_ids(token, offset, limit)` call. Until it answers, the tiles in the range that are on screen are shown selected by index. A step onto a row not fetched yet is shown the same way, at its index, until the row arrives. While either waits, the next `query_run` keeps the selection as it was before; the new result drops the waiting change and any late answer to it. A click on a tile still showing the previous result's row (see [No blank flash](#running-a-query)) does nothing.
 
 Selecting another photo while a photo is being edited ends edit mode first, as its Done button would (see 06).
 
 ### Keys that change the selection
 
-Ctrl+A selects every photo shown in the result (one `query_ids` call) and leaves the current photo where it is, or makes the first photo current when there was none. "Shown" means the tiles: photos folded inside a closed stack are not included, as [Organising](05-organising.md#stacks) says. Ctrl+D selects nothing: the selection is emptied, there is no current photo and no anchor, the preview shows its hint and the details panel is empty. It does the same as the details panel's close button. Esc, when more than one photo is selected, reduces the selection to the current photo.
+Ctrl+A selects every photo shown in the result (one `query_ids` call) and leaves the current photo where it is, or makes the first photo current when there was none. "Shown" means the tiles: photos folded inside a closed stack are not included, as [Organising](05-organising.md#stacks) says. Ctrl+D selects nothing: the selection is emptied, there is no current photo and no anchor, the preview shows its hint and the details panel is empty. It does the same as the details panel's close button. Esc, when more than one photo is selected, reduces the selection to the current photo, which also becomes the anchor.
 
 ### What acts on what
 

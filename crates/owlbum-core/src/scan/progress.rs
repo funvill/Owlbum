@@ -175,7 +175,14 @@ struct ChangesState {
     dirty: bool,
     rekeyed: Vec<i64>,
     last: Option<Instant>,
+    /// When the bursts were last worked out again.
+    rebuilt: Option<Instant>,
 }
+
+/// While a scan writes, the bursts are worked out again at most this often
+/// (docs/05-organising.md, "Loading and keeping in step"), and once more
+/// when it ends.
+pub const REBUILD_EVERY: Duration = Duration::from_millis(2000);
 
 impl<'a> Changes<'a> {
     pub fn new(
@@ -207,6 +214,7 @@ impl<'a> Changes<'a> {
     pub fn flush(&self) {
         let mut s = self.state.lock().unwrap_or_else(|p| p.into_inner());
         if s.dirty {
+            s.rebuilt = None;
             self.send(&mut s);
         }
     }
@@ -215,9 +223,16 @@ impl<'a> Changes<'a> {
     /// as for `scan_progress`.
     fn send(&self, s: &mut ChangesState) {
         // New, gone or re-read photos change the photo score's sharpness
-        // list, so the scores are worked out again before the page re-runs
-        // its query (docs/05-organising.md, "Is the score stored?").
-        self.album.index().rescore();
+        // list and the bursts, so they are worked out again before the page
+        // re-runs its query (docs/05-organising.md, "Is the score
+        // stored?"): the bursts at most every two seconds and at the end,
+        // the scores every time.
+        if s.rebuilt.is_none_or(|t| t.elapsed() >= REBUILD_EVERY) {
+            self.album.index().rebuild();
+            s.rebuilt = Some(Instant::now());
+        } else {
+            self.album.index().rescore();
+        }
         let event = AlbumChanged {
             revision: self.album.next_revision(),
             reason: self.reason,

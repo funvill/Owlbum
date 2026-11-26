@@ -113,8 +113,11 @@ fn the_load_reads_every_column_the_index_keeps() {
             p.derived,
             Derived {
                 score: p.derived.score,
+                quality: p.derived.quality,
+                keeper: true,
                 ..Derived::default()
-            }
+            },
+            "scored, with its quality, and its own keeper in no burst"
         );
 
         let q = v.get(id(b)).unwrap();
@@ -559,4 +562,99 @@ fn a_new_photo_is_unscored_until_the_next_rescore() {
             .read(|v| v.get(id(b)).unwrap().derived.score)
             .is_some()
     );
+}
+
+/// Three shots of one burst: same dHash and colour, a minute apart, with
+/// sharpness rising so the last one has the best `quality`.
+fn burst_album() -> (Connection, [i64; 3]) {
+    let conn = db();
+    let ids = [1, 2, 3].map(|n| {
+        let id = add(&conn, "day", &format!("IMG_{n}.jpg"));
+        set(
+            &conn,
+            id,
+            &format!(
+                "captured_at = '2024-06-01T10:0{n}:00', analysis = '{{\"sharpness\":{},\"mean_luma\":0.5,\"clipped_shadows\":0,\"clipped_highlights\":0,\"saliency_x\":0.5,\"saliency_y\":0.5,\"dhash\":\"8f0c3c3e1e0e0603\",\"avg_colour\":[90,90,90]}}'",
+                n * 10
+            ),
+        );
+        id
+    });
+    (conn, ids)
+}
+
+fn bursts_of(index: &AlbumIndex) -> Vec<(u32, Option<u32>, bool, Option<i32>)> {
+    index.read(|v| {
+        v.photos()
+            .iter()
+            .map(|p| {
+                (
+                    p.id,
+                    p.derived.burst.map(|b| b.get()),
+                    p.derived.keeper,
+                    p.derived.score,
+                )
+            })
+            .collect()
+    })
+}
+
+#[test]
+fn the_load_finds_bursts_and_their_keepers() {
+    let (conn, [a, b, c]) = burst_album();
+    add(&conn, "", "alone.jpg");
+    let index = AlbumIndex::load(&conn, "").unwrap();
+    let got = bursts_of(&index);
+    let burst = Some(id(a));
+    assert_eq!(got[0].1, burst);
+    assert_eq!(got[1].1, burst);
+    assert_eq!(got[2].1, burst);
+    assert_eq!(got[3].1, None, "not analysed: in no burst");
+    assert!(got[2].2, "the sharpest is the keeper");
+    assert!(!got[0].2 && !got[1].2);
+    assert!(got[3].2, "a photo in no burst is its own keeper");
+    let _ = (b, c);
+}
+
+#[test]
+fn a_star_or_hide_picks_the_keeper_again_and_rescores_the_burst() {
+    let (conn, [a, _, c]) = burst_album();
+    let index = AlbumIndex::load(&conn, "").unwrap();
+    for change in ["star = 1", "star = 0", "hidden = 1"] {
+        let who = if change == "hidden = 1" { c } else { a };
+        set(&conn, who, change);
+        index.refresh(&conn, &[who]).unwrap();
+        let fresh = AlbumIndex::load(&conn, "").unwrap();
+        assert_eq!(bursts_of(&index), bursts_of(&fresh), "after {change}");
+    }
+    // The hidden keeper gave way to the next best.
+    assert!(index.read(|v| v.get(id(a + 1)).unwrap().derived.keeper));
+}
+
+#[test]
+fn a_changed_date_works_the_bursts_out_again() {
+    let (conn, [a, b, c]) = burst_album();
+    let index = AlbumIndex::load(&conn, "").unwrap();
+    set(&conn, a, "date_override = '2024-07-01T10:00:00'");
+    index.refresh(&conn, &[a]).unwrap();
+    let got = bursts_of(&index);
+    assert_eq!(got[0].1, None, "a is a month away now");
+    assert_eq!(got[1].1, Some(id(b)), "the burst is named after b now");
+    assert_eq!(
+        bursts_of(&index),
+        bursts_of(&AlbumIndex::load(&conn, "").unwrap())
+    );
+    let _ = c;
+}
+
+#[test]
+fn a_rebuild_finds_bursts_without_changing_the_generation() {
+    let (conn, [a, ..]) = burst_album();
+    let index = AlbumIndex::load(&conn, "").unwrap();
+    index.install_derived(Vec::new());
+    assert_eq!(bursts_of(&index)[0].1, None);
+    let g = index.generation();
+    index.rebuild();
+    assert_eq!(bursts_of(&index)[0].1, Some(id(a)));
+    assert_eq!(index.generation(), g);
 }

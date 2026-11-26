@@ -2135,3 +2135,41 @@ fn a_view_only_album_has_a_status_whatever_its_database_holds() {
     assert_eq!(status.view_only, Some(ViewOnly::Newer));
     assert_eq!((status.photos, status.unreadable), (0, 0));
 }
+
+#[test]
+fn the_trip_album_has_its_burst_and_its_duplicate_and_nothing_else() {
+    // docs/05, "Tests": the burst is found and nothing else is; the exact
+    // duplicate forms a burst too. The scan's last change works them out.
+    let fx = Fx::trip();
+    fx.scan();
+    let mut groups: std::collections::BTreeMap<u32, Vec<String>> = Default::default();
+    fx.album().index().read(|v| {
+        for p in v.photos() {
+            if let Some(b) = p.derived.burst {
+                let dir = v.folder(p.folder);
+                groups
+                    .entry(b.get())
+                    .or_default()
+                    .push(format!("{dir}/{}", v.file_name(p)));
+            }
+        }
+    });
+    let mut found: Vec<Vec<String>> = groups.into_values().collect();
+    for g in &mut found {
+        g.sort();
+    }
+    found.sort();
+    let mut burst: Vec<String> = fx
+        .manifest
+        .of_kind(Kind::Burst)
+        .map(|f| f.rel_path.clone())
+        .collect();
+    burst.sort();
+    assert_eq!(
+        found,
+        vec![
+            vec!["copies/lake.jpg".to_owned(), "day1/lake.jpg".to_owned()],
+            burst
+        ]
+    );
+}

@@ -249,6 +249,18 @@ impl Photo {
     pub fn analysis(&self) -> Option<&Analysis> {
         (self.flags & ANALYSED != 0).then_some(&self.analysis)
     }
+
+    /// Sets the star and hidden flags, for tests of rules that read them.
+    #[cfg(test)]
+    pub(crate) fn set_flags(&mut self, star: bool, hidden: bool) {
+        self.flags &= !(STAR | HIDDEN);
+        if star {
+            self.flags |= STAR;
+        }
+        if hidden {
+            self.flags |= HIDDEN;
+        }
+    }
 }
 
 /// The columns of one `photos` row that the index is built from. The

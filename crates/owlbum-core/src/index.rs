@@ -26,8 +26,12 @@
 //! - **In a view-only album** there is no writer. Rows that exist only in
 //!   memory for the session are put in with [`AlbumIndex::upsert`] and taken
 //!   out with [`AlbumIndex::remove`].
-//! - **Derived values** (flags, bursts) are worked out elsewhere from a
-//!   copy of the records and put in whole with
+//! - **Bursts** (with `quality` and the keepers) are worked out on load
+//!   and by [`AlbumIndex::rebuild`] (a scan, at most every 2 seconds and
+//!   at its end; a changed date), from a copy of the records outside the
+//!   lock. A star or hide of a burst member picks that burst's keeper
+//!   again and scores its members as soon as the row is refreshed.
+//! - **Other derived values** can be put in whole with
 //!   [`AlbumIndex::install_derived`]. A row the rebuild did not cover reads
 //!   as unscored.
 //! - **The score** is worked out here: for every photo on load and on
@@ -46,13 +50,14 @@ pub mod record;
 
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
+use std::num::NonZeroU32;
 use std::sync::{RwLock, RwLockWriteGuard};
 
 use rusqlite::{Connection, OptionalExtension, Row};
 
 use crate::album::sqlite_error;
 use crate::error::AppResult;
-use crate::organise::score;
+use crate::organise::{bursts, score};
 use crate::scan::natural_cmp_text;
 use crate::text;
 
@@ -156,18 +161,18 @@ impl AlbumIndex {
     /// with `missing = 0` and no `scan_error`, in one `SELECT`.
     pub fn load(conn: &Connection, scope: &str) -> AppResult<Self> {
         let mut state = State::load(conn, scope)?;
-        state.rescore();
+        state.rebuild();
         Ok(Self {
             state: RwLock::new(state),
         })
     }
 
     /// Replaces everything in the index with a fresh load from `conn`.
-    /// Derived values are cleared and the photos scored again.
+    /// Derived values are cleared, then bursts and scores worked out again.
     pub fn reload(&self, conn: &Connection) -> AppResult<()> {
         let scope = self.read(|v| v.scope().to_owned());
         let mut fresh = State::load(conn, &scope)?;
-        fresh.rescore();
+        fresh.rebuild();
         let mut state = self.write();
         fresh.generation = state.generation + 1;
         *state = fresh;
@@ -179,7 +184,9 @@ impl AlbumIndex {
     /// `missing`, with a `scan_error`, outside the scope) is taken out.
     /// Applied in one step under the write lock. A replaced row keeps its
     /// derived values until the next rebuild, except its score, which is
-    /// worked out again at once (see [`AlbumIndex::rescore`]).
+    /// worked out again at once (see [`AlbumIndex::rescore`]). A star or
+    /// hidden change of a burst member picks the burst's keeper again and
+    /// scores every member; a changed date rebuilds the bursts.
     pub fn refresh(&self, conn: &Connection, ids: &[i64]) -> AppResult<()> {
         if ids.is_empty() {
             return Ok(());
@@ -204,7 +211,10 @@ impl AlbumIndex {
                 None => gone.push(id),
             }
         }
-        self.write().apply(&found, &gone);
+        let redated = self.write().apply(&found, &gone);
+        if redated {
+            self.rebuild();
+        }
         Ok(())
     }
 
@@ -212,14 +222,18 @@ impl AlbumIndex {
     /// album's scan). A row outside the scope is taken out instead.
     pub fn upsert(&self, facts: &[PhotoFacts]) {
         if !facts.is_empty() {
-            self.write().apply(facts, &[]);
+            let redated = self.write().apply(facts, &[]);
+            if redated {
+                self.rebuild();
+            }
         }
     }
 
     /// Takes rows out (a view-only album's missing or unreadable files).
     pub fn remove(&self, ids: &[i64]) {
         if !ids.is_empty() {
-            self.write().apply(&[], ids);
+            // Taking rows out moves no date: nothing to rebuild.
+            let _ = self.write().apply(&[], ids);
         }
     }
 
@@ -241,6 +255,41 @@ impl AlbumIndex {
             };
             photo.derived.score = score::score(photo, &state.sharpness);
         }
+    }
+
+    /// Works out the bursts again (docs/05-organising.md, "Bursts"): the
+    /// sharpness list, every photo's `quality`, the bursts and their
+    /// keepers, then every score. The work runs on a copy of the records
+    /// outside the lock; only putting the result in holds the write lock,
+    /// so queries are not held up. A photo added while it ran is in no
+    /// burst until the next rebuild; star and hidden are read when the
+    /// result is put in, so a change that lands meanwhile is not lost.
+    /// Does not change [`AlbumIndex::generation`].
+    pub fn rebuild(&self) {
+        let photos = self.read(|v| v.photos().to_vec());
+        let sharpness = sharpness_of(&photos);
+        let found = bursts::find(&photos);
+        let worked: Vec<(u32, f32, Option<NonZeroU32>)> = photos
+            .iter()
+            .zip(found)
+            .map(|(p, b)| (p.id, bursts::quality(p, &sharpness), b))
+            .collect();
+        drop(photos);
+        let mut state = self.write();
+        let state = &mut *state;
+        let mut next = worked.iter().peekable();
+        for photo in &mut state.photos {
+            while next.next_if(|(id, ..)| *id < photo.id).is_some() {}
+            let (quality, burst) = match next.peek() {
+                Some((id, q, b)) if *id == photo.id => (*q, *b),
+                _ => (0.0, None),
+            };
+            photo.derived.quality = quality;
+            photo.derived.burst = burst;
+        }
+        bursts::pick_keepers(&mut state.photos, None);
+        state.sharpness = sharpness;
+        state.score_all();
     }
 
     /// Works out every photo's score again (docs/05-organising.md, "Photo
@@ -389,16 +438,47 @@ impl State {
     }
 
     fn rescore(&mut self) {
-        let mut sharpness: Vec<f32> = self
-            .photos
-            .iter()
-            .filter_map(|p| p.analysis().map(|a| a.sharpness))
-            .collect();
-        sharpness.sort_unstable_by(f32::total_cmp);
+        self.sharpness = sharpness_of(&self.photos);
+        self.score_all();
+    }
+
+    /// Every photo's score against the kept sharpness list.
+    fn score_all(&mut self) {
         for photo in &mut self.photos {
-            photo.derived.score = score::score(photo, &sharpness);
+            photo.derived.score = score::score(photo, &self.sharpness);
         }
-        self.sharpness = sharpness;
+    }
+
+    /// The whole rebuild in place, for a state no one else can see yet.
+    fn rebuild(&mut self) {
+        self.sharpness = sharpness_of(&self.photos);
+        let found = bursts::find(&self.photos);
+        for (photo, burst) in self.photos.iter_mut().zip(found) {
+            photo.derived.quality = bursts::quality(photo, &self.sharpness);
+            photo.derived.burst = burst;
+        }
+        bursts::pick_keepers(&mut self.photos, None);
+        self.score_all();
+    }
+
+    /// Picks the keepers of the `changed` bursts again from the flags as
+    /// they are now, and scores every member of them.
+    fn rekeep(&mut self, changed: &mut Vec<NonZeroU32>) {
+        if changed.is_empty() {
+            return;
+        }
+        changed.sort_unstable();
+        changed.dedup();
+        bursts::pick_keepers(&mut self.photos, Some(changed));
+        for photo in &mut self.photos {
+            if photo
+                .derived
+                .burst
+                .is_some_and(|b| changed.binary_search(&b).is_ok())
+            {
+                photo.derived.score = score::score(photo, &self.sharpness);
+            }
+        }
     }
 
     fn position(&self, id: u32) -> Result<usize, usize> {
@@ -481,7 +561,11 @@ impl State {
     /// Adds or replaces the rows of `facts` and takes out the rows of
     /// `remove`, as one change. When an id is in both, the facts win; when
     /// facts name an id twice, the last wins.
-    fn apply(&mut self, facts: &[PhotoFacts], remove: &[i64]) {
+    ///
+    /// Answers true when a kept row's effective date changed, which calls
+    /// for the bursts to be worked out again ([`AlbumIndex::rebuild`]).
+    #[must_use]
+    fn apply(&mut self, facts: &[PhotoFacts], remove: &[i64]) -> bool {
         let mut seen = HashSet::new();
         let mut latest: Vec<&PhotoFacts> =
             facts.iter().rev().filter(|f| seen.insert(f.id)).collect();
@@ -493,6 +577,9 @@ impl State {
             .filter(|&id| self.position(id).is_ok())
             .collect();
 
+        // Bursts whose keeper may have changed, and whether a date moved.
+        let mut rekeep: Vec<NonZeroU32> = Vec::new();
+        let mut redated = false;
         // Ids that need a (new) place in the name order.
         let mut placed: Vec<u32> = Vec::new();
         let mut added: Vec<Photo> = Vec::new();
@@ -515,6 +602,12 @@ impl State {
                     let old = self.photos[at];
                     photo.derived = old.derived;
                     photo.derived.score = score::score(&photo, &self.sharpness);
+                    if let Some(b) = old.derived.burst
+                        && (old.star() != photo.star() || old.hidden() != photo.hidden())
+                    {
+                        rekeep.push(b);
+                    }
+                    redated |= old.date != photo.date;
                     photo.name_rank = old.name_rank;
                     if old.folder == folder && self.name(&old) == f.file_name {
                         photo.name_at = old.name_at;
@@ -534,7 +627,7 @@ impl State {
             }
         }
         if gone.is_empty() && placed.is_empty() && facts.is_empty() {
-            return;
+            return false;
         }
         self.generation += 1;
 
@@ -581,6 +674,8 @@ impl State {
             self.renumber(&at);
         }
         self.compact_names();
+        self.rekeep(&mut rekeep);
+        redated
     }
 
     /// Rebuilds the name store when most of it is no longer used.
@@ -598,6 +693,17 @@ impl State {
         self.names = names;
         self.dead_names = 0;
     }
+}
+
+/// The sharpness of every analysed photo, sorted ascending: the `S` of
+/// the photo score's Focus line.
+fn sharpness_of(photos: &[Photo]) -> Vec<f32> {
+    let mut sharpness: Vec<f32> = photos
+        .iter()
+        .filter_map(|p| p.analysis().map(|a| a.sharpness))
+        .collect();
+    sharpness.sort_unstable_by(f32::total_cmp);
+    sharpness
 }
 
 /// Record positions by photo id, built in one pass for a change that looks

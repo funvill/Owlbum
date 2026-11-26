@@ -13,6 +13,7 @@ use crate::scan::{Request, ScanEnv, Scanner};
 use crate::text;
 
 mod filters;
+mod timeline;
 
 // ---- Helpers ----
 
@@ -270,16 +271,10 @@ fn parts_not_built_yet_answer_bad_query() {
     let album = album(tmp.path());
     small(&album);
     let engine = QueryEngine::new();
-    let refused = [
-        Query {
-            view: QueryView::Timeline,
-            ..default_query()
-        },
-        Query {
-            search: Some("lake".to_owned()),
-            ..default_query()
-        },
-    ];
+    let refused = [Query {
+        search: Some("lake".to_owned()),
+        ..default_query()
+    }];
     for q in refused {
         let err = engine.run(&album, &q, None).unwrap_err();
         assert_eq!(err.code, ErrorCode::BadQuery, "{q:?}");
@@ -296,7 +291,10 @@ fn a_refused_query_makes_no_token() {
     let first = run(&engine, &album, &default_query());
     for _ in 0..TOKENS_KEPT {
         let bad = Query {
-            view: QueryView::Timeline,
+            filter: Filter {
+                from: Some("2024-02-30".to_owned()),
+                ..Filter::default()
+            },
             ..default_query()
         };
         assert!(engine.run(&album, &bad, None).is_err());

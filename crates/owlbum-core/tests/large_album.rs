@@ -24,7 +24,8 @@ use owlbum_core::album::{Album, OpenOptions};
 use owlbum_core::appdata::AppData;
 use owlbum_core::events::Emitter;
 use owlbum_core::query::{
-    Filter, Keep, Located, PhotoAt, Query, QueryEngine, QuerySort, ShapeFilter, StarFilter,
+    Filter, Keep, Located, PhotoAt, Query, QueryEngine, QuerySort, QueryTimelineUnit, QueryView,
+    ShapeFilter, StarFilter,
 };
 use owlbum_core::scan::{Request, ScanEnv, Scanner};
 use owlbum_core::thumbs::Thumbs;
@@ -181,6 +182,18 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
     let facets = engine.facets(&album, &r.token).unwrap();
     let facets_took = t.elapsed();
     assert_eq!(Some(facets), r.facets);
+    // The timeline (#35) in Day mode, the most headings: its groups are
+    // worked out in the same run.
+    let by_day = Query {
+        view: QueryView::Timeline,
+        timeline_unit: QueryTimelineUnit::Day,
+        ..Query::default()
+    };
+    let t = Instant::now();
+    let r = engine.run(&album, &by_day, None).unwrap();
+    let run_timeline = t.elapsed();
+    let groups = r.groups.unwrap_or_default();
+    assert_eq!(groups.iter().map(|g| g.count).sum::<u32>(), count);
     // The engine holds only a few results, and the runs above pushed the
     // date-sorted one out: run it again for the re-run below.
     let by_date = engine.run(&album, &date, None).unwrap();
@@ -279,6 +292,11 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
         ms(run_faceted)
     );
     println!("  query_facets of that result {}", ms(facets_took));
+    println!(
+        "  query_run, timeline by day, {} groups (target 100 ms) {}",
+        groups.len(),
+        ms(run_timeline)
+    );
     println!(
         "  query_run, date, keeping place and 1,000 selected {}",
         ms(run_keep)

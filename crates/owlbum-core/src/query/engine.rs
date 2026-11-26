@@ -9,8 +9,8 @@ use rusqlite::OptionalExtension;
 
 use super::filter::{self, Content, Matcher};
 use super::keep::settle;
-use super::shape::{Facets, Filter, Keep, Located, Query, QueryResult, Row};
-use super::{sort, support};
+use super::shape::{Facets, Filter, Keep, Located, Query, QueryResult, QuerySort, QueryView, Row};
+use super::{sort, support, timeline};
 use crate::album::{Album, sqlite_error};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::index::Kind;
@@ -95,17 +95,29 @@ impl QueryEngine {
         // The old result is looked up before the new one is stored, which
         // may drop it.
         let old = keep.and_then(|k| self.find(&k.token));
-        let (tiles, album_photos, total, facets, chips) = album.index().read(|v| {
+        // The timeline is always in date order; the chosen sort is kept for
+        // the other views.
+        let is_timeline = query.view == QueryView::Timeline;
+        let order = if is_timeline {
+            QuerySort::Date
+        } else {
+            query.sort
+        };
+        let (tiles, album_photos, total, facets, chips, grouped) = album.index().read(|v| {
             let matcher = Matcher::new(v, &filter, &content);
             let passed = filter::pass(v, &matcher, query.want_facets);
+            let tiles = sort::order(v, &passed.shown, order);
+            let grouped = is_timeline.then(|| timeline::groups(v, &tiles, query.timeline_unit));
             (
-                sort::order(v, &passed.shown, query.sort),
+                tiles,
                 v.len(),
                 passed.total,
                 passed.facets,
                 filter::chips(&filter, v.scope()),
+                grouped,
             )
         });
+        let (groups, unit) = grouped.map_or((None, None), |(g, u)| (Some(g), Some(u)));
         // Every photo that passes; stacks unfolded once they exist (#30).
         let photos = count(tiles.len());
         let kept = keep.map(|k| settle(k, old.as_deref().map(|h| h.tiles.as_slice()), &tiles));
@@ -128,9 +140,10 @@ impl QueryEngine {
             filtered: !query.filter.is_empty() || support::is_search(query.search.as_deref()),
             panel_count: self::count(chips.len()),
             chips,
+            groups,
+            unit,
             kept,
             facets,
-            ..QueryResult::default()
         })
     }
 

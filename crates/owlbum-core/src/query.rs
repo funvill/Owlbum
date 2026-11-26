@@ -20,6 +20,7 @@ mod keep;
 pub mod shape;
 pub mod sort;
 pub mod support;
+pub mod timeline;
 
 pub use arg::Arg;
 pub use engine::{QueryEngine, TOKENS_KEPT, WINDOW_MAX};

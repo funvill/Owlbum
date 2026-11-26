@@ -84,10 +84,6 @@ fn a_query_with_a_value_not_allowed_answers_bad_query() {
     )
     .unwrap_err();
     assert_eq!(err["code"], "bad_query");
-    let mut later = default_query();
-    later["view"] = json!("timeline");
-    let err = invoke(&window, "query_run", json!({ "query": later })).unwrap_err();
-    assert_eq!(err["code"], "bad_query");
     let mut not_a_day = default_query();
     not_a_day["filter"] = json!({ "from": "2024-02-30" });
     let err = invoke(&window, "query_run", json!({ "query": not_a_day })).unwrap_err();

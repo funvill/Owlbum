@@ -16,8 +16,6 @@ pub const EXPIRED: &str = "The list of photos changed. Showing it again.";
 pub const READING_ROWS: &str = "reading the photos to show";
 
 /// What a query asks for that is not built yet, for [`not_yet`].
-pub const TIMELINE: &str = "the timeline view";
-/// See [`TIMELINE`].
 pub const SEARCH: &str = "search results";
 
 /// `bad_query`: a filter value that is not allowed (a date that is not a

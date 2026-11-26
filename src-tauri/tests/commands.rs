@@ -1,41 +1,15 @@
 //! The command registry, and commands wired through Tauri's mock runtime.
 
+mod common;
+
 use std::collections::HashSet;
 
+use common::invoke;
 use owlbum_core::app::AppVersion;
-use tauri::test::{
-    INVOKE_KEY, MockRuntime, get_ipc_response, mock_builder, mock_context, noop_assets,
-};
-use tauri::webview::InvokeRequest;
-use tauri::{WebviewWindow, WebviewWindowBuilder};
+use tauri::test::{MockRuntime, mock_builder};
 
-fn app_window() -> (tauri::App<MockRuntime>, WebviewWindow<MockRuntime>) {
-    let app = owlbum_lib::setup(mock_builder())
-        .build(mock_context(noop_assets()))
-        .expect("the app builds");
-    let window = WebviewWindowBuilder::new(&app, "main", Default::default())
-        .build()
-        .expect("the window builds");
-    (app, window)
-}
-
-fn invoke(
-    window: &WebviewWindow<MockRuntime>,
-    cmd: &str,
-    body: serde_json::Value,
-) -> Result<tauri::ipc::InvokeResponseBody, serde_json::Value> {
-    get_ipc_response(
-        window,
-        InvokeRequest {
-            cmd: cmd.into(),
-            callback: tauri::ipc::CallbackFn(0),
-            error: tauri::ipc::CallbackFn(1),
-            url: "http://tauri.localhost".parse().unwrap(),
-            body: tauri::ipc::InvokeBody::Json(body),
-            headers: Default::default(),
-            invoke_key: INVOKE_KEY.to_string(),
-        },
-    )
+fn app_window() -> (tauri::App<MockRuntime>, tauri::WebviewWindow<MockRuntime>) {
+    common::window(owlbum_lib::setup(mock_builder()))
 }
 
 #[test]

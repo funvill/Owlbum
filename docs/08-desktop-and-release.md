@@ -960,6 +960,7 @@ The events `open_folder` and `update_state` are listed in [Architecture](01-arch
 | Command | Arguments → reply | Purpose |
 |---|---|---|
 | `app_startup` | → `{ version, platform, arch, package, dev, settings, recent: Recent[], launch_folder: string \| null, reopen: string \| null, show_update_notice, whats_new? }` | The page has drawn. Shows the window and hands over what the page needs to begin. `settings` and `Recent` are the shapes in Browsing. `launch_folder` is a folder from the command line, or one that arrived before this call. `reopen` is the folder to reopen by the rule in [Which album opens at start](#which-album-opens-at-start). `show_update_notice` is true while `updates.notice_seen` is false. |
+| `app_version` | → `{ version }` | The running version. Added by the scaffold (#1) to prove the command pattern end to end; `app_startup` carries the same value. |
 | `app_pick_folder` | → `path` or null | The native "Open a folder of photos" dialog, for the page's own Open folder button. |
 | `app_close_ready` | | The page has finished edit mode, the session save and any running save, after `app_closing`. |
 | `app_check_updates` | | The manual check. Its result arrives as `update_state` events and the dialogs under [Messages](#messages). |

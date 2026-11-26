@@ -58,14 +58,15 @@ The `lock` file is JSON: `{ "host", "pid", "user", "app_version", "opened_at", "
 
 ### Schema
 
-`PRAGMA user_version` holds the schema version, starting at 1. Migrations are numbered SQL scripts compiled into the program and run in a transaction on open. A database with a version newer than the program knows opens view-only with the message "This album was last used by a newer Owlbum."
+`PRAGMA user_version` holds the schema version, starting at 1. Migrations are numbered SQL scripts (`crates/owlbum-core/src/album/migrations/`) compiled into the program and run in a transaction on open; a file at version 0 is treated as new. A database with a version newer than the program knows opens view-only with the message "This album was last used by a newer Owlbum."
 
 ```sql
 CREATE TABLE meta (
   key   TEXT PRIMARY KEY,
   value TEXT NOT NULL
 );
--- keys: album_id (a UUID made at creation), created_at, created_by (app version),
+-- keys: album_id (a UUID made at creation), created_at (ms since the epoch, as text),
+--       created_by (app version),
 --       save:<photo id> (a save-into-file in progress; see Editing and file actions)
 
 CREATE TABLE photos (

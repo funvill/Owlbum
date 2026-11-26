@@ -6,4 +6,5 @@
 //! (`text/album.rs` for `album`), so parallel issues add text in different
 //! files. Text shared by several areas goes in `errors`.
 
+pub mod album;
 pub mod errors;

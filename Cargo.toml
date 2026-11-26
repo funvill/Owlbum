@@ -16,6 +16,7 @@ authors = ["Owlbum contributors"]
 # `name.workspace = true` so the version is chosen in one place.
 [workspace.dependencies]
 owlbum-core = { path = "crates/owlbum-core" }
+rusqlite = { version = "0.43", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 thiserror = "2"
@@ -23,6 +24,8 @@ ts-rs = { version = "12", features = ["serde-json-impl", "no-serde-warnings"] }
 tauri = "2"
 tauri-build = "2"
 tempfile = "3"
+uuid = { version = "1", features = ["v4"] }
+windows-sys = "0.61"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

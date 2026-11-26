@@ -16,6 +16,9 @@ else
   echo "up to date"
 fi
 
+step "Prune the shared target directory"
+bash scripts/prune-target.sh
+
 step "Rust format"
 cargo fmt --all --check
 

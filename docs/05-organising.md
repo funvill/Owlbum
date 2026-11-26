@@ -55,7 +55,7 @@ A star or a hide can make the photo leave the result (hidden under the default H
 3. Else the tile that now sits in its place: let `k` be the number of tiles that were before it in the previous result and are still present; the tile at index `k` is used.
 4. Else (when `k` is past the end) the last tile. If the result is empty, nothing is selected.
 
-In cases 2 to 4 the new tile is selected alone. The full-screen viewer follows the same rule and closes if the result becomes empty. These are the same rules [Browsing](04-browsing.md#when-the-result-changes) gives for every change to a result; they are stated once in each part and must stay the same.
+In every case the selection becomes the old selection limited to the photos still shown, plus the new current photo (`kept.selection`); so in cases 2 to 4 the new tile joins whatever else of the selection is still shown. The full-screen viewer follows the same rule and closes if the result becomes empty. These are the same rules [Browsing](04-browsing.md#when-the-result-changes) gives for every change to a result; they are stated once in each part and must stay the same.
 
 ### The mark
 

@@ -20,7 +20,7 @@ import { appHandlers } from "./app";
 import { editHandlers } from "./edit";
 import { fileHandlers } from "./file";
 import { photoHandlers } from "./photo";
-import { queryHandlers } from "./query";
+import { createQueryFake, queryHandlers } from "./query";
 import { searchHandlers } from "./search";
 import { taggingHandlers } from "./tagging";
 import type { FakeHandlers } from "./types";
@@ -62,7 +62,7 @@ export function appError(code: AppError["code"], message: string, details?: AppE
 
 /** Creates a fake backend. `overrides` replaces default handlers. */
 export function createFakeApi(overrides: Partial<FakeHandlers> = {}): FakeApi {
-  const handlers: FakeHandlers = { ...defaultHandlers, ...overrides };
+  const handlers: FakeHandlers = { ...defaultHandlers, ...createQueryFake().handlers, ...overrides };
   const listeners = new Map<string, Set<(payload: never) => void>>();
   const calls: FakeCall[] = [];
 

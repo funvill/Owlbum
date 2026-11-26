@@ -696,7 +696,7 @@ The panel shows the current photo. With no current photo the column is an empty 
 
 **Head.** The file name in bold, cut with an ellipsis, with the path relative to the album root as its tooltip. A close button, labelled "Close details", clears the selection.
 
-**Loading.** The panel calls `photo_detail(id)` when the current photo changes, and again when an `album_changed` event arrives for a revision newer than the detail it holds. While the first answer is on its way, the head shows the file name from the row and the body is empty; the previous photo's facts are never shown under the new name. An answer for a photo that is no longer current is thrown away.
+**Loading.** The panel calls `photo_detail(id)` when the current photo changes, and again when an `album_changed` event arrives for a revision newer than the detail's `revision` (also when such an event arrived while the detail was being read). While the first answer is on its way, the head shows the file name from the row and the body is empty; the previous photo's facts are never shown under the new name. An answer for a photo that is no longer current is thrown away.
 
 **Notes under the score card.** In a view-only album: "This album is view-only, so nothing here can be changed." When the last save of this photo failed: the error's message, in a note with an `--error` border, until a later save succeeds.
 
@@ -746,7 +746,7 @@ Each section has a header button with a chevron (down when open, right when fold
 
 ### Histogram
 
-The page calls `photo_histogram(id)` when the section is open and the photo changes. Rust answers with four arrays of 64 counts: luminance, red, green and blue. They are counted from the photo's medium thumbnail, reduced so its long side is at most 256px. The histogram describes the file, not the edit, as [Editing and file actions](06-editing-and-file-actions.md#where-edits-are-shown) says, so it agrees with the clipping line beneath it, which comes from the scan's analysis of the file. Luminance is `0.2126 R + 0.7152 G + 0.0722 B`. Transparency is ignored.
+The page calls `photo_histogram(id)` when the section is open and the photo or its `thumb_key` changes. It is counted on demand and never stored: a folded section costs nothing, and the scan and the album database are unchanged. Rust answers with four arrays of 64 counts: luminance, red, green and blue. They are counted from the photo's medium thumbnail, reduced so its long side is at most 256px. The histogram describes the file, not the edit, as [Editing and file actions](06-editing-and-file-actions.md#where-edits-are-shown) says, so it agrees with the clipping line beneath it, which comes from the scan's analysis of the file. Luminance is `0.2126 R + 0.7152 G + 0.0722 B`. Transparency is ignored.
 
 - **Chart.** 80px high and as wide as the panel. Four filled areas, luminance behind (`--hist-luma` at `--hist-luma-fill`) and red, green, blue in front (`--hist-red`, `--hist-green`, `--hist-blue` at `--hist-fill`), all scaled to the single highest count among the four.
 - **Clipping line.** When the photo has been analysed, a line beneath reads "Shadows clipped x.x %" and "Highlights clipped x.x %". Either is in `--error` when it is 2.0 % or more.
@@ -1136,9 +1136,9 @@ type PhotoDetail = {
   clipping: { shadows: number; highlights: number } | null;   // fractions, 0 to 1
   star: boolean; hidden: boolean;
   people: string[]; description: string | null; notes: string | null;
-  info_revision: number;     // the album revision at which typed info last changed
-  edit_plan: object | null;  // EditPlan for the stored edit, as on Row; defined in 06
-  tags: object;              // PhotoTags; defined in 07
+  revision: number;          // the album revision when this detail was read (read before the row, as query_run does)
+  edit_plan: object | null;  // EditPlan for the stored edit, as on Row; defined in 06; null until the edit model (#43)
+  tags: object | null;       // PhotoTags; defined in 07; null until "What's in it" (#55), which hides its section until then
   // The score breakdown is not here: it is read with photo_score (05).
 };
 

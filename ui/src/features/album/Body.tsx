@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { albumText } from "../../text/album";
-import { BrowseGrid, useGridStore } from "../grid";
+import { useGridStore } from "../grid";
+import { Review } from "./Review";
 import { useAlbumStore } from "./session";
 import { StartScreen } from "./StartScreen";
 
@@ -26,9 +27,9 @@ const scanRunning = () => {
 };
 
 /**
- * The body: the start screen, a message, or the review screen, which
- * holds the grid (#18). While a drag is over the window it shows the drop
- * outline.
+ * The body: the start screen, a message, or the review screen (the grid
+ * and the details panel). While a drag is over the window it shows the
+ * drop outline.
  */
 export function Body() {
   const state = useAlbumStore(bodyState);
@@ -48,11 +49,7 @@ export function Body() {
       {state === "opening" && <p className="ow-body__message">{albumText.opening(opening?.name ?? "")}</p>}
       {state === "looking" && <p className="ow-body__message">{albumText.lookingForPhotos}</p>}
       {state === "empty" && <p className="ow-body__message">{albumText.noPhotos}</p>}
-      {state === "review" && (
-        <section className="ow-review" aria-label={albumText.photosRegion}>
-          <BrowseGrid busy={scanRunning} />
-        </section>
-      )}
+      {state === "review" && <Review busy={scanRunning} />}
       {dropOver && (
         <div className="ow-drop" role="status">
           {albumText.dropHere}

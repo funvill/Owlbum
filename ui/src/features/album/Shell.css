@@ -125,11 +125,25 @@
   position: absolute;
   inset: 0;
   display: flex;
+}
+
+/* The thumbnail column; the preview (#20) and the splitters come later. */
+.ow-review__photos {
+  flex: 1;
+  min-width: 0;
+  display: flex;
   flex-direction: column;
 }
 
-.ow-review > .ow-grid {
+.ow-review__photos > .ow-grid {
   flex: 1;
+  min-height: 0;
+}
+
+/* Default width; the splitter and stored width come with the review row. */
+.ow-review__details {
+  flex: none;
+  width: 340px;
   min-height: 0;
 }
 

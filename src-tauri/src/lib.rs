@@ -8,28 +8,53 @@
 pub mod bindings;
 pub mod commands;
 pub mod events;
+pub mod handoff;
 pub mod keymap;
 pub mod protocol;
 pub mod session;
 
 use std::sync::Arc;
 
+use owlbum_core::app::{DropPhase, FolderDrop};
 use owlbum_core::appdata::log::{self, LogFile, Logger};
 use owlbum_core::appdata::{self, AppData};
 use owlbum_core::thumbs::Thumbs;
-use tauri::{Manager, Runtime};
+use tauri::{AppHandle, DragDropEvent, Manager, Runtime, WindowEvent};
 
 /// Adds Owlbum's commands and the `owlbum://` protocol to a Tauri builder.
 /// `run` uses it, and shell tests use it with Tauri's mock runtime.
 pub fn setup<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     protocol::register(builder)
         .manage(session::Session::default())
-        .on_window_event(|window, event| {
-            if let tauri::WindowEvent::Focused(true) = event {
-                window.state::<session::Session>().focused();
-            }
+        .manage(handoff::Handoff::default())
+        .on_window_event(|window, event| match event {
+            WindowEvent::Focused(true) => window.state::<session::Session>().focused(),
+            WindowEvent::DragDrop(drop) => dropped(window.app_handle(), drop),
+            _ => {}
         })
         .invoke_handler(commands::registry::invoke_handler(commands::modules()))
+}
+
+/// Files dragged over the window (docs/04-browsing.md, "Opening a
+/// folder"): the page shows its drop outline while a drag is over it, and
+/// a drop opens the first folder among the dropped items, or the folder of
+/// the first file. The webview never navigates to a dropped file.
+pub fn dropped<R: Runtime>(app: &AppHandle<R>, drop: &DragDropEvent) {
+    let phase = |phase| {
+        let _ = events::emit(app, &FolderDrop { phase });
+    };
+    match drop {
+        DragDropEvent::Enter { .. } => phase(DropPhase::Over),
+        DragDropEvent::Leave => phase(DropPhase::Left),
+        DragDropEvent::Drop { paths, .. } => {
+            phase(DropPhase::Left);
+            match owlbum_core::app::dropped_folder(paths) {
+                Some(folder) => handoff::deliver(app, &folder),
+                None => phase(DropPhase::Refused),
+            }
+        }
+        _ => {}
+    }
 }
 
 /// Gives the app its open app data folder, which the `app_` settings and
@@ -104,9 +129,40 @@ pub fn run() {
         );
     }
 
+    let launch = std::env::current_dir()
+        .ok()
+        .and_then(|cwd| owlbum_core::app::launch_folder(std::env::args_os(), &cwd));
+
     with_app_data(setup(tauri::Builder::default()), data)
+        .plugin(tauri_plugin_dialog::init())
+        .setup(move |app| {
+            app.manage(commands::app::FolderPicker(folder_dialog(
+                app.handle().clone(),
+            )));
+            if let Some(folder) = &launch {
+                handoff::deliver(app.handle(), folder);
+            }
+            Ok(())
+        })
         .run(context)
         .expect("Owlbum could not start");
+}
+
+/// The native folder dialog, over the main window.
+fn folder_dialog<R: Runtime>(
+    app: AppHandle<R>,
+) -> Arc<dyn Fn() -> Option<std::path::PathBuf> + Send + Sync> {
+    use tauri_plugin_dialog::DialogExt;
+    Arc::new(move || {
+        let mut dialog = app
+            .dialog()
+            .file()
+            .set_title(owlbum_core::text::album::PICK_FOLDER_TITLE);
+        if let Some(window) = app.get_webview_window("main") {
+            dialog = dialog.set_parent(&window);
+        }
+        dialog.blocking_pick_folder()?.into_path().ok()
+    })
 }
 
 #[cfg(test)]

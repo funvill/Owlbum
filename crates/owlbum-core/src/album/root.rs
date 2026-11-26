@@ -40,6 +40,14 @@ impl AlbumLocation {
     pub fn is_scoped(&self) -> bool {
         !self.scope.is_empty()
     }
+
+    /// The folder the user opened: the root, or the scope inside it.
+    pub fn opened(&self) -> PathBuf {
+        self.scope
+            .split('/')
+            .filter(|part| !part.is_empty())
+            .fold(self.root.clone(), |path, part| path.join(part))
+    }
 }
 
 /// `<root>/.owlbum/owlbum.sqlite`.

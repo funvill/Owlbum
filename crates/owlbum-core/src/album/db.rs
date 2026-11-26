@@ -11,6 +11,7 @@
 //! [`AlbumDb::open`] and makes a view-only [`AlbumDb`] when it must.
 
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::time::Duration;
 
 use rusqlite::{Connection, OpenFlags, Transaction};
@@ -19,6 +20,7 @@ use crate::album::read::Readers;
 use crate::album::root::AlbumLocation;
 use crate::album::schema::{self, SchemaState};
 use crate::album::sqlite_error;
+use crate::album::state::AlbumState;
 use crate::album::writer::Writer;
 use crate::error::AppResult;
 use crate::text;
@@ -80,6 +82,9 @@ pub struct AlbumDb {
     /// Set to the other computer's name once the album's lock was taken
     /// over (Open anyway there): writes are refused from then on.
     lost: Option<LostLock>,
+    /// The open album's shared state: a write the database could not take
+    /// is reported to it, and refuses writes from then on.
+    state: Option<Arc<AlbumState>>,
 }
 
 /// Shared with the lock's heartbeat ([`super::lock::AlbumLock::lost_to`]):
@@ -119,6 +124,7 @@ impl AlbumDb {
             schema,
             view_only: None,
             lost: None,
+            state: None,
         }))
     }
 
@@ -150,6 +156,7 @@ impl AlbumDb {
             writer: None,
             view_only: Some(message.to_owned()),
             lost: None,
+            state: None,
         })
     }
 
@@ -172,6 +179,7 @@ impl AlbumDb {
             writer: None,
             view_only: Some(message.to_owned()),
             lost: None,
+            state: None,
         })
     }
 
@@ -179,6 +187,12 @@ impl AlbumDb {
     /// a computer (the album's lock was taken over).
     pub fn refuse_writes_when(&mut self, lost: LostLock) {
         self.lost = Some(lost);
+    }
+
+    /// Reports every write the database could not take to `state`, which
+    /// turns the album view-only ([`AlbumState::write_answered`]).
+    pub fn attach(&mut self, state: Arc<AlbumState>) {
+        self.state = Some(state);
     }
 
     /// The database file; None for an in-memory database.
@@ -191,6 +205,9 @@ impl AlbumDb {
     pub fn view_only_message(&self) -> Option<String> {
         if let Some(message) = &self.view_only {
             return Some(message.clone());
+        }
+        if self.state.as_ref().is_some_and(|s| s.write_failed()) {
+            return Some(text::album::view_only::READ_ONLY.to_owned());
         }
         let lost = self.lost.as_ref()?;
         let host = lost.lock().unwrap_or_else(|p| p.into_inner()).clone()?;
@@ -215,7 +232,7 @@ impl AlbumDb {
         F: FnOnce(&Transaction<'_>) -> AppResult<T> + Send + 'static,
     {
         match (&self.writer, self.view_only_message()) {
-            (Some(writer), None) => writer.write(job),
+            (Some(writer), None) => self.answered(writer.write(job)),
             (_, message) => Err(AppError::new(
                 ErrorCode::ViewOnly,
                 message.unwrap_or_else(|| text::album::view_only::READ_ONLY.to_owned()),
@@ -232,12 +249,20 @@ impl AlbumDb {
         A: FnOnce(&Connection, &T) + Send + 'static,
     {
         match (&self.writer, self.view_only_message()) {
-            (Some(writer), None) => writer.write_then(job, after),
+            (Some(writer), None) => self.answered(writer.write_then(job, after)),
             (_, message) => Err(AppError::new(
                 ErrorCode::ViewOnly,
                 message.unwrap_or_else(|| text::album::view_only::READ_ONLY.to_owned()),
             )),
         }
+    }
+
+    /// Tells the album's state about a failed write.
+    fn answered<T>(&self, result: AppResult<T>) -> AppResult<T> {
+        if let (Err(e), Some(state)) = (&result, &self.state) {
+            state.write_answered(e);
+        }
+        result
     }
 
     /// Runs `f` with a read-only connection.

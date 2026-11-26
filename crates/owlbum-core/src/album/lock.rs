@@ -13,8 +13,8 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
 use std::sync::mpsc;
+use std::sync::{Arc, Mutex};
 use std::thread::JoinHandle;
 use std::time::Duration;
 
@@ -170,8 +170,21 @@ pub struct AlbumLock {
     path: PathBuf,
     info: LockInfo,
     lost: LostLock,
+    on_lost: OnLost,
     stop: Option<mpsc::Sender<()>>,
     thread: Option<JoinHandle<()>>,
+}
+
+/// Called once, on the heartbeat thread, when the lock is lost.
+type OnLost = Arc<OnLostSlot>;
+
+#[derive(Default)]
+struct OnLostSlot(Mutex<Option<Arc<dyn Fn() + Send + Sync>>>);
+
+impl std::fmt::Debug for OnLostSlot {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str("OnLostSlot")
+    }
 }
 
 /// The clock the lock reads: ms since the epoch.
@@ -219,11 +232,13 @@ impl AlbumLock {
         }
 
         let lost = LostLock::default();
+        let on_lost = OnLost::default();
         let (stop, stopped) = mpsc::channel::<()>();
         let thread = {
             let dir = dir.to_path_buf();
             let mut beat = info.clone();
             let lost = Arc::clone(&lost);
+            let on_lost = Arc::clone(&on_lost);
             std::thread::Builder::new()
                 .name("owlbum-album-lock".into())
                 .spawn(move || {
@@ -232,6 +247,11 @@ impl AlbumLock {
                             Ok(Some(on_disk)) if !same_holder(&on_disk, &beat) => {
                                 *lost.lock().unwrap_or_else(|p| p.into_inner()) =
                                     Some(on_disk.host);
+                                let tell =
+                                    on_lost.0.lock().unwrap_or_else(|p| p.into_inner()).clone();
+                                if let Some(tell) = tell {
+                                    tell();
+                                }
                                 break;
                             }
                             // Ours, or gone (someone deleted it): beat, which
@@ -251,6 +271,7 @@ impl AlbumLock {
             path: dir.join(LOCK_FILE),
             info,
             lost,
+            on_lost,
             stop: Some(stop),
             thread: Some(thread),
         })
@@ -273,6 +294,18 @@ impl AlbumLock {
             .lock()
             .unwrap_or_else(|p| p.into_inner())
             .is_some()
+    }
+
+    /// Calls `tell` once when the lock is lost, on the heartbeat thread; at
+    /// once, here, when it is lost already.
+    pub fn on_lost(&self, tell: Arc<dyn Fn() + Send + Sync>) {
+        let mut slot = self.on_lost.0.lock().unwrap_or_else(|p| p.into_inner());
+        if self.is_lost() {
+            drop(slot);
+            tell();
+        } else {
+            *slot = Some(tell);
+        }
     }
 
     /// Set to the other computer's name once the lock is lost. The album

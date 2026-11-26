@@ -18,8 +18,23 @@ pub mod query;
 pub mod search;
 pub mod tagging;
 
+use owlbum_core::AppError;
 use registry::Module;
 use tauri::Runtime;
+
+/// Runs `job` on the blocking pool, off the thread that answers the page:
+/// for work that touches a database or the disk, or waits. `what` names
+/// what was being done, for the error when the job panics.
+pub(crate) async fn off_main<T: Send + 'static>(
+    what: &'static str,
+    job: impl FnOnce() -> Result<T, AppError> + Send + 'static,
+) -> Result<T, AppError> {
+    tauri::async_runtime::spawn_blocking(job)
+        .await
+        .map_err(|e| {
+            AppError::internal(what).with_details(serde_json::json!({ "cause": e.to_string() }))
+        })?
+}
 
 /// Every area, in prefix order. This list is fixed: one entry per prefix in
 /// the architecture's command table.

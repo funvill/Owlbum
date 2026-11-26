@@ -32,3 +32,7 @@ pub const SETTINGS_RESET: &str =
 pub fn setting_out_of_range(key: &str) -> String {
     format!("That value can't be used for the setting {key}.")
 }
+
+/// What was being done, for an `internal` error when the folder dialog
+/// could not be shown.
+pub const PICKING_FOLDER: &str = "showing the folder dialog";

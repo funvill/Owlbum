@@ -22,18 +22,30 @@ pub mod read;
 pub mod root;
 pub mod schema;
 pub mod search;
+pub mod state;
 pub mod writer;
 
 pub use changed::{AlbumChanged, ChangeReason};
 pub use db::{AlbumDb, Opened};
 pub use open::{Album, OpenOptions, Safety, ViewOnly};
 pub use root::{AlbumLocation, locate};
+pub use state::{AlbumState, StatusListener};
+
+/// The key in an error's `details` that holds SQLite's extended result
+/// code, when the error came from SQLite ([`state::is_storage_failure`]).
+pub(crate) const SQLITE_CODE: &str = "sqlite";
 
 /// Maps a SQLite error to an `internal` error that says what was being
 /// done. The message for the user names only `what`; SQLite's own text is
-/// kept in `details.cause` for the log (there is no logger yet, #5).
+/// kept in `details.cause` for the log, and its extended result code, when
+/// it has one, in `details.sqlite`, so that a write the disk refused can be
+/// told from the job's own failure.
 pub(crate) fn sqlite_error(what: &'static str) -> impl Fn(rusqlite::Error) -> crate::AppError {
     move |e| {
-        crate::AppError::internal(what).with_details(serde_json::json!({ "cause": e.to_string() }))
+        let mut details = serde_json::json!({ "cause": e.to_string() });
+        if let Some(code) = e.sqlite_error().map(|f| f.extended_code) {
+            details[SQLITE_CODE] = code.into();
+        }
+        crate::AppError::internal(what).with_details(details)
     }
 }

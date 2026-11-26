@@ -1957,7 +1957,10 @@ fn the_album_status_counts_what_the_scan_found_and_left_out() {
     assert!(status.unreadable > 0);
     assert_eq!(status.unreadable, errors.total);
     assert_eq!(status.unsupported.count, scanner.unsupported(0, 0).total);
-    assert!(status.unsupported.labels.contains(&"HEIC".to_owned()), "{status:?}");
+    assert!(
+        status.unsupported.labels.contains(&"HEIC".to_owned()),
+        "{status:?}"
+    );
     assert!(status.scan.watching);
     assert_eq!(status.revision, album.revision());
 }

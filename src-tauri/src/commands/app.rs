@@ -1,14 +1,18 @@
 //! Start-up, settings, recent albums, session, updates, cache (`app_`).
 
+use std::path::PathBuf;
+use std::sync::Arc;
+
+use crate::handoff::Handoff;
 use crate::{area, command};
-use owlbum_core::app::{self, AppVersion};
+use owlbum_core::app::{self, AppVersion, FolderDrop, OpenFolder, Startup};
 use owlbum_core::appdata::{AppData, Recent, Settings};
 use owlbum_core::info::country::{self, CountryMatch};
 use owlbum_core::media::{self, FormatInfo};
 use owlbum_core::thumbs::{CacheCleared, CacheUsage, Thumbs};
 use owlbum_core::{AppError, text};
 use serde_json::{Map, Value};
-use tauri::State;
+use tauri::{AppHandle, Manager, Runtime, State};
 
 area! {
     prefix: "app",
@@ -16,14 +20,16 @@ area! {
         app_cache_clear,
         app_cache_usage,
         app_formats,
+        app_pick_folder,
         app_place_search,
         app_recent_list,
         app_recent_remove,
         app_settings_get,
         app_settings_set,
+        app_startup,
         app_version,
     ],
-    events: [],
+    events: [FolderDrop, OpenFolder],
 }
 
 command! {
@@ -108,6 +114,54 @@ command! {
         .await
     }
 }
+
+command! {
+    /// The native "Open a folder of photos" dialog, for the page's Open
+    /// folder button. Answers the chosen folder, or null when it was
+    /// cancelled.
+    pub async fn app_pick_folder<R: Runtime>(; app: AppHandle<R>) -> Option<String> {
+        let picker = app
+            .try_state::<FolderPicker>()
+            .map(|p| Arc::clone(&p.0))
+            .ok_or_else(|| AppError::internal(text::appdata::PICKING_FOLDER))?;
+        blocking(move || Ok(picker().map(|p| p.display().to_string()))).await
+    }
+}
+
+command! {
+    /// Called once when the page has drawn: everything it needs to begin
+    /// (docs/08-desktop-and-release.md, "Commands and events this part
+    /// adds"). A folder that arrived before this call is handed over here
+    /// as `launch_folder`; later ones arrive as `open_folder`.
+    pub async fn app_startup<R: Runtime>(; app: AppHandle<R>) -> Startup {
+        blocking(move || {
+            let data = app.state::<AppData>();
+            let settings = data.settings()?;
+            let recent = data.recent()?;
+            let launch_folder = app.try_state::<Handoff>().and_then(|h| h.start());
+            let reopen = app::reopen(launch_folder.as_deref(), settings.reopen_last, &recent);
+            let dev = crate::is_dev_build(cfg!(debug_assertions), &app.config().identifier);
+            Ok(Startup {
+                version: app::version().version,
+                platform: std::env::consts::OS.to_owned(),
+                arch: std::env::consts::ARCH.to_owned(),
+                package: app::package_kind(dev, std::env::var_os("APPIMAGE").is_some()).to_owned(),
+                dev,
+                show_update_notice: !settings.updates_notice_seen,
+                settings,
+                recent,
+                launch_folder,
+                reopen,
+            })
+        })
+        .await
+    }
+}
+
+/// Shows the native folder dialog and answers the chosen folder. `run`
+/// installs the real dialog; shell tests install a fake.
+#[derive(Clone)]
+pub struct FolderPicker(pub Arc<dyn Fn() -> Option<PathBuf> + Send + Sync>);
 
 command! {
     /// The program's version.

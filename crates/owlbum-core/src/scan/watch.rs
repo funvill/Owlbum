@@ -240,9 +240,23 @@ fn lock<T>(m: &Mutex<T>) -> MutexGuard<'_, T> {
     m.lock().unwrap_or_else(|p| p.into_inner())
 }
 
+/// Sets the watch's state. Entering a state in which the folder is not
+/// watched is a change of the album's status (`album_status`'s
+/// `scan.watching`), so the page hears of it.
 fn set_state(cell: &Mutex<WatchState>, scanner: &Scanner, state: WatchState) {
-    *lock(cell) = state;
+    let was = std::mem::replace(&mut *lock(cell), state);
     scanner.set_watching(state == WatchState::Watching);
+    if was != state && !state.may_watch() {
+        scanner.album().status_changed();
+    }
+}
+
+impl WatchState {
+    /// True while the folder is watched, or its watch is being set up: the
+    /// page says the folder cannot be watched only when this is false.
+    pub fn may_watch(self) -> bool {
+        matches!(self, Self::Starting | Self::Watching)
+    }
 }
 
 /// What the watch thread works with.

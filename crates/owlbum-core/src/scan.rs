@@ -44,6 +44,7 @@ pub mod report;
 pub mod rows;
 mod run;
 mod scanner;
+pub mod status;
 pub mod walk;
 pub mod watch;
 
@@ -56,6 +57,7 @@ pub use progress::{ScanPhase, ScanProgress};
 pub use reader::{MediaReader, Reader};
 pub use run::{Request, Scan, ScanEnv, ScanSummary, run};
 pub use scanner::{ScanStatus, Scanner};
+pub use status::{AlbumOpened, AlbumStatus, UnsupportedSummary};
 
 /// Raised in the same commit as any change to the metadata rules, the
 /// analysis formulas or the error placeholders: every row with an older

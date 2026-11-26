@@ -94,3 +94,7 @@ pub const RESTORING_BACKUP: &str = "restoring the album database from its backup
 /// What was being done, for an `internal` error while making the daily
 /// backup.
 pub const BACKING_UP: &str = "backing up the album database";
+
+/// The title of the native folder dialog (`app_pick_folder`,
+/// docs/04-browsing.md, "Opening a folder").
+pub const PICK_FOLDER_TITLE: &str = "Open a folder of photos";

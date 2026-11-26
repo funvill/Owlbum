@@ -8,14 +8,18 @@
 //! and waits for both before the album database closes. A picture request
 //! in flight holds the album ([`Session::scanner`]) until it answers, so
 //! the last of those closes it.
+//!
+//! Opening and closing take a while (an album index loads, a scan is
+//! waited for), so `album_open` and `album_close` run them off the main
+//! thread, one at a time ([`Session::one_at_a_time`]).
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
-use owlbum_core::album::Album;
+use owlbum_core::album::{Album, AlbumChanged, ChangeReason};
 use owlbum_core::error::AppResult;
 use owlbum_core::query::QueryEngine;
 use owlbum_core::scan::watch::{AlbumWatch, WatchEnv};
-use owlbum_core::scan::{Request, ScanEnv, Scanner};
+use owlbum_core::scan::{AlbumStatus, Request, ScanEnv, Scanner};
 use owlbum_core::thumbs::Thumbs;
 use owlbum_core::{AppError, ErrorCode, text};
 use tauri::{AppHandle, Manager, Runtime};
@@ -44,6 +48,11 @@ impl OpenAlbum {
         &self.scanner
     }
 
+    /// Its scans, to hold apart from the session's lock.
+    pub fn scanner_arc(&self) -> &Arc<Scanner> {
+        &self.scanner
+    }
+
     /// Its folder watch.
     pub fn watch(&self) -> &AlbumWatch {
         &self.watch
@@ -59,6 +68,8 @@ impl OpenAlbum {
 #[derive(Debug, Default)]
 pub struct Session {
     open: Mutex<Option<OpenAlbum>>,
+    /// Held for the whole of an open or a close.
+    gate: Mutex<()>,
 }
 
 impl Session {
@@ -95,13 +106,33 @@ impl Session {
         }
     }
 
-    /// Closes the open album: cancels its scan and waits for it.
+    /// Closes the open album: cancels its scan and waits for it. A picture
+    /// request still in flight may keep the album itself a moment longer;
+    /// it no longer tells the page anything.
     pub fn close(&self) {
         let old = self.slot().take();
         if let Some(old) = &old {
+            old.album().set_status_listener(Arc::new(|_| {}));
             old.scanner.cancel();
         }
         drop(old);
+    }
+
+    /// Held while an album opens or closes, so that two never overlap: the
+    /// old album's lock is released before the new one is taken.
+    pub fn one_at_a_time(&self) -> MutexGuard<'_, ()> {
+        self.gate.lock().unwrap_or_else(|p| p.into_inner())
+    }
+
+    /// The open album's status; None when no album is open. The database is
+    /// read without holding the session.
+    pub fn status(&self) -> AppResult<Option<AlbumStatus>> {
+        let held = self
+            .slot()
+            .as_ref()
+            .map(|o| (Arc::clone(&o.scanner), o.watch.state()));
+        held.map(|(scanner, watch)| AlbumStatus::of(&scanner, watch))
+            .transpose()
     }
 
     /// The open album's scanner, held apart from the session's lock: for
@@ -132,9 +163,24 @@ impl Session {
 }
 
 /// Opens `album` in the app's session, with its scans' events sent to the
-/// page.
+/// page, and changes to its state sent as `album_changed` with reason
+/// `status`.
 pub fn open_album<R: Runtime>(app: &AppHandle<R>, album: Album) {
-    let mut env = ScanEnv::new(Arc::new(TauriEmitter(app.clone())));
+    let emitter = Arc::new(TauriEmitter(app.clone()));
+    {
+        let emitter = Arc::clone(&emitter);
+        album.set_status_listener(Arc::new(move |revision| {
+            owlbum_core::events::emit(
+                &*emitter,
+                &AlbumChanged {
+                    revision,
+                    reason: ChangeReason::Status,
+                    rekeyed: Vec::new(),
+                },
+            );
+        }));
+    }
+    let mut env = ScanEnv::new(emitter);
     env.thumbs = app.try_state::<Thumbs>().map(|t| t.inner().clone());
     app.state::<Session>().open(album, env);
 }

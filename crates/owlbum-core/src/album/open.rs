@@ -27,7 +27,6 @@
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use chrono::{DateTime, Local, TimeZone};
@@ -39,6 +38,7 @@ use crate::album::db::{self, AlbumDb, Opened};
 use crate::album::lock::{self, AlbumLock, Owner, Verdict};
 use crate::album::root::AlbumLocation;
 use crate::album::schema::CURRENT_VERSION;
+use crate::album::state::{AlbumState, StatusListener};
 use crate::album::{backup, locate};
 use crate::error::AppResult;
 use crate::index::{AlbumIndex, Touched};
@@ -137,8 +137,9 @@ pub struct Album {
     // before the lock file is removed.
     db: AlbumDb,
     lock: Option<AlbumLock>,
-    /// Raised on every change the page should hear of (`album_changed`).
-    revision: AtomicU64,
+    /// The revision, the status listener and whether a write failed,
+    /// shared with the database and the lock's heartbeat.
+    state: Arc<AlbumState>,
 }
 
 impl Album {
@@ -277,18 +278,24 @@ impl Album {
                     },
                     db,
                     lock: None,
-                    revision: AtomicU64::new(0),
+                    state: Arc::default(),
                 });
             }
         };
         db.refuse_writes_when(lock.lost_to());
+        let state = Arc::new(AlbumState::default());
+        db.attach(Arc::clone(&state));
+        {
+            let state = Arc::clone(&state);
+            lock.on_lost(Arc::new(move || state.status_changed()));
+        }
         Ok(Self {
             index: load_index(&db, &location.scope, false)?,
             location,
             safety,
             db,
             lock: Some(lock),
-            revision: AtomicU64::new(0),
+            state,
         })
     }
 
@@ -326,7 +333,7 @@ impl Album {
             },
             db,
             lock: None,
-            revision: AtomicU64::new(0),
+            state: Arc::default(),
         })
     }
 
@@ -336,7 +343,8 @@ impl Album {
     }
 
     /// What album safety found. Once another computer has replaced the lock
-    /// (Open anyway there), the album reports `locked` from then on.
+    /// (Open anyway there), the album reports `locked` from then on; once a
+    /// write failed because the database could not take it, `read_only`.
     pub fn safety(&self) -> Safety {
         let lost_to = self.lock.as_ref().and_then(|lock| {
             lock.lost_to()
@@ -348,6 +356,10 @@ impl Album {
             Some(host) => Safety {
                 view_only: Some(ViewOnly::Locked),
                 lock_host: Some(host),
+                ..self.safety.clone()
+            },
+            None if self.safety.view_only.is_none() && self.state.write_failed() => Safety {
+                view_only: Some(ViewOnly::ReadOnly),
                 ..self.safety.clone()
             },
             None => self.safety.clone(),
@@ -369,12 +381,25 @@ impl Album {
     /// The album's revision: 0 when opened, raised by every change the
     /// page is told of with `album_changed`.
     pub fn revision(&self) -> u64 {
-        self.revision.load(Ordering::SeqCst)
+        self.state.revision()
     }
 
     /// Raises the revision and answers the new one.
     pub fn next_revision(&self) -> u64 {
-        self.revision.fetch_add(1, Ordering::SeqCst) + 1
+        self.state.next_revision()
+    }
+
+    /// Sets who hears of changes to the album's state: the lock taken over,
+    /// a write the database could not take, the folder no longer watched.
+    /// It is told the new revision ([`StatusListener`]).
+    pub fn set_status_listener(&self, listener: StatusListener) {
+        self.state.set_listener(listener);
+    }
+
+    /// The album's state changed in a way `album_status` shows: raises the
+    /// revision and tells the listener.
+    pub fn status_changed(&self) {
+        self.state.status_changed();
     }
 
     /// The album index: the in-memory copy that filters, sorts, scores and
@@ -1317,7 +1342,9 @@ mod tests {
     fn listen(album: &Album) -> Arc<Mutex<Vec<u64>>> {
         let heard = Arc::new(Mutex::new(Vec::new()));
         let sink = Arc::clone(&heard);
-        album.set_status_listener(Arc::new(move |revision| sink.lock().unwrap().push(revision)));
+        album.set_status_listener(Arc::new(move |revision| {
+            sink.lock().unwrap().push(revision)
+        }));
         heard
     }
 
@@ -1356,12 +1383,20 @@ mod tests {
         let album = Album::open_with(tmp.path(), &none(), &env()).unwrap();
         let heard = listen(&album);
         let err = insert_on_a_full_disk(&album).unwrap_err();
-        assert_eq!(err.code, ErrorCode::Internal, "the failed write answers its own error");
+        assert_eq!(
+            err.code,
+            ErrorCode::Internal,
+            "the failed write answers its own error"
+        );
         assert_eq!(album.safety().view_only, Some(ViewOnly::ReadOnly));
         assert!(!album.safety().in_memory);
         assert_eq!(*heard.lock().unwrap(), [1], "told once");
         assert_view_only_refuses_writes(&album, text::album::view_only::READ_ONLY);
-        assert_eq!(*heard.lock().unwrap(), [1], "a refused write is not a new failure");
+        assert_eq!(
+            *heard.lock().unwrap(),
+            [1],
+            "a refused write is not a new failure"
+        );
     }
 
     #[test]
@@ -1426,7 +1461,10 @@ mod tests {
         std::fs::create_dir_all(&sub).unwrap();
         let album = Album::open_with(&sub, &none(), &env()).unwrap();
         assert_eq!(album.location().scope, "2024/Trip");
-        assert_eq!(album.location().opened(), album.location().root.join("2024").join("Trip"));
+        assert_eq!(
+            album.location().opened(),
+            album.location().root.join("2024").join("Trip")
+        );
         drop(album);
         let whole = Album::open_with(tmp.path(), &none(), &env()).unwrap();
         assert_eq!(whole.location().opened(), whole.location().root);

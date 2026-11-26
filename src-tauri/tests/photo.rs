@@ -316,3 +316,59 @@ fn album_undo_takes_back_typed_info_and_tells_the_page() {
     assert_eq!(f.detail(id).unwrap().description, None);
     assert_eq!(undo()["outcome"], "nothing");
 }
+
+#[test]
+fn album_tidy_lists_and_removes_rows_whose_files_are_gone() {
+    let f = fixture();
+    let err = invoke(&f.window, "album_tidy_list", json!({})).unwrap_err();
+    assert_eq!(err["code"], "no_album");
+
+    let fixture = owlbum_fixtures::trip(&f.tmp.path().join("trip")).unwrap();
+    f.open(&fixture.root);
+    let id = f.id_of("day1/panorama.jpg");
+    // Only the test's own copy of the fixture loses a file.
+    std::fs::remove_file(fixture.root.join("day1/panorama.jpg")).unwrap();
+    let scanner = f.app.state::<Session>().scanner().unwrap();
+    scanner.scan_and_wait(owlbum_core::scan::Request::default());
+
+    let list: serde_json::Value = invoke(&f.window, "album_tidy_list", json!({}))
+        .unwrap()
+        .deserialize()
+        .unwrap();
+    assert_eq!(
+        list,
+        json!([{ "folder": "day1", "gone": false,
+                 "files": [{ "id": id, "file_name": "panorama.jpg", "keeps": [] }] }])
+    );
+
+    let (send, heard) = mpsc::channel::<serde_json::Value>();
+    f.app.listen_any("album_changed", move |event| {
+        let _ = send.send(serde_json::from_str(event.payload()).unwrap());
+    });
+    let other = f.id_of("day2/harbour.jpg");
+    let r: serde_json::Value = invoke(
+        &f.window,
+        "album_tidy_remove",
+        json!({ "ids": [id, other] }),
+    )
+    .unwrap()
+    .deserialize()
+    .unwrap();
+    assert_eq!(r["removed"], 1, "a row that is not missing is refused");
+    assert_eq!(r["kept"], 0);
+    let event = loop {
+        let e = heard
+            .recv_timeout(Duration::from_secs(10))
+            .expect("album_changed is sent");
+        if e["reason"] == "tidy" {
+            break e;
+        }
+    };
+    assert_eq!(event["revision"], r["revision"]);
+    assert!(f.detail(other).is_ok());
+    let list: serde_json::Value = invoke(&f.window, "album_tidy_list", json!({}))
+        .unwrap()
+        .deserialize()
+        .unwrap();
+    assert_eq!(list, json!([]));
+}

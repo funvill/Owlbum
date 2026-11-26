@@ -1,9 +1,10 @@
-import { useSyncExternalStore } from "react";
+import { useState, useSyncExternalStore } from "react";
 import { Button, IconButton, Pill, Tooltip } from "../../controls";
 import { albumText } from "../../text/album";
 import { appText } from "../../text/app";
 import { ThumbSize } from "../grid";
-import { shownScope, viewOnlyBanner } from "./banners";
+import { shownScope, viewOnlyBanner, viewOnlyReason } from "./banners";
+import { TidyDialog } from "./TidyDialog";
 import { useAlbumStore } from "./session";
 
 /** Below this width the bar's buttons become icon buttons (docs/09-visual-design.md, "The bars"). */
@@ -26,7 +27,7 @@ function useNarrow(): boolean {
 
 /**
  * The 48 px bar at the top of the window (docs/04-browsing.md, "Top bar").
- * Tidy… comes with #34 and Settings with #59.
+ * Settings comes with #59.
  */
 export function TopBar() {
   const status = useAlbumStore((s) => s.status);
@@ -34,6 +35,9 @@ export function TopBar() {
   const pick = useAlbumStore((s) => s.pickFolder);
   const close = useAlbumStore((s) => s.close);
   const narrow = useNarrow();
+  const [tidying, setTidying] = useState(false);
+  // Tidy is off in a view-only album; the tooltip says why.
+  const tidyOff = status === null ? undefined : (viewOnlyReason(status) ?? undefined);
   const banner = status === null ? null : viewOnlyBanner(status);
   const scoped = status !== null && status.scope !== "";
   const tooltip =
@@ -82,11 +86,28 @@ export function TopBar() {
           <ThumbSize />
           {narrow ? (
             <>
+              <IconButton
+                icon="tidy"
+                label={albumText.tidyTooltip}
+                disabledReason={tidyOff}
+                onClick={() => setTidying(true)}
+              />
               <IconButton icon="close-album" label={albumText.closeFolder} onClick={() => void close()} />
               <IconButton icon="folder" label={albumText.openFolder} onClick={() => void pick()} />
             </>
           ) : (
             <>
+              {tidyOff !== undefined ? (
+                <Button icon="tidy" disabledReason={tidyOff}>
+                  {albumText.tidy}
+                </Button>
+              ) : (
+                <Tooltip text={albumText.tidyTooltip}>
+                  <Button icon="tidy" onClick={() => setTidying(true)}>
+                    {albumText.tidy}
+                  </Button>
+                </Tooltip>
+              )}
               <Button icon="close-album" onClick={() => void close()}>
                 {albumText.closeFolder}
               </Button>
@@ -95,6 +116,7 @@ export function TopBar() {
               </Button>
             </>
           )}
+          <TidyDialog open={tidying} onClose={() => setTidying(false)} />
         </div>
       )}
     </header>

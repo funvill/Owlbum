@@ -9,6 +9,7 @@ use owlbum_core::album::undo::{self, Undone};
 use owlbum_core::album::{Album, AlbumChanged, ChangeReason, OpenOptions};
 use owlbum_core::appdata::AppData;
 use owlbum_core::info::typed::{self, PersonCount};
+use owlbum_core::organise::tidy::{self, TidyFolder, TidyRemoved};
 use owlbum_core::scan::report::{ScanErrors, ScanReport, UnsupportedFiles};
 use owlbum_core::scan::{AlbumOpened, AlbumStatus, Request, ScanProgress};
 use owlbum_core::{AppError, text};
@@ -25,6 +26,8 @@ area! {
         album_scan_errors,
         album_scan_report,
         album_status,
+        album_tidy_list,
+        album_tidy_remove,
         album_undo,
         album_unsupported,
     ],
@@ -206,5 +209,51 @@ command! {
             );
         }
         Ok(undone)
+    }
+}
+
+command! {
+    /// The missing rows in scope, grouped by folder, with what each would
+    /// lose (docs/05-organising.md, "Tidy"). `scan_running` while a scan
+    /// runs, `album_unreachable` when the album folder cannot be reached,
+    /// `no_album` when no album is open.
+    pub async fn album_tidy_list<R: Runtime>(; app: AppHandle<R>) -> Vec<TidyFolder> {
+        let scanner = app.state::<Session>().queries()?.0;
+        off_main(text::album::READING_DATABASE, move || {
+            tidy::list(scanner.album(), scanner.is_running())
+        })
+        .await
+    }
+}
+
+command! {
+    /// Deletes the rows of `ids` that are still missing, in one
+    /// transaction; a row whose file is found again is kept and un-marked
+    /// (docs/05-organising.md, "Safety rules"). Never touches a photo file.
+    /// Sends `album_changed` with reason `tidy` when anything was written,
+    /// and starts a scan when a file was found again, so its facts are read
+    /// afresh. `view_only`, `scan_running`, `album_unreachable`, `no_album`.
+    pub async fn album_tidy_remove<R: Runtime>(ids: Vec<i64>; app: AppHandle<R>) -> TidyRemoved {
+        let scanner = app.state::<Session>().queries()?.0;
+        let worker = std::sync::Arc::clone(&scanner);
+        let done = off_main(owlbum_core::text::album::tidy::REMOVING, move || {
+            tidy::remove(worker.album(), ids, worker.is_running())
+        })
+        .await?;
+        tracing::info!(target: "album", "tidy removed={} kept={}", done.removed, done.kept);
+        if done.removed > 0 || done.kept > 0 {
+            let _ = crate::events::emit(
+                &app,
+                &AlbumChanged {
+                    revision: done.revision,
+                    reason: ChangeReason::Tidy,
+                    rekeyed: Vec::new(),
+                },
+            );
+        }
+        if done.kept > 0 {
+            scanner.request(Request::default());
+        }
+        Ok(done)
     }
 }

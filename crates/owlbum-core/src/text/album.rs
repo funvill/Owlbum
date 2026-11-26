@@ -98,3 +98,33 @@ pub const BACKING_UP: &str = "backing up the album database";
 /// The title of the native folder dialog (`app_pick_folder`,
 /// docs/04-browsing.md, "Opening a folder").
 pub const PICK_FOLDER_TITLE: &str = "Open a folder of photos";
+
+/// Tidy (docs/05-organising.md, "Tidy").
+pub mod tidy {
+    /// `scan_running`: Tidy waits until the scan has finished.
+    pub const SCAN_RUNNING: &str = "Owlbum is still reading the album. Tidy when it has finished.";
+
+    /// `album_unreachable`: the album folder cannot be reached.
+    pub const UNREACHABLE: &str = "The album folder can't be reached. Nothing was removed.";
+
+    /// What was being done, for an `internal` error while removing rows.
+    pub const REMOVING: &str = "removing what Owlbum remembers about missing photos";
+
+    /// What a row would lose, as listed beside it.
+    pub const STARRED: &str = "starred";
+    pub const HIDDEN: &str = "hidden";
+    pub const NOTES: &str = "notes";
+    pub const DESCRIPTION: &str = "description";
+    pub const DATE: &str = "date";
+    pub const PLACE: &str = "place";
+    pub const EDIT: &str = "edit";
+
+    /// "1 person", "2 people".
+    pub fn people(n: i64) -> String {
+        if n == 1 {
+            "1 person".to_owned()
+        } else {
+            format!("{n} people")
+        }
+    }
+}

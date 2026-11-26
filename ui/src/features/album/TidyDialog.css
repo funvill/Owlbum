@@ -1,0 +1,35 @@
+/* docs/05-organising.md, "Tidy": the list scrolls at half the window's height. */
+
+.ow-tidy__list {
+  max-height: 50vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ow-tidy__folder + .ow-tidy__folder {
+  margin-top: var(--space-3);
+}
+
+.ow-tidy__folder-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ow-tidy__gone,
+.ow-tidy__count {
+  color: var(--muted);
+}
+
+.ow-tidy__count {
+  margin-left: auto;
+  white-space: nowrap;
+}
+
+.ow-tidy__files {
+  margin: var(--space-2) 0 0;
+  padding: 0 0 0 var(--space-6);
+  list-style: none;
+}

@@ -38,6 +38,26 @@ export const albumText = {
   showWholeAlbum: "Show whole album",
   viewOnlyBadge: "View only",
   closeFolder: "Close folder",
+  tidy: "Tidy…",
+  tidyTooltip: "Remove what Owlbum remembers about photos that are no longer in the album",
+
+  // Tidy (docs/05-organising.md, "Tidy")
+  tidyTitle: "Tidy album",
+  tidyLooking: "Looking…",
+  tidyNothing: "Nothing to tidy: every photo Owlbum knows about is still in the album.",
+  tidyScanning: "Owlbum is still reading the album. Tidy when it has finished.",
+  tidyExplain:
+    "These photos are no longer in the album. Removing them deletes their stars, notes, people and tags for good. No photo file is touched.",
+  tidyTopFolder: "(top folder)",
+  tidyFolderGone: "This whole folder is gone",
+  tidyFolderGoneTooltip:
+    "If it is on a drive that is not plugged in, plug it in and let Owlbum read the album again before tidying.",
+  tidySelected: (n: number, of: number) => `${n} of ${of} selected`,
+  tidyRemove: (n: number) => `Remove ${n} ${plural(n, "entry", "entries")}`,
+  tidyRemoved: (n: number) => `Removed ${n} ${plural(n, "entry", "entries")}.`,
+  tidyRemovedKept: (n: number, kept: number) =>
+    `Removed ${n} ${plural(n, "entry", "entries")}. ${kept} ${plural(kept, "photo was", "photos were")} found again and kept.`,
+  close: "Close",
 
   // Banners
   viewOnlyLocked: (host: string) =>

@@ -71,6 +71,14 @@ impl UndoList {
         self.steps().pop_back()
     }
 
+    /// Drops every step whose photos are all in `deleted` (Tidy removed
+    /// their rows). A step that still holds another photo is kept as it
+    /// is, so its undo answers `partial`.
+    pub fn drop_deleted(&self, deleted: &std::collections::HashSet<i64>) {
+        self.steps()
+            .retain(|step| !step.ids().iter().all(|id| deleted.contains(id)));
+    }
+
     /// The number of steps held.
     pub fn len(&self) -> usize {
         self.steps().len()

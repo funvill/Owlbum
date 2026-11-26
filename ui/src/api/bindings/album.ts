@@ -9,6 +9,8 @@ import type { PersonCount } from "./PersonCount";
 import type { ScanErrors } from "./ScanErrors";
 import type { ScanProgress } from "./ScanProgress";
 import type { ScanReport } from "./ScanReport";
+import type { TidyFolder } from "./TidyFolder";
+import type { TidyRemoved } from "./TidyRemoved";
 import type { Undone } from "./Undone";
 import type { UnsupportedFiles } from "./UnsupportedFiles";
 
@@ -21,6 +23,8 @@ export type AlbumCommands = {
   album_scan_errors: { args: { offset: number; limit: number }; result: ScanErrors };
   album_scan_report: { args: Record<string, never>; result: ScanReport };
   album_status: { args: Record<string, never>; result: AlbumStatus | null };
+  album_tidy_list: { args: Record<string, never>; result: Array<TidyFolder> };
+  album_tidy_remove: { args: { ids: Array<number> }; result: TidyRemoved };
   album_undo: { args: Record<string, never>; result: Undone };
   album_unsupported: { args: { offset: number; limit: number }; result: UnsupportedFiles };
 };

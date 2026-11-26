@@ -922,9 +922,9 @@ The top bar has a button **Tidy…** with the tooltip "Remove what Owlbum rememb
 | During a scan | `album_tidy_list` and `album_tidy_remove` answer `scan_running`. "Missing" is only trustworthy once a scan has finished. |
 | The album root cannot be reached | Both commands answer `album_unreachable`, and the dialog says "The album folder can't be reached. Nothing was removed." A whole drive that was unplugged must not look like 100,000 deleted photos. |
 | Scope | In a scoped open only rows under the scope are listed and can be removed. |
-| Check again before deleting | For each id, Rust looks for the file once more. If it is there now, the row is kept and marked `missing = 0`. |
+| Check again before deleting | For each id, Rust looks for the file once more. If it is there now, the row is kept and marked `missing = 0`, the bursts are worked out again so it rejoins its burst, a scan is started so its facts are read afresh, and the page re-runs its query. Only a file that is surely not found counts as gone; when it cannot be looked for, the row is left alone. |
 | Only missing rows | An id whose row is not missing is refused, whatever the page sent. |
-| One transaction | All confirmed rows are deleted together. People links, tags and vectors go with them, the rows leave the `search` table, and names left on no photo leave `people`. |
+| One transaction | All confirmed rows are deleted together. People links, tags, labels and vectors go with them, the rows leave the `search` table, and names left on no photo leave `people`. Undo steps whose photos were all deleted are dropped; a step that still holds another photo stays, and its undo answers `partial`. Missing rows are not in the album index, so bursts, keepers and scores are unchanged by the deletion. |
 | Photo files | Never touched. Thumbnails in the cache are left to the cache's own pruning. |
 | The way back | Tidy cannot be undone with Ctrl+Z. The daily backup in `.owlbum/backup/` still holds the rows until it ages out. |
 
@@ -946,8 +946,8 @@ Commands this document adds or defines. All follow the rules in [Architecture](0
 | `photo_score` | `id` | `{ total, analysed, lines: { label, why, points }[] }` | The score card's breakdown. |
 | `album_undo` | none | `{ outcome, label, ids, revision }` | `label` is null for `nothing`; `revision` is the album's revision after the undo. |
 | `album_people` | none | `{ name, count }[]` | |
-| `album_tidy_list` | none | `{ folder, gone, files: { id, file_name, keeps: string[] }[] }[]` | `gone`: the folder does not exist on disk. `keeps`: what the row would lose. |
-| `album_tidy_remove` | `ids` | `{ removed: number, kept: number }` | |
+| `album_tidy_list` | none | `{ folder, gone, files: { id, file_name, keeps: string[] }[] }[]` | `gone`: the folder does not exist on disk. `keeps`: what the row would lose, as the words shown ("starred", "2 people", ...); empty when it holds nothing typed. |
+| `album_tidy_remove` | `ids` | `{ removed: number, kept: number, revision: number }` | Ids that are not missing or not in scope are skipped, not an error. |
 
 `query_ids` and `query_map` are view commands defined in [Browsing](04-browsing.md#commands-and-events); they read the same token. `search_meaning(token)` is defined in [Tagging](07-tagging.md#commands-and-events).
 
@@ -959,7 +959,7 @@ Events. This document adds no event. It emits `album_changed` with these reasons
 |---|---|
 | `info` | Typed info changed: star, hide, nudge, undo, or a field in the details panel. |
 | `facts` | A whole-album rebuild of the derived values was swapped in. |
-| `tidy` | Tidy removed rows. |
+| `tidy` | Tidy removed rows, or kept rows whose files were found again. |
 
 When the page re-runs its query after `album_changed` is decided by the reason, as the table in Architecture says. It always passes `keep`, so the selection holds. How often it may re-run is set in [Browsing](04-browsing.md#running-a-query).
 

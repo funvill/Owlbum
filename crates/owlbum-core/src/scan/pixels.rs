@@ -63,7 +63,7 @@ where
 }
 
 /// `img` resized to `w × h` with Lanczos3 by `fast_image_resize`, which
-/// works in fixed point and gives the same levels with or without SIMD.
+/// works on 8-bit samples in fixed point.
 pub fn lanczos<P>(img: &ImageBuffer<P, Vec<u8>>, w: u32, h: u32) -> ImageBuffer<P, Vec<u8>>
 where
     P: Pixel<Subpixel = u8> + 'static,

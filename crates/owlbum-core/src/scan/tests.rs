@@ -1887,6 +1887,22 @@ fn the_pixels_pass_stores_the_analysis() {
         analysis_of(&fx, "copies/lake.jpg"),
         analysis_of(&fx, "day1/lake.jpg")
     );
+    // The burst's shots are near-duplicates by the 9 x 8 dHash (docs/05,
+    // "Bursts": at most 12 bits apart).
+    let hash = |rel: &str| {
+        u64::from_str_radix(analysis_of(&fx, rel)["dhash"].as_str().unwrap(), 16).unwrap()
+    };
+    let burst: Vec<u64> = fx
+        .manifest
+        .of_kind(Kind::Burst)
+        .map(|f| hash(&f.rel_path))
+        .collect();
+    assert_eq!(burst.len(), 5);
+    for a in &burst {
+        for b in &burst {
+            assert!((a ^ b).count_ones() <= 12, "{a:016x} {b:016x}");
+        }
+    }
     // The transparent PNG of the extras is transparent; an opaque one is not.
     let fx = Fx::extras();
     fx.scan();

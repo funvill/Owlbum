@@ -64,7 +64,7 @@ pub struct Facts {
     pub width: u32,
     pub height: u32,
     pub duration_ms: Option<u64>,
-    /// Read by the metadata reader (roadmap #10); None until then.
+    /// Read by the metadata reader (`scan::metadata`).
     pub captured_at: Option<String>,
     pub gps_lat: Option<f64>,
     pub gps_lon: Option<f64>,

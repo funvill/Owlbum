@@ -63,11 +63,11 @@ pub fn analyse(small: &RgbImage, alpha: Option<&GrayImage>) -> Analysis {
     let planes: Vec<Vec<u8>> = (0..3)
         .map(|c| colour.pixels().map(|p| p.0[c]).collect())
         .collect();
-    let avg_colour = [0, 1, 2].map(|c| {
-        let sum: u64 = planes[c].iter().map(|&v| u64::from(v)).sum();
-        level(sum as f64 / n)
-    });
-    let cells: Vec<Vec<f64>> = planes.iter().map(|p| box_resize(p, w, h, 3, 3)).collect();
+    let area = (w * h) as u64;
+    // A mean as a level: sum / area, rounded half up, in integers.
+    let level = |sum: u64| ((2 * sum + area) / (2 * area)).min(255) as u8;
+    let avg_colour = [0, 1, 2].map(|c| level(planes[c].iter().map(|&v| u64::from(v)).sum()));
+    let cells: Vec<Vec<u64>> = planes.iter().map(|p| box_resize(p, w, h, 3, 3)).collect();
     let colour_grid = (0..9)
         .flat_map(|cell| cells.iter().map(move |plane| level(plane[cell])))
         .collect();
@@ -114,11 +114,6 @@ fn round(x: f64, decimals: i32) -> f64 {
     let scale = 10f64.powi(decimals);
     let r = (x * scale).round() / scale;
     if r == 0.0 { 0.0 } else { r }
-}
-
-/// A mean as a 0..255 level, rounded half up.
-fn level(x: f64) -> u8 {
-    x.round().clamp(0.0, 255.0) as u8
 }
 
 /// The variance of the 4-neighbour Laplacian over the interior pixels,
@@ -174,7 +169,7 @@ fn saliency(grey: &[u8], w: usize, h: usize) -> (f64, f64) {
 
 /// The 9 × 8 difference hash: one bit per neighbour pair, 1 when the right
 /// one is brighter; rows top to bottom, most significant bit first. The
-/// box-filtered means are compared unrounded.
+/// box-filtered means are compared exactly, unrounded.
 fn dhash(grey: &[u8], w: usize, h: usize) -> String {
     let small = box_resize(grey, w, h, 9, 8);
     let mut bits = 0u64;
@@ -196,40 +191,39 @@ fn transparent(alpha: &GrayImage) -> bool {
 }
 
 /// For each output index along one side, the source indices it covers and
-/// by how much (in source pixels), for an area average from `src` pixels to
-/// `dst`. Enlarging works too: an output inside one source pixel takes it.
-fn box_weights(src: usize, dst: usize) -> Vec<Vec<(usize, f64)>> {
-    let scale = src as f64 / dst as f64;
+/// by how much, for an area average from `src` pixels to `dst`. Positions
+/// are counted in `1/dst` of a source pixel, so every weight is an integer
+/// and the weights of one output add up to `src`. Enlarging works too: an
+/// output inside one source pixel takes it whole.
+fn box_weights(src: usize, dst: usize) -> Vec<Vec<(usize, u64)>> {
     (0..dst)
         .map(|o| {
-            let (lo, hi) = (o as f64 * scale, (o + 1) as f64 * scale);
-            let first = lo.floor() as usize;
-            let last = (hi.ceil() as usize).min(src);
-            (first..last)
+            let (lo, hi) = (o * src, (o + 1) * src);
+            (lo / dst..hi.div_ceil(dst).min(src))
                 .filter_map(|i| {
-                    let cover = hi.min((i + 1) as f64) - lo.max(i as f64);
-                    (cover > 0.0).then_some((i, cover))
+                    let cover = hi.min((i + 1) * dst) - lo.max(i * dst);
+                    (cover > 0).then_some((i, cover as u64))
                 })
                 .collect()
         })
         .collect()
 }
 
-/// One `w × h` plane resized to `dw × dh` by area average (a box filter):
-/// each output is the mean of the source area it covers, unrounded.
-fn box_resize(plane: &[u8], w: usize, h: usize, dw: usize, dh: usize) -> Vec<f64> {
+/// One `w × h` plane resized to `dw × dh` by area average (a box filter).
+/// Each output is its area's weighted sum; every output's weights add up to
+/// `w · h`, so the sums compare exactly and the mean is `sum / (w · h)`.
+fn box_resize(plane: &[u8], w: usize, h: usize, dw: usize, dh: usize) -> Vec<u64> {
     let (wx, wy) = (box_weights(w, dw), box_weights(h, dh));
     let mut out = Vec::with_capacity(dw * dh);
     for row in &wy {
         for col in &wx {
-            let (mut sum, mut area) = (0.0, 0.0);
+            let mut sum = 0u64;
             for &(y, fy) in row {
                 for &(x, fx) in col {
-                    sum += f64::from(plane[y * w + x]) * fx * fy;
-                    area += fx * fy;
+                    sum += u64::from(plane[y * w + x]) * fx * fy;
                 }
             }
-            out.push(if area > 0.0 { sum / area } else { 0.0 });
+            out.push(sum);
         }
     }
     out
@@ -263,6 +257,17 @@ mod tests {
         assert_eq!(a.avg_colour, [128, 128, 128]);
         assert_eq!(a.colour_grid, vec![128; 27]);
         assert!(!a.transparent);
+    }
+
+    #[test]
+    fn flat_pictures_of_any_size_hash_to_zero() {
+        // Box means of one level must compare equal, whatever the areas.
+        for (w, h, v) in [(256, 171, 255), (64, 48, 100), (100, 7, 3), (13, 250, 201)] {
+            let a = analyse(&flat(w, h, v), None);
+            assert_eq!(a.dhash, "0000000000000000", "{w} x {h} of {v}");
+            assert_eq!(a.colour_grid, vec![v; 27], "{w} x {h} of {v}");
+            assert_eq!(a.avg_colour, [v; 3]);
+        }
     }
 
     #[test]

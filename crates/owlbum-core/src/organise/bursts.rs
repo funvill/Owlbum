@@ -12,8 +12,8 @@ use std::cmp::Ordering;
 use std::collections::HashMap;
 use std::num::NonZeroU32;
 
-use super::score::percentile;
-use crate::index::{Kind, Photo};
+use super::facts;
+use crate::index::Photo;
 
 /// The most minutes two dated photos of a pair may be apart.
 pub const MAX_MINUTES: i64 = 120;
@@ -185,25 +185,10 @@ pub fn pick_keepers(photos: &mut [Photo], only: Option<&[NonZeroU32]>) {
     }
 }
 
-/// `quality` (docs/05, "Quality"), 0 for a photo that is not analysed.
-/// `sharpness` is the sorted list of the photo score's Focus line.
+/// `quality` as the keeper order reads it ([`facts::quality`]), 0 for a
+/// photo that is not analysed.
 pub fn quality(p: &Photo, sharpness: &[f32]) -> f32 {
-    let Some(a) = p.analysis() else {
-        return 0.0;
-    };
-    let clamp = |x: f64| x.clamp(0.0, 1.0);
-    let exposure = clamp(
-        1.0 - (f64::from(a.mean_luma) - 0.48).abs() * 1.6
-            - f64::from(a.clipped_highlights) * 2.0
-            - f64::from(a.clipped_shadows) * 1.5,
-    );
-    let (size, discount) = if p.kind == Kind::Video {
-        (1.0, 1.0)
-    } else {
-        let mp = f64::from(p.width) * f64::from(p.height) / 1_000_000.0;
-        (clamp(mp / 8.0), if mp < 2.0 { 0.6 } else { 1.0 })
-    };
-    ((0.55 * percentile(sharpness, a.sharpness) + 0.3 * exposure + 0.15 * size) * discount) as f32
+    facts::quality(p, sharpness).unwrap_or(0.0) as f32
 }
 
 fn dhash(p: &Photo) -> Option<u64> {

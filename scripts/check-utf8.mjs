@@ -3,7 +3,7 @@
 import { execFileSync } from "node:child_process";
 import { readFileSync } from "node:fs";
 
-const binary = /\.(jxl|png|jpe?g|gif|webp|bmp|tiff?|ico|icns|woff2?|ttf|otf|dng|mp4|sqlite)$/i;
+const binary = /\.(jxl|png|jpe?g|gif|webp|bmp|tiff?|ico|icns|woff2?|ttf|otf|dng|mp4|sqlite|bin)$/i;
 const files = execFileSync("git", ["ls-files", "-z"], { encoding: "utf8" })
   .split("\0")
   .filter((f) => f && !binary.test(f));

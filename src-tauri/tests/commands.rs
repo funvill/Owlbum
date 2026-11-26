@@ -6,6 +6,7 @@ use std::collections::HashSet;
 
 use common::invoke;
 use owlbum_core::app::AppVersion;
+use owlbum_core::info::country::CountryMatch;
 use owlbum_core::media::FormatInfo;
 use tauri::test::{MockRuntime, mock_builder};
 
@@ -31,6 +32,25 @@ fn app_formats_answers_the_registry() {
     assert_eq!(first["id"], "jpeg");
     assert_eq!(first["save_as"], "jpeg");
     assert_eq!(first["kind"], "image");
+}
+
+#[test]
+fn app_place_search_answers_countries_with_their_central_points() {
+    let (_app, window) = app_window();
+    let reply = invoke(&window, "app_place_search", serde_json::json!({ "text": "Fran" }))
+        .expect("app_place_search answers");
+    let found: Vec<CountryMatch> = reply.deserialize().unwrap();
+    assert_eq!(found.len(), 1);
+    assert_eq!(found[0].name, "France");
+    assert_eq!(
+        owlbum_core::info::country::country_at(found[0].lat, found[0].lon),
+        Some("France")
+    );
+
+    let reply = invoke(&window, "app_place_search", serde_json::json!({ "text": "a" }))
+        .expect("app_place_search answers");
+    let found: Vec<CountryMatch> = reply.deserialize().unwrap();
+    assert_eq!(found.len(), 6);
 }
 
 #[test]

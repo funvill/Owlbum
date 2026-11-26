@@ -4,6 +4,7 @@
 import type { AppVersion } from "./AppVersion";
 import type { CacheCleared } from "./CacheCleared";
 import type { CacheUsage } from "./CacheUsage";
+import type { CountryMatch } from "./CountryMatch";
 import type { FormatInfo } from "./FormatInfo";
 import type { JsonValue } from "./serde_json/JsonValue";
 import type { Recent } from "./Recent";
@@ -13,6 +14,7 @@ export type AppCommands = {
   app_cache_clear: { args: Record<string, never>; result: CacheCleared };
   app_cache_usage: { args: Record<string, never>; result: CacheUsage };
   app_formats: { args: Record<string, never>; result: Array<FormatInfo> };
+  app_place_search: { args: { text: string }; result: Array<CountryMatch> };
   app_recent_list: { args: Record<string, never>; result: Array<Recent> };
   app_recent_remove: { args: { root: string }; result: Array<Recent> };
   app_settings_get: { args: Record<string, never>; result: Settings };

@@ -10,6 +10,7 @@
 *.webp binary
 *.gif binary
 *.jxl binary
+*.bin binary
 
 # Windows-only scripts keep CRLF.
 *.ps1 text eol=crlf

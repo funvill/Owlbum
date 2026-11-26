@@ -3,6 +3,7 @@
 use crate::{area, command};
 use owlbum_core::app::{self, AppVersion};
 use owlbum_core::appdata::{AppData, Recent, Settings};
+use owlbum_core::info::country::{self, CountryMatch};
 use owlbum_core::media::{self, FormatInfo};
 use owlbum_core::thumbs::{CacheCleared, CacheUsage, Thumbs};
 use owlbum_core::{AppError, text};
@@ -15,6 +16,7 @@ area! {
         app_cache_clear,
         app_cache_usage,
         app_formats,
+        app_place_search,
         app_recent_list,
         app_recent_remove,
         app_settings_get,
@@ -47,6 +49,16 @@ command! {
     /// (docs/03-media-and-scanning.md, "Commands").
     pub fn app_formats() -> Vec<FormatInfo> {
         Ok(media::formats())
+    }
+}
+
+command! {
+    /// Countries whose name contains the text, at most 6, each with its
+    /// central point, from the bundled outlines (docs/04-browsing.md, "How
+    /// typed fields save"). Async so the first call, which reads the
+    /// outlines, runs off the main thread.
+    pub async fn app_place_search(text: String) -> Vec<CountryMatch> {
+        Ok(country::place_search(&text))
     }
 }
 

@@ -1,4 +1,5 @@
 import type { AppCommands } from "../bindings/app";
+import type { CountryMatch } from "../bindings/CountryMatch";
 import type { FormatInfo } from "../bindings/FormatInfo";
 import type { Settings } from "../bindings/Settings";
 import type { AppError } from "../bindings/AppError";
@@ -80,12 +81,59 @@ export const fakeFormats: FormatInfo[] = [
   },
 ];
 
+/**
+ * A few countries with their central points, enough for page tests. The
+ * real list is Natural Earth's, bundled in Rust (owlbum_core::info::country).
+ */
+export const fakeCountries: CountryMatch[] = [
+  { name: "Algeria", lat: 28.1586, lon: 2.6174 },
+  { name: "Australia", lat: -25.0498, lon: 134.0482 },
+  { name: "Canada", lat: 59.0816, lon: -101.6684 },
+  { name: "Finland", lat: 63.2524, lon: 27.2764 },
+  { name: "France", lat: 46.6966, lon: 2.4351 },
+  { name: "Germany", lat: 50.9616, lon: 10.2117 },
+  { name: "Italy", lat: 44.7329, lon: 11.0761 },
+  { name: "Japan", lat: 36.9324, lon: 138.4442 },
+  { name: "Niger", lat: 17.4469, lon: 9.5047 },
+  { name: "Nigeria", lat: 9.4396, lon: 7.4958 },
+  { name: "United States of America", lat: 39.5385, lon: -97.4826 },
+  { name: "Åland", lat: 60.1565, lon: 19.8697 },
+];
+
+/** Lower case without accents, as Rust's `info::country` compares names. */
+const fold = (text: string) =>
+  text
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase();
+
+const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+
+/** `app_place_search`'s rule (docs/04-browsing.md, "How typed fields save"). */
+export function placeSearch(countries: CountryMatch[], text: string): CountryMatch[] {
+  const wanted = fold(text.trim());
+  if (wanted === "") return [];
+  const rank = (name: string) => {
+    const folded = fold(name);
+    if (folded.startsWith(wanted)) return 0;
+    if (folded.split(/[^\p{L}\p{N}]+/u).some((word) => word.startsWith(wanted))) return 1;
+    return folded.includes(wanted) ? 2 : -1;
+  };
+  return countries
+    .map((c) => ({ c, r: rank(c.name) }))
+    .filter(({ r }) => r >= 0)
+    .sort((a, b) => a.r - b.r || compare(fold(a.c.name), fold(b.c.name)))
+    .slice(0, 6)
+    .map(({ c }) => ({ ...c }));
+}
+
 /** The fake backend's `app_` commands. */
 export const appHandlers: AreaHandlers<AppCommands> = {
   // An empty cache at the default limit. A test that needs a size replaces these.
   app_cache_clear: () => ({ bytes_freed: 0 }),
   app_cache_usage: () => ({ bytes: 0, limit_bytes: defaultSettings["cache.limit_gb"] * 1_000_000_000 }),
   app_formats: () => fakeFormats.map((f) => ({ ...f, extensions: [...f.extensions] })),
+  app_place_search: ({ text }) => placeSearch(fakeCountries, text),
   app_recent_list: () => [],
   app_recent_remove: () => [],
   app_settings_get: () => structuredClone(defaultSettings),

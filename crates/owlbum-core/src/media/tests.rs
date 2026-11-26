@@ -650,6 +650,107 @@ fn wide_pictures_are_not_capped_by_a_decoder() {
     }
 }
 
+// ---- A large JPEG's preview is decoded at a reduced scale ----
+
+/// `quadrants()` at 3600 × 1800, big enough for a scaled preview.
+fn big_quadrants() -> RgbImage {
+    RgbImage::from_fn(3600, 1800, |x, y| {
+        Rgb(match (x < 1800, y < 900) {
+            (true, true) => RED,
+            (false, true) => GREEN,
+            (true, false) => BLUE,
+            (false, false) => WHITE,
+        })
+    })
+}
+
+#[test]
+fn a_large_jpeg_preview_is_decoded_at_the_smallest_scale_that_fits() {
+    let dir = TempDir::new().unwrap();
+    let path = write(&dir, "big.jpg", &jpeg_bytes(&big_quadrants()));
+    let h = handler_for(&path).handler;
+    // 1/2 is 1800 px, the smallest eighth still at least 1600.
+    let px = h.preview(&path, 1600).unwrap();
+    assert_eq!((px.width, px.height), (1800, 900));
+    assert_eq!((px.full_width, px.full_height), (3600, 1800));
+    assert_eq!(px.rgba.len(), 1800 * 900 * 4);
+    assert!(!px.has_alpha);
+    assert_corners(&px, [RED, GREEN, BLUE, WHITE], "1/2");
+    // 1/4 is 900 px, at least 512; 1/8 would be 450.
+    let px = h.preview(&path, 512).unwrap();
+    assert_eq!((px.width, px.height), (900, 450));
+    assert_eq!((px.full_width, px.full_height), (3600, 1800));
+    assert_corners(&px, [RED, GREEN, BLUE, WHITE], "1/4");
+    // Too small to scale: the full decode, as `working`.
+    assert_eq!(h.preview(&path, 2000).unwrap(), h.working(&path).unwrap());
+}
+
+#[test]
+fn a_scaled_jpeg_preview_is_upright() {
+    let dir = TempDir::new().unwrap();
+    for o in [3u16, 5, 6, 8] {
+        let path = write(
+            &dir,
+            &format!("big{o}.jpg"),
+            &jpeg_with_orientation(&big_quadrants(), o),
+        );
+        let px = handler_for(&path).handler.preview(&path, 1600).unwrap();
+        let what = format!("orientation {o}");
+        if o >= 5 {
+            assert_eq!((px.width, px.height), (900, 1800), "{what}");
+            assert_eq!((px.full_width, px.full_height), (1800, 3600), "{what}");
+        } else {
+            assert_eq!((px.width, px.height), (1800, 900), "{what}");
+            assert_eq!((px.full_width, px.full_height), (3600, 1800), "{what}");
+        }
+        assert_corners(&px, upright_corners(o), &what);
+    }
+}
+
+#[test]
+fn a_scaled_jpeg_preview_is_converted_to_srgb() {
+    use owlbum_fixtures::icc;
+
+    let dir = TempDir::new().unwrap();
+    let img = image::DynamicImage::ImageRgb8(RgbImage::from_pixel(2000, 1000, Rgb(ORANGE)));
+    let p3 = icc::DISPLAY_P3.bytes();
+    let path = write(&dir, "p3.jpg", &with_icc(&img, ImageFormat::Jpeg, &p3));
+    let px = handler_for(&path).handler.preview(&path, 512).unwrap();
+    assert_eq!((px.width, px.height), (1000, 500));
+    let want = icc::DISPLAY_P3.expected_srgb(ORANGE);
+    assert_near(px.pixel(500, 250), want, 5.0, "p3 preview");
+}
+
+#[test]
+fn a_scaled_grey_jpeg_preview_is_grey() {
+    let dir = TempDir::new().unwrap();
+    let grey = image::GrayImage::from_fn(2000, 1000, |x, _| {
+        image::Luma([if x < 1000 { 40 } else { 200 }])
+    });
+    let path = write(
+        &dir,
+        "grey.jpg",
+        &encode(&image::DynamicImage::ImageLuma8(grey), ImageFormat::Jpeg),
+    );
+    let px = handler_for(&path).handler.preview(&path, 512).unwrap();
+    assert_eq!((px.width, px.height), (1000, 500));
+    assert_eq!((px.full_width, px.full_height), (2000, 1000));
+    for (x, v) in [(250, 40u8), (750, 200)] {
+        let c = px.pixel(x, 250);
+        assert!(c[..3].iter().all(|k| k.abs_diff(v) <= 3), "{x}: {c:?}");
+    }
+}
+
+#[test]
+fn a_truncated_large_jpeg_preview_still_yields_a_picture() {
+    let dir = TempDir::new().unwrap();
+    let full = jpeg_bytes(&big_quadrants());
+    let path = write(&dir, "cut.jpg", &full[..full.len() * 3 / 4]);
+    let px = handler_for(&path).handler.preview(&path, 1600).unwrap();
+    assert!(px.width.max(px.height) >= 1600);
+    assert_eq!((px.full_width, px.full_height), (3600, 1800));
+}
+
 // ---- Leniency, files closed, cost ----
 
 #[test]

@@ -1,17 +1,23 @@
 //! The still handler: JPEG, PNG, WebP, GIF, TIFF and BMP, decoded with the
 //! `image` crate (docs/03-media-and-scanning.md, "The still handler").
 //!
-//! `image` decodes JPEG with `zune-jpeg`. `zune-jpeg` has no reduced-size
-//! (DCT-scaled) decode, so `preview` and `working` are the same decode for
-//! every format here.
+//! `image` decodes JPEG with `zune-jpeg`, which has no reduced-size
+//! decode. A JPEG's `preview` is therefore decoded by `jpeg-decoder`,
+//! scaled in the DCT to 1/2, 1/4 or 1/8 of its size: the smallest that is
+//! still at least `min_side` on its longest side (#114). When no scale fits
+//! below full size, when the file is CMYK, 16-bit or lossless, or when
+//! `jpeg-decoder` cannot read it, `preview` is the full decode. For every
+//! other format `preview` and `working` are the same decode.
 
 use std::fs::File;
 use std::io::BufReader;
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::Path;
 
 use image::codecs::tiff::TiffDecoder;
 use image::metadata::Orientation;
-use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
+use image::{DynamicImage, GrayImage, ImageDecoder, ImageFormat, ImageReader, RgbImage};
+use jpeg_decoder::{CodingProcess, PixelFormat};
 
 use super::colour;
 use super::exif::Exif;
@@ -106,6 +112,55 @@ impl Still {
         let mut img = DynamicImage::from_decoder(decoder).map_err(self.decode_err())?;
         img.apply_orientation(orientation);
         Ok((img, icc))
+    }
+
+    /// A JPEG's preview decoded at the smallest DCT scale (1/2, 1/4, 1/8)
+    /// that is still at least `min_side` on its longest side, in sRGB, with
+    /// `full_width` and `full_height` the full upright size. None when no
+    /// scale below full size fits or `jpeg-decoder` cannot give the picture
+    /// as 8-bit grey or RGB: the caller then decodes it in full, which also
+    /// keeps a damaged file as lenient as `zune-jpeg` makes it.
+    fn scaled_jpeg(file: &Path, min_side: u32) -> Option<Pixels> {
+        let mut decoder = jpeg_decoder::Decoder::new(Self::open(file).ok()?);
+        decoder.read_info().ok()?;
+        // `info` panics on a component count JPEG allows but
+        // `jpeg-decoder` does not handle, as can its decode on a hostile
+        // file; either way the full decode takes over.
+        catch_unwind(AssertUnwindSafe(move || {
+            let info = decoder.info()?;
+            if info.coding_process == CodingProcess::Lossless
+                || !matches!(info.pixel_format, PixelFormat::L8 | PixelFormat::RGB24)
+            {
+                return None;
+            }
+            let full = (u32::from(info.width), u32::from(info.height));
+            let side = u16::try_from(min_side).unwrap_or(u16::MAX);
+            let (w, h) = decoder.scale(side, side).ok()?;
+            let (w, h) = (u32::from(w), u32::from(h));
+            if (w, h) == full {
+                return None;
+            }
+            let raw = decoder.decode().ok()?;
+            let mut img = match info.pixel_format {
+                PixelFormat::L8 => DynamicImage::ImageLuma8(GrayImage::from_raw(w, h, raw)?),
+                _ => DynamicImage::ImageRgb8(RgbImage::from_raw(w, h, raw)?),
+            };
+            let orientation = decoder
+                .exif_data()
+                .and_then(Orientation::from_exif_chunk)
+                .unwrap_or(Orientation::NoTransforms);
+            let icc = decoder.icc_profile();
+            img.apply_orientation(orientation);
+            let mut px = to_pixels(&img);
+            (px.full_width, px.full_height) = if swaps_sides(orientation) {
+                (full.1, full.0)
+            } else {
+                full
+            };
+            Some(colour::to_srgb(px, icc.as_deref()))
+        }))
+        .ok()
+        .flatten()
     }
 
     /// A TIFF's ICC profile, read by a decoder with no limits set. Once
@@ -252,7 +307,14 @@ impl MediaHandler for Still {
         self.metadata_inner(file)
     }
 
-    fn preview(&self, file: &Path, _min_side: u32) -> Result<Pixels, MediaError> {
+    fn preview(&self, file: &Path, min_side: u32) -> Result<Pixels, MediaError> {
+        if self.format == StillFormat::Jpeg {
+            // The size limit holds before any pixel memory is taken.
+            self.check_jpeg_header(file)?;
+            if let Some(px) = Self::scaled_jpeg(file, min_side) {
+                return Ok(px);
+            }
+        }
         self.working(file)
     }
 

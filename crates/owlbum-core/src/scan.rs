@@ -62,4 +62,4 @@ pub use status::{AlbumOpened, AlbumStatus, UnsupportedSummary};
 /// Raised in the same commit as any change to the metadata rules, the
 /// analysis formulas or the error placeholders: every row with an older
 /// value is read again by the next scan.
-pub const SCAN_VERSION: i64 = 2;
+pub const SCAN_VERSION: i64 = 3;

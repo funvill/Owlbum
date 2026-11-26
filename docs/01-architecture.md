@@ -240,7 +240,7 @@ These are the starting choices. A prototype may replace one; the replacement is 
 | Need | Choice | Notes |
 |---|---|---|
 | Database | `rusqlite` with bundled SQLite, FTS5 enabled | |
-| JPEG decode and resize | `zune-jpeg` (through `image`, which uses it as its JPEG decoder), `fast_image_resize`; `image` for other formats | Thumbnails and the analysis image are resized with `fast_image_resize`'s Lanczos3, about 4 times faster than `image`'s on a 24-megapixel decode (#10). |
+| JPEG decode and resize | `zune-jpeg` (through `image`, which uses it as its JPEG decoder), `jpeg-decoder` for a large JPEG's DCT-scaled preview (#114), `fast_image_resize`; `image` for other formats | Thumbnails and the analysis image are resized with `fast_image_resize`'s Lanczos3, about 4 times faster than `image`'s on a 24-megapixel decode (#10). |
 | JPEG encode | `jpeg-encoder` | Pure Rust, writes 4:2:0 (which `image`'s encoder cannot); `mozjpeg` was not taken because it needs a C and assembler toolchain on every build machine (#11). |
 | EXIF and video metadata | EXIF: Owlbum's own reader (`media::exif`); video containers: `nom-exif` | Read only. Why EXIF is read by hand is in [Media and scanning](03-media-and-scanning.md#metadata-reading). |
 | JPEG XL | `jxl-oxide` | |

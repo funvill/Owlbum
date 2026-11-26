@@ -202,7 +202,7 @@ It covers JPEG, PNG, WebP, GIF, TIFF and BMP, all decoded with the `image` crate
 
 | Format | Notes |
 |---|---|
-| JPEG | `zune-jpeg` 0.5 has no reduced-size decode, so `preview` is the full decode (open question 7). CMYK and greyscale files are converted to RGB; a CMYK file's profile is not applied (#82). A truncated file yields the part that was read. Cost: cheap. |
+| JPEG | `zune-jpeg` 0.5 has no reduced-size decode, so `preview(min_side)` is decoded by `jpeg-decoder` 0.3 (no rayon), scaled in the DCT to 1/2, 1/4 or 1/8: the smallest of these whose longest side is still at least `min_side` (a 5504 × 4128 photo is decoded at 2752 × 2064 for `preview(1600)`), then turned upright from its EXIF orientation and converted with its embedded profile, with `full_width`/`full_height` the full upright size (#114). When no scale below full size fits (a 2048 × 1536 photo for 1600), or the file is CMYK, 16-bit or lossless, or `jpeg-decoder` cannot read it, `preview` is the full `zune-jpeg` decode. `working` and `source` are always the full `zune-jpeg` decode. CMYK and greyscale files are converted to RGB; a CMYK file's profile is not applied (#82). A truncated file yields the part that was read. Cost: cheap. |
 | PNG | Cost: cheap under 8 MB, else decode. |
 | WebP | Animated files: frame 1 is the picture. |
 | GIF | Frame 1 is the picture, composed on a transparent canvas. |
@@ -419,7 +419,7 @@ If `metadata` cannot give dimensions, the row is written with `width = 0` and `h
 
 For each waiting row, on the scan pool:
 
-1. `preview(1600)` once. This single decode feeds everything below.
+1. `preview(1600)` once. This single decode feeds everything below. For a large JPEG it is the DCT-scaled decode (see The still handler), so the buffers below are resized from about a quarter of the pixels.
 2. Flatten on white and resize to the 1600 px buffer, then the 512 px buffer from it, then the analysis image from that (see Thumbnails and Image analysis). The 1600 px buffer is always built in memory, so the analysis numbers never depend on which thumbnails are kept.
 3. Encode and write the small thumbnail, and the medium one when the cache has room.
 4. Send the writer `analysis`, and `width` and `height` when the header gave none or when the decode reports a different full size (`full_width`, `full_height`, when not 0). The size of a reduced or embedded preview is never stored.
@@ -467,7 +467,7 @@ After the last write the scanner emits the final `scan_progress` and starts the 
 
 ### `scan_version`
 
-`SCAN_VERSION` is an integer constant in `owlbum-core`, starting at 1. Version 1 stored `analysis = '{}'` and no metadata facts; version 2 (#10) added the metadata reader and the [image analysis](#image-analysis). It is raised in the same commit as any change to the metadata rules, the analysis formulas or the placeholders. On the next scan every row with an older value is treated as changed: facts and analysis are read again. Thumbnails that already exist under the same `thumb_key` are not encoded again.
+`SCAN_VERSION` is an integer constant in `owlbum-core`, starting at 1. Version 1 stored `analysis = '{}'` and no metadata facts; version 2 (#10) added the metadata reader and the [image analysis](#image-analysis); version 3 (#114) decodes a large JPEG's preview at a reduced DCT scale, which moves the analysis numbers a little. It is raised in the same commit as any change to the metadata rules, the analysis formulas or the placeholders. On the next scan every row with an older value is treated as changed: facts and analysis are read again. Thumbnails that already exist under the same `thumb_key` are not encoded again.
 
 ### Concurrency and writes
 
@@ -847,7 +847,7 @@ Only things a prototype or a measurement must settle. Each has an issue.
 4. **Tauri issue #3725.** Which of the three Linux playback steps works on current WebKitGTK, and does `<video>` over `owlbum://` with ranges behave on WebView2 for multi-gigabyte files?
 5. **Linux poster frames.** Is the GStreamer pipeline reliable across distributions with only the base plug-ins, and how is its absence detected cleanly at run time?
 6. **Windows poster frames.** Does the shell thumbnail give at least 1600 px, and does it block on cloud or network files? If so, use the Media Foundation path first.
-7. **Thumbnail encoding.** JPEG qualities for 512 px and 1600 px. The encoder is `jpeg-encoder` (#11); `mozjpeg` could still be measured against it if file size matters. (`zune-jpeg` 0.5.15 has no reduced-size decode; checked in #6.)
+7. **Thumbnail encoding.** JPEG qualities for 512 px and 1600 px. The encoder is `jpeg-encoder` (#11); `mozjpeg` could still be measured against it if file size matters. (`zune-jpeg` 0.5.15 has no reduced-size decode, checked in #6; a JPEG's preview uses `jpeg-decoder`'s scaled decode instead, #114.)
 8. **Colour conversion.** Settled in #7: `moxcms` 0.8.1, already a dependency of `image`. Measured against `lcms2` 6.3 (Little CMS 2.20) and `qcms` 0.3 on hand-built Display P3, Adobe RGB, sRGB and grey profiles, against values worked out from each profile's own numbers: all three stay within 1.5 levels (`moxcms` at most 1.2, mean 0.2). On five real monitor profiles `moxcms` and `lcms2` differ by at most 2 levels. All three refuse truncated, random and out-of-range profiles without panicking; given a profile whose colorants are all zero, `lcms2` and `qcms` turn every colour black while `moxcms` refuses it. The Windows "sRGB Color Space Profile" is recognised as sRGB and skipped. Converting a 6000 × 4000 picture on one thread: `moxcms` 57 to 77 ms, `qcms` 67 to 71 ms, `lcms2` 520 to 550 ms; building a transform takes 0.6 ms (`lcms2` 4 to 5 ms). The edit renderer in [Editing and file actions](06-editing-and-file-actions.md#rendering) uses `moxcms` too, with its 16-bit transform.
 9. **Encoders and decoders assumed here.** Settled in #6: `jxl-oxide` 0.12.6 has no encoder and `image` 0.25.10 writes only lossless WebP, so the capability table stands.
 10. **Analysis numbers.** The score thresholds in Organising were tuned on the old program's resampler. They must be checked against the pipeline pinned here on the `trip` fixture before they are trusted.

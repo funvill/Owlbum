@@ -58,6 +58,10 @@ moxcms = "0.8.1"
 # Thumbnail and zoom-copy JPEGs (docs/03-media-and-scanning.md, "Thumbnails
 # and the zoom copy"): 4:2:0 chroma, which `image`'s own encoder cannot write.
 jpeg-encoder = "0.7.1"
+# A JPEG's preview decoded at 1/2, 1/4 or 1/8 of its size in the DCT
+# (docs/03-media-and-scanning.md, "The still handler"), which `zune-jpeg`
+# cannot do. No rayon: the scan pool already decodes one photo per thread.
+jpeg-decoder = { version = "0.3.2", default-features = false }
 
 [workspace.lints.rust]
 unsafe_code = "deny"
@@ -118,6 +122,9 @@ opt-level = 3
 opt-level = 3
 
 [profile.dev.package.zune-jpegxl]
+opt-level = 3
+
+[profile.dev.package.jpeg-decoder]
 opt-level = 3
 
 [profile.dev.package.moxcms]

@@ -45,6 +45,13 @@ pub fn buffers(px: &Pixels) -> Buffers {
 /// The picture with its transparency laid over white (`#ffffff`).
 pub fn flatten(px: &Pixels) -> RgbImage {
     let mut out = Vec::with_capacity(px.width as usize * px.height as usize * 3);
+    if !px.has_alpha {
+        // Opaque: the blend below would leave every sample as it is.
+        for p in px.rgba.as_chunks::<4>().0 {
+            out.extend_from_slice(&p[..3]);
+        }
+        return RgbImage::from_raw(px.width, px.height, out).unwrap_or_else(|| RgbImage::new(1, 1));
+    }
     for p in px.rgba.as_chunks::<4>().0 {
         let a = u32::from(p[3]);
         for &c in &p[..3] {

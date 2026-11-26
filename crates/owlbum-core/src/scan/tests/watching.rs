@@ -377,3 +377,23 @@ fn inotify_limit_falls_back_without_losing_rows() {
     assert_eq!(w.watch().state(), WatchState::Failed);
     assert!(!w.row("a/1.jpg").unwrap().1);
 }
+
+#[test]
+fn a_watch_that_fails_is_a_status_change_the_page_hears_of() {
+    let mut fx = Fx::empty();
+    let album = fx.take_album();
+    let heard = Arc::new(std::sync::Mutex::new(Vec::new()));
+    let sink = Arc::clone(&heard);
+    album.set_status_listener(Arc::new(move |r| sink.lock().unwrap().push(r)));
+    let scanner = Arc::new(Scanner::new(Arc::clone(&album), fx.env.clone()));
+    let env = WatchEnv {
+        start: fails_to_start,
+        ..quick()
+    };
+    let watch = AlbumWatch::start(Arc::clone(&scanner), env);
+    eventually("the watch to fail", || watch.state() == WatchState::Failed);
+    assert_eq!(*heard.lock().unwrap(), [1]);
+    assert_eq!(album.revision(), 1);
+    drop(watch);
+    drop(scanner);
+}

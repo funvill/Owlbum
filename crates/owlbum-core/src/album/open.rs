@@ -1309,4 +1309,126 @@ mod tests {
             .collect();
         assert_eq!(codes, ["album_damaged", "album_lock_stale"]);
     }
+
+    // Changes the album makes on its own while open are told to a listener
+    // (docs/04-browsing.md, "Album banners"; docs/08, "Failure handling").
+
+    /// A listener that records each revision it is told of.
+    fn listen(album: &Album) -> Arc<Mutex<Vec<u64>>> {
+        let heard = Arc::new(Mutex::new(Vec::new()));
+        let sink = Arc::clone(&heard);
+        album.set_status_listener(Arc::new(move |revision| sink.lock().unwrap().push(revision)));
+        heard
+    }
+
+    #[test]
+    fn losing_the_lock_is_told_to_the_listener_with_a_new_revision() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut env = env();
+        env.heartbeat_every = Duration::from_millis(20);
+        let album = Album::open_with(tmp.path(), &none(), &env).unwrap();
+        let heard = listen(&album);
+        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        while heard.lock().unwrap().is_empty() {
+            assert!(std::time::Instant::now() < deadline, "loss not told");
+            write_lock(tmp.path(), "THERE", 7, now_ms(&env));
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        assert_eq!(*heard.lock().unwrap(), [1]);
+        assert_eq!(album.revision(), 1);
+        assert_eq!(album.safety().view_only, Some(ViewOnly::Locked));
+    }
+
+    /// A write whose SQL fails the way a full disk does.
+    fn insert_on_a_full_disk(album: &Album) -> AppResult<()> {
+        album.db().write(|_tx| {
+            let full = rusqlite::Error::SqliteFailure(
+                rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_FULL),
+                None,
+            );
+            Err(sqlite_error(text::album::WRITING_DATABASE)(full))
+        })
+    }
+
+    #[test]
+    fn a_write_the_database_cannot_take_turns_the_album_view_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let album = Album::open_with(tmp.path(), &none(), &env()).unwrap();
+        let heard = listen(&album);
+        let err = insert_on_a_full_disk(&album).unwrap_err();
+        assert_eq!(err.code, ErrorCode::Internal, "the failed write answers its own error");
+        assert_eq!(album.safety().view_only, Some(ViewOnly::ReadOnly));
+        assert!(!album.safety().in_memory);
+        assert_eq!(*heard.lock().unwrap(), [1], "told once");
+        assert_view_only_refuses_writes(&album, text::album::view_only::READ_ONLY);
+        assert_eq!(*heard.lock().unwrap(), [1], "a refused write is not a new failure");
+    }
+
+    #[test]
+    fn a_failed_write_through_write_photos_also_turns_it_view_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let album = Album::open_with(tmp.path(), &none(), &env()).unwrap();
+        let heard = listen(&album);
+        let err = album
+            .write_photos(|_tx, _touched| -> AppResult<()> {
+                let readonly = rusqlite::Error::SqliteFailure(
+                    rusqlite::ffi::Error::new(rusqlite::ffi::SQLITE_READONLY),
+                    None,
+                );
+                Err(sqlite_error(text::album::WRITING_DATABASE)(readonly))
+            })
+            .unwrap_err();
+        assert_eq!(err.code, ErrorCode::Internal);
+        assert!(album.is_view_only());
+        assert_eq!(heard.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_job_that_refuses_for_its_own_reasons_leaves_the_album_writable() {
+        let tmp = tempfile::tempdir().unwrap();
+        let album = Album::open_with(tmp.path(), &none(), &env()).unwrap();
+        let heard = listen(&album);
+        let constraint = album
+            .db()
+            .write(|tx| {
+                tx.execute("INSERT INTO meta (key, value) VALUES ('album_id', 'x')", [])
+                    .map_err(sqlite_error(text::album::WRITING_DATABASE))?;
+                Ok(())
+            })
+            .unwrap_err();
+        assert_eq!(constraint.code, ErrorCode::Internal);
+        let own = album
+            .db()
+            .write(|_tx| -> AppResult<()> { Err(AppError::new(ErrorCode::BadQuery, "no")) })
+            .unwrap_err();
+        assert_eq!(own.code, ErrorCode::BadQuery);
+        assert!(!album.is_view_only());
+        assert!(heard.lock().unwrap().is_empty());
+        insert_photo(&album, "still.jpg").unwrap();
+    }
+
+    #[test]
+    fn a_failed_write_before_a_listener_is_set_is_still_view_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        let album = Album::open_with(tmp.path(), &none(), &env()).unwrap();
+        insert_on_a_full_disk(&album).unwrap_err();
+        assert!(album.is_view_only());
+        assert_eq!(album.revision(), 1, "the change still raises the revision");
+    }
+
+    // The folder the user opened.
+
+    #[test]
+    fn the_opened_folder_is_the_root_joined_with_the_scope() {
+        let tmp = tempfile::tempdir().unwrap();
+        existing_album(tmp.path());
+        let sub = tmp.path().join("2024").join("Trip");
+        std::fs::create_dir_all(&sub).unwrap();
+        let album = Album::open_with(&sub, &none(), &env()).unwrap();
+        assert_eq!(album.location().scope, "2024/Trip");
+        assert_eq!(album.location().opened(), album.location().root.join("2024").join("Trip"));
+        drop(album);
+        let whole = Album::open_with(tmp.path(), &none(), &env()).unwrap();
+        assert_eq!(whole.location().opened(), whole.location().root);
+    }
 }

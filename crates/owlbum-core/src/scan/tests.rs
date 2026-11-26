@@ -1935,3 +1935,60 @@ fn analysed(analysis: Option<&str>) -> bool {
         .and_then(|a| serde_json::from_str::<Value>(a).ok())
         .is_some_and(|v| v.get("dhash").is_some())
 }
+
+// album_status (docs/04-browsing.md, "Shapes").
+
+#[test]
+fn the_album_status_counts_what_the_scan_found_and_left_out() {
+    use crate::scan::watch::WatchState;
+    let mut fx = Fx::trip();
+    let album = fx.take_album();
+    let scanner = Scanner::new(Arc::clone(&album), fx.env.clone());
+    scanner.scan_and_wait(Request::default());
+    let status = AlbumStatus::of(&scanner, WatchState::Watching).unwrap();
+    assert_eq!(status.root, fx.root.display().to_string());
+    assert_eq!(status.scope, "");
+    assert_eq!(status.name, "album");
+    assert_eq!(status.view_only, None);
+    assert!(!status.in_memory && !status.scanning);
+    assert!(status.photos > 0);
+    assert_eq!(status.photos as usize, album.index().len());
+    let errors = scanner.scan_errors(0, 500).unwrap();
+    assert!(status.unreadable > 0);
+    assert_eq!(status.unreadable, errors.total);
+    assert_eq!(status.unsupported.count, scanner.unsupported(0, 0).total);
+    assert!(status.unsupported.labels.contains(&"HEIC".to_owned()), "{status:?}");
+    assert!(status.scan.watching);
+    assert_eq!(status.revision, album.revision());
+}
+
+#[test]
+fn the_album_status_says_watching_until_the_watch_is_known_to_have_failed() {
+    use crate::scan::watch::WatchState;
+    let mut fx = Fx::empty();
+    let album = fx.take_album();
+    let scanner = Scanner::new(album, fx.env.clone());
+    for (state, watching) in [
+        (WatchState::Starting, true),
+        (WatchState::Watching, true),
+        (WatchState::NetworkShare, false),
+        (WatchState::Failed, false),
+        (WatchState::Lost, false),
+    ] {
+        let status = AlbumStatus::of(&scanner, state).unwrap();
+        assert_eq!(status.scan.watching, watching, "{state:?}");
+    }
+}
+
+#[test]
+fn a_scoped_album_status_names_the_root_and_the_scope() {
+    let mut fx = Fx::trip();
+    let sub = fx.root.join("problems");
+    fx.reopen(&sub, &OpenOptions::default());
+    let album = fx.take_album();
+    let scanner = Scanner::new(album, fx.env.clone());
+    let status = AlbumStatus::of(&scanner, crate::scan::watch::WatchState::Starting).unwrap();
+    assert_eq!(status.root, fx.root.display().to_string());
+    assert_eq!(status.scope, "problems");
+    assert_eq!(status.name, "problems");
+}

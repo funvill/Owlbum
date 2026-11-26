@@ -43,6 +43,11 @@ if [ -n "${CARGO_TARGET_DIR:-}" ]; then
   done
   echo "$PWD (pid $$)" > "$gate_lock/owner"
   trap 'rm -rf "$gate_lock"' EXIT
+  # `timeout` stops the gate with SIGTERM, which skips the EXIT trap unless
+  # the signal is turned into a normal exit; without this a killed run would
+  # leave its lock behind for the next 45 minutes.
+  trap 'exit 143' TERM
+  trap 'exit 130' INT
   echo "lock taken${waited:+ after ${waited}s}"
 fi
 

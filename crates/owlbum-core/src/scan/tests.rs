@@ -448,7 +448,10 @@ fn a_first_scan_gives_every_supported_trip_file_a_row() {
         .map(|u| u.rel_path.as_str())
         .collect();
     assert_eq!(unsupported, ["problems/photo.heic"]);
-    assert_eq!(summary.walk.unsupported[0].label, "HEIC");
+    assert_eq!(
+        summary.walk.unsupported[0].label,
+        crate::media::unsupported_of("photo.heic").unwrap().label
+    );
 }
 
 #[test]
@@ -500,12 +503,12 @@ fn extras_rows_follow_what_each_file_is() {
             Kind::WrongExtension => {
                 let row = row.unwrap();
                 match f.format {
-                    // A PNG named `.jpg` reads as what it is.
+                    // A PNG named as a JPEG reads as what it is.
                     Some(real) => {
                         assert_eq!(row.format, real);
                         assert_eq!(row.scan_error, None);
                     }
-                    // A HEIC named `.jpg` gets a row with `unsupported`.
+                    // A HEIC named as a JPEG gets a row with `unsupported`.
                     None => {
                         assert_eq!(code(&row), Some("unsupported"));
                         assert_eq!(
@@ -519,7 +522,12 @@ fn extras_rows_follow_what_each_file_is() {
             Kind::Animated => {
                 let row = row.unwrap();
                 assert_eq!(row.scan_error, None, "{}", f.rel_path);
-                if row.format != "png" {
+                // GIF and WebP loop; an animated PNG is shown as a still.
+                if crate::media::format_by_id(&row.format)
+                    .unwrap()
+                    .caps
+                    .animated
+                {
                     assert!(row.duration_ms.is_some(), "{} loops", f.rel_path);
                 }
             }

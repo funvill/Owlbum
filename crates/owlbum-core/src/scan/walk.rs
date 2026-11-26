@@ -38,7 +38,7 @@ pub struct Listed {
 pub struct UnsupportedFile {
     /// Relative to the album root.
     pub rel_path: String,
-    /// The format's label, such as `HEIC`.
+    /// The format's label, as the unsupported table names it.
     pub label: String,
     /// The sentence shown beside the file.
     pub reason: String,
@@ -339,7 +339,8 @@ mod tests {
         let w = run(tmp.path(), "");
         assert_eq!(listed(&w), ["p/photo.jpg"]);
         let labels: Vec<_> = w.unsupported.iter().map(|u| u.label.as_str()).collect();
-        assert_eq!(labels, ["AVIF", "HEIC"]);
+        let label = |name: &str| media::unsupported_of(name).unwrap().label;
+        assert_eq!(labels, [label("photo.avif"), label("photo.heic")]);
         assert_eq!(
             w.unsupported[1].reason,
             "HEIC photos are not supported yet."

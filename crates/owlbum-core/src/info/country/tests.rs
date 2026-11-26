@@ -205,9 +205,11 @@ fn a_hundred_thousand_lookups_are_quick() {
     let took = start.elapsed();
     eprintln!("100,000 lookups in {took:?}");
     assert!(found > 50_000);
-    // Unoptimised test builds are several times slower than the release
-    // build; a release build does this in a small fraction of the bound.
-    assert!(took.as_millis() < 5_000, "{took:?}");
+    // An idle unoptimised build takes about half a second, a release build
+    // a small fraction of that. The bound is wide so a machine busy with
+    // other builds does not fail it; it still catches a lookup that tests
+    // every edge (about 190,000 per point), which would take minutes.
+    assert!(took.as_millis() < 30_000, "{took:?}");
 }
 
 #[test]

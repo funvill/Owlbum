@@ -514,6 +514,8 @@ These are targets to measure against with the `large-N` fixture, not promises. E
 | First open of 10,000 JPEGs | First tiles within 2 s; every photo listed (facts pass done) within 20 s. |
 | Any scan | A star or a note is saved within 300 ms while the scan runs. Memory stays bounded: no stage holds decoded pixels for more than the pool's worth of files. |
 
+**Windows and Defender (#95).** On Windows a first scan with thumbnails pays for Defender's real-time protection, which scans each thumbnail file as it is created: on the development machine `MsMpEng` used two to almost four cores while thumbnails were written, and 20,000 tiny files took about 11 s at 11 threads even written in place with their folders made ahead. Owlbum keeps that to one created file per thumbnail (no temporary file, no rename, no folder call per write) and does not change Defender's settings or ask for an exclusion. On real photos the cost is small next to decoding: on 2,000 photos of 12 to 24 megapixels a first scan took about 106 s without thumbnails and 118 to 128 s with them, within the noise between runs. An album of tens of thousands of tiny files shows it most. A user who adds the app data folder to Defender's exclusions removes it; Owlbum does not suggest that.
+
 ## Metadata reading
 
 `metadata` reads only the metadata blocks of a file, never the whole file. Each handler finds the EXIF block (JPEG `APP1`, PNG `eXIf`, WebP `EXIF`, JPEG XL `Exif` box) and gives it to one small EXIF reader, `media::exif`, which reads IFD 0 and its Exif and GPS sub-IFDs with seeks and keeps every text and numeric value of at most 4 KiB. A TIFF file is itself the structure EXIF uses, so its tags are read from the file the same way, seeking to its IFDs. The rules below are applied to those tags by `scan::metadata`. A file with no metadata, or with metadata that fails to parse, is not an error: the fields are NULL.
@@ -669,10 +671,12 @@ Making the medium size for every photo of a very large album would fill the cach
 
 ### Writing
 
-- A thumbnail is written to `<final name>.<random>.tmp` in the same folder, then renamed over the final name. If the rename fails and the final file exists, another thread got there first and that is success. The temporary file is removed in every case.
-- After the rename, a `cache_entries` row is written with kind `s` or `m` and the file's size. Rows are written in batches (when 200 wait or a second after the first), because `app.sqlite` runs with `synchronous = FULL`; the cache's total size is kept in memory, so the size limit and the 70% rule cost no query.
+- A new thumbnail is written straight to its final name, which is created only if nothing is there. No temporary file and no rename: on Windows, Defender's real-time protection scans every file a program creates and again when one is renamed, and a temporary file renamed into place cost twice as much as one file written in place (#95). A reader that finds the file before it is whole treats it like one cut short (below): it makes the picture again and writes over it.
+- A file already at the final name (cut short, or another thread's) is replaced through `<final name>.<random>.tmp` in the same folder, renamed over it. If the rename fails and the final file exists, another thread got there first and that is success. The temporary file is removed whenever it is left behind.
+- The `thumbs/<aa>` folder is made only when creating the file finds it missing, not before every write, so Clear cache needs nothing further.
+- After the write, a `cache_entries` row is written with kind `s` or `m` and the file's size. Rows are written in batches (when 200 wait or a second after the first), because `app.sqlite` runs with `synchronous = FULL`; the cache's total size is kept in memory, so the size limit and the 70% rule cost no query.
 - `last_used` is updated in memory when a thumbnail is served and flushed to `app.sqlite` every 60 seconds, not once per request.
-- Thumbnail files are not flushed to disk with `fsync`; they are a cache. To catch a file cut short by a power loss, the protocol handler checks that a thumbnail is not empty and ends with the JPEG end marker (`FF D9`) before serving it. A file that fails is deleted and made again.
+- Thumbnail files are not flushed to disk with `fsync`; they are a cache. To catch a file cut short by a power loss, the protocol handler checks that a thumbnail is not empty and ends with the JPEG end marker (`FF D9`) before serving it. A file that fails is made again and written over; it is not deleted on sight, because it may be a new thumbnail still being written.
 
 ### On demand
 

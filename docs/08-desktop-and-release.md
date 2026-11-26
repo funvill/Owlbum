@@ -920,7 +920,7 @@ Tests run locally, on Windows and on Linux under WSL. There are no CI test jobs 
 
 ```text
 cargo run -p owlbum-fixtures -- trip <folder>
-cargo run -p owlbum-fixtures -- large 100000 <folder> [--seed <n>]
+cargo run -p owlbum-fixtures -- large 100000 <folder> [--seed <n>] [--megapixels <n>[-<n>]]
 cargo run -p owlbum-fixtures -- extras <folder>
 ```
 

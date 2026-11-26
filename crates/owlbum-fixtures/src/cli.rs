@@ -1,13 +1,15 @@
-//! The command line: `trip <folder>`, `large <count> <folder> [--seed <n>]`
-//! and `extras <folder>`.
+//! The command line: `trip <folder>`,
+//! `large <count> <folder> [--seed <n>] [--megapixels <n>[-<n>]]` and
+//! `extras <folder>`.
 
 use std::path::PathBuf;
 
 pub const USAGE: &str = "usage: owlbum-fixtures trip <folder>
-       owlbum-fixtures large <count> <folder> [--seed <n>]
+       owlbum-fixtures large <count> <folder> [--seed <n>] [--megapixels <n>[-<n>]]
        owlbum-fixtures extras <folder>
 
-The folder must be missing or empty.";
+The folder must be missing or empty. --megapixels paints the large album
+at camera sizes (for example 12-24) instead of tiny ones.";
 
 #[derive(Debug, PartialEq, Eq)]
 pub enum Command {
@@ -16,6 +18,8 @@ pub enum Command {
         count: usize,
         folder: PathBuf,
         seed: u64,
+        /// Camera sizes, `lo..=hi` megapixels; None for the tiny photos.
+        megapixels: Option<(u32, u32)>,
     },
     Extras(PathBuf),
 }
@@ -35,19 +39,38 @@ where
             let count: usize = count
                 .parse()
                 .map_err(|_| format!("not a count of photos: {count}"))?;
-            let seed = match rest {
-                [] => crate::DEFAULT_SEED,
-                ["--seed", s] => s.parse().map_err(|_| format!("not a seed: {s}"))?,
-                _ => return Err(USAGE.to_string()),
-            };
+            let mut seed = crate::DEFAULT_SEED;
+            let mut megapixels = None;
+            for pair in rest.chunks(2) {
+                match pair {
+                    ["--seed", s] => {
+                        seed = s.parse().map_err(|_| format!("not a seed: {s}"))?;
+                    }
+                    ["--megapixels", m] => megapixels = Some(range(m)?),
+                    _ => return Err(USAGE.to_string()),
+                }
+            }
             Ok(Command::Large {
                 count,
                 folder: folder.into(),
                 seed,
+                megapixels,
             })
         }
         _ => Err(USAGE.to_string()),
     }
+}
+
+/// `12` or `12-24`, in megapixels.
+fn range(text: &str) -> Result<(u32, u32), String> {
+    let bad = || format!("not megapixels: {text}");
+    let (lo, hi) = text.split_once('-').unwrap_or((text, text));
+    let lo: u32 = lo.parse().map_err(|_| bad())?;
+    let hi: u32 = hi.parse().map_err(|_| bad())?;
+    if lo == 0 || hi < lo || hi > 200 {
+        return Err(bad());
+    }
+    Ok((lo, hi))
 }
 
 /// Run a parsed command; returns the line to print.
@@ -59,7 +82,11 @@ pub fn run(command: Command) -> std::io::Result<String> {
             count,
             folder,
             seed,
-        } => (crate::large(&folder, count, seed)?, "large"),
+            megapixels,
+        } => (
+            crate::large_sized(&folder, count, seed, megapixels)?,
+            "large",
+        ),
     };
     Ok(format!(
         "wrote the {what} album: {} files in {}",
@@ -81,7 +108,8 @@ mod tests {
             Ok(Command::Large {
                 count: 100_000,
                 folder: "x".into(),
-                seed: crate::DEFAULT_SEED
+                seed: crate::DEFAULT_SEED,
+                megapixels: None,
             })
         );
         assert_eq!(
@@ -89,7 +117,26 @@ mod tests {
             Ok(Command::Large {
                 count: 5,
                 folder: "x".into(),
-                seed: 9
+                seed: 9,
+                megapixels: None,
+            })
+        );
+        assert_eq!(
+            parse(["large", "5", "x", "--megapixels", "12-24", "--seed", "9"]),
+            Ok(Command::Large {
+                count: 5,
+                folder: "x".into(),
+                seed: 9,
+                megapixels: Some((12, 24)),
+            })
+        );
+        assert_eq!(
+            parse(["large", "5", "x", "--megapixels", "20"]),
+            Ok(Command::Large {
+                count: 5,
+                folder: "x".into(),
+                seed: crate::DEFAULT_SEED,
+                megapixels: Some((20, 20)),
             })
         );
     }
@@ -102,6 +149,9 @@ mod tests {
         assert!(parse(["large", "many", "x"]).unwrap_err().contains("many"));
         assert!(parse(["large", "5", "x", "--seed"]).is_err());
         assert!(parse(["large", "5", "x", "--seed", "z"]).is_err());
+        assert!(parse(["large", "5", "x", "--megapixels", "24-12"]).is_err());
+        assert!(parse(["large", "5", "x", "--megapixels", "0"]).is_err());
+        assert!(parse(["large", "5", "x", "--megapixels"]).is_err());
     }
 
     #[test]
@@ -112,6 +162,7 @@ mod tests {
             count: 3,
             folder: folder.clone(),
             seed: 1,
+            megapixels: None,
         })
         .unwrap();
         assert!(line.contains("3 files"), "{line}");

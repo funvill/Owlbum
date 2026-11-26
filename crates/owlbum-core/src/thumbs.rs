@@ -23,6 +23,8 @@ pub mod serve;
 pub mod store;
 
 #[cfg(test)]
+mod profile;
+#[cfg(test)]
 mod tests;
 
 use std::io::Cursor;

@@ -1675,6 +1675,86 @@ fn scan_timings() {
     }
 }
 
+/// Timings on an album of camera-sized photos, with the real reader and
+/// the real scan pool (#95), not a gate. Make the album once, then:
+///
+/// ```text
+/// cargo run -p owlbum-fixtures --release -- large 2000 <album> --megapixels 12-24
+/// OWLBUM_TIMING_ALBUM=<album> cargo test -p owlbum-core --release --lib \
+///     real_album_timings -- --ignored --nocapture
+/// ```
+///
+/// `OWLBUM_TIMING_DATA` sets where the app data folder (the cache) is made;
+/// a temporary folder by default. The album's `.owlbum` folder is deleted
+/// before each first scan. The first pass only warms the system's file
+/// cache (and the virus scanner's verdicts on the photos); then one scan
+/// without thumbnails and one with them.
+#[test]
+#[ignore]
+fn real_album_timings() {
+    let Some(root) = std::env::var_os("OWLBUM_TIMING_ALBUM").map(PathBuf::from) else {
+        println!("OWLBUM_TIMING_ALBUM is not set");
+        return;
+    };
+    let data_base = std::env::var_os("OWLBUM_TIMING_DATA").map(PathBuf::from);
+    for (pass, thumbnails) in [false, false, true].into_iter().enumerate() {
+        let _ = std::fs::remove_dir_all(root.join(".owlbum"));
+        let data = match &data_base {
+            Some(b) => tempfile::tempdir_in(b).unwrap(),
+            None => tempfile::tempdir().unwrap(),
+        };
+        let events = Arc::new(Recorder::default());
+        let mut env = ScanEnv::new(events.clone());
+        if thumbnails {
+            let app = crate::appdata::AppData::open(data.path()).unwrap();
+            env.thumbs = Some(crate::thumbs::Thumbs::open(app).unwrap());
+        }
+        let album = Album::open(&root, &OpenOptions::default()).unwrap();
+        let overlay = Mutex::new(Overlay::default());
+        let cancel = AtomicBool::new(false);
+        let progress = Progress::new(events.clone(), env.progress_every);
+        let scan = Scan {
+            album: &album,
+            overlay: &overlay,
+            env: &env,
+            cancel: &cancel,
+            progress: &progress,
+        };
+        let t = Instant::now();
+        let first = run(&scan, Request::default());
+        let took = t.elapsed();
+        if let Some(thumbs) = &env.thumbs {
+            thumbs.cache().flush();
+        }
+        let cache_bytes = env.thumbs.as_ref().map_or(0, |t| t.cache().usage().bytes);
+        // Reading every small thumbnail back, as the grid would.
+        let t = Instant::now();
+        let mut read = 0;
+        for folder in std::fs::read_dir(data.path().join("thumbs"))
+            .into_iter()
+            .flatten()
+        {
+            for entry in std::fs::read_dir(folder.unwrap().path()).unwrap() {
+                let entry = entry.unwrap();
+                if entry.file_name().to_string_lossy().ends_with("_s.jpg") {
+                    std::fs::read(entry.path()).unwrap();
+                    read += 1;
+                }
+            }
+        }
+        let read_took = t.elapsed();
+        println!(
+            "pass {pass}: {} files, {} threads, thumbnails {thumbnails}: first scan {took:.2?} ({} failed), cache {} MB; read {read} small back in {read_took:.2?}",
+            first.done,
+            env.threads,
+            first.failed,
+            cache_bytes / 1_000_000
+        );
+        drop(album);
+    }
+    let _ = std::fs::remove_dir_all(root.join(".owlbum"));
+}
+
 // ---- The album index follows the scan (#12) ----
 
 /// What the album index holds, in a form that does not depend on where

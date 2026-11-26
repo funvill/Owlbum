@@ -1,5 +1,7 @@
 //! The `large-N` album: `n` small photos from a seed, spread over ten
 //! years in `YYYY/MM` folders, with bursts, undated photos and some GPS.
+//! [`large_sized`] paints the same album at camera sizes, for timing a
+//! scan against real decode and encode costs (#95).
 
 use std::fs;
 use std::io;
@@ -57,7 +59,7 @@ fn exif_time(seconds: i64) -> String {
     )
 }
 
-fn plan(n: usize, seed: u64) -> Vec<Plan> {
+fn plan(n: usize, seed: u64, megapixels: Option<(u32, u32)>) -> Vec<Plan> {
     let mut r = Rng::new(seed);
     let step = SPAN_SECONDS / (n.max(1) as i64);
     let mut out: Vec<Plan> = Vec::with_capacity(n);
@@ -80,6 +82,7 @@ fn plan(n: usize, seed: u64) -> Vec<Plan> {
             _ => (96, 24, Kind::Panorama),
         };
         let scene_seed = r.next_u64();
+        let (w, h) = megapixels.map_or((w, h), |range| scaled(w, h, range, scene_seed));
         let shots = if dated && r.chance(4) {
             burst_id += 1;
             r.range(3, 6) as usize
@@ -115,6 +118,17 @@ fn plan(n: usize, seed: u64) -> Vec<Plan> {
     out
 }
 
+/// `w x h` scaled up, keeping its shape, to a size in `lo..=hi`
+/// megapixels picked from `pick`. Picking does not draw from the plan's
+/// random numbers, so every size gives the same album otherwise.
+fn scaled(w: u32, h: u32, (lo, hi): (u32, u32), pick: u64) -> (u32, u32) {
+    let mp = u64::from(lo) + pick % (u64::from(hi.saturating_sub(lo)) + 1);
+    let k = (mp * 1_000_000 / (u64::from(w) * u64::from(h)))
+        .isqrt()
+        .max(1);
+    ((u64::from(w) * k) as u32, (u64::from(h) * k) as u32)
+}
+
 fn render(p: &Plan) -> Vec<u8> {
     let f = &p.fixture;
     let mut img = scene(p.scene_seed, f.width, f.height);
@@ -137,8 +151,19 @@ fn render(p: &Plan) -> Vec<u8> {
 
 /// Write `n` photos made from `seed` into `root` (missing or empty).
 pub fn large(root: &Path, n: usize, seed: u64) -> io::Result<Album> {
+    large_sized(root, n, seed, None)
+}
+
+/// [`large`], with each photo between `lo` and `hi` megapixels when
+/// `megapixels` is `Some((lo, hi))`.
+pub fn large_sized(
+    root: &Path,
+    n: usize,
+    seed: u64,
+    megapixels: Option<(u32, u32)>,
+) -> io::Result<Album> {
     let w = Writer::new(root)?;
-    let plans = plan(n, seed);
+    let plans = plan(n, seed, megapixels);
     let mut folders: Vec<&str> = plans
         .iter()
         .map(|p| p.fixture.rel_path.rsplit_once('/').map_or("", |(d, _)| d))
@@ -188,11 +213,29 @@ mod tests {
 
     #[test]
     fn plans_are_ordered_and_spread() {
-        let p = plan(1000, 3);
+        let p = plan(1000, 3, None);
         assert_eq!(p.len(), 1000);
         let dated: Vec<&str> = p.iter().filter_map(|p| p.exif_time.as_deref()).collect();
         assert!(dated.windows(2).all(|w| w[0] <= w[1]));
         assert!(dated.first().unwrap().starts_with("2016"));
         assert!(dated.last().unwrap().starts_with("2025"));
+    }
+
+    #[test]
+    fn camera_sizes_keep_the_album_and_its_shapes() {
+        let small = plan(200, 3, None);
+        let big = plan(200, 3, Some((12, 24)));
+        for (s, b) in small.iter().zip(&big) {
+            assert_eq!(s.fixture.rel_path, b.fixture.rel_path);
+            assert_eq!(s.exif_time, b.exif_time);
+            let (w, h) = (b.fixture.width, b.fixture.height);
+            assert_eq!(
+                u64::from(w) * u64::from(s.fixture.height),
+                u64::from(h) * u64::from(s.fixture.width)
+            );
+            let mp = u64::from(w) * u64::from(h);
+            assert!((11_000_000..=24_000_000).contains(&mp), "{w}x{h}");
+        }
+        assert_eq!(scaled(64, 48, (12, 12), 7), (3_968, 2_976), "rounded down");
     }
 }

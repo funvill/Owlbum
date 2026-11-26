@@ -13,7 +13,7 @@
 //!
 //! ```text
 //! cargo run -p owlbum-fixtures -- trip <folder>
-//! cargo run -p owlbum-fixtures -- large <count> <folder> [--seed <n>]
+//! cargo run -p owlbum-fixtures -- large <count> <folder> [--seed <n>] [--megapixels <n>[-<n>]]
 //! cargo run -p owlbum-fixtures -- extras <folder>
 //! ```
 
@@ -35,7 +35,7 @@ mod large;
 mod trip;
 
 pub use extras::extras;
-pub use large::{DEFAULT_SEED, large};
+pub use large::{DEFAULT_SEED, large, large_sized};
 pub use trip::trip;
 
 /// The `image` crate version the pictures are made with, for callers that

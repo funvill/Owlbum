@@ -2,8 +2,7 @@
 //! read back (docs/02-data.md, "The app data folder"; docs/03, "Writing").
 //!
 //! Every path made here is inside `thumbs/` or `full/`. Only those paths
-//! are ever deleted by the cache: a file that fails the end-marker check is
-//! one of Owlbum's own copies, never a user's photo.
+//! are ever deleted or written over by the cache, never a user's photo.
 
 use std::io;
 use std::path::{Path, PathBuf};
@@ -45,16 +44,12 @@ pub fn is_whole_jpeg(bytes: &[u8]) -> bool {
     bytes.len() >= 4 && bytes.starts_with(&[0xFF, 0xD8]) && bytes.ends_with(&[0xFF, 0xD9])
 }
 
-/// Reads a cached picture. A file that is not a whole JPEG is deleted and
-/// None answered, so it is made again; a file that is not there is None.
+/// Reads a cached picture. A file that is not there, or not a whole JPEG,
+/// is None, so it is made again, and [`write`] then writes over it. It is
+/// not deleted here: it may be a new picture still being written.
 pub fn read(path: &Path) -> Option<Vec<u8>> {
     let bytes = std::fs::read(path).ok()?;
-    if is_whole_jpeg(&bytes) {
-        Some(bytes)
-    } else {
-        let _ = std::fs::remove_file(path);
-        None
-    }
+    is_whole_jpeg(&bytes).then_some(bytes)
 }
 
 /// True when a whole cached picture is at `path`, without reading all of
@@ -73,24 +68,67 @@ pub fn is_whole_file(path: &Path) -> bool {
         && tail == [0xFF, 0xD9]
 }
 
-/// Writes `bytes` to `path` through `<path>.<random>.tmp` in the same
-/// folder, renamed over the final name. When the rename fails but the
-/// final file exists, another thread got there first, and that is
-/// success. The temporary file is removed in every case. Not flushed with
-/// `fsync`: this is a cache, and [`read`] catches a file cut short.
+/// Writes `bytes` to `path`. Not flushed with `fsync`: this is a cache,
+/// and [`read`] catches a file cut short.
+///
+/// A new picture is written straight to its final name, created only if
+/// it is not there. On Windows every file a program creates or renames is
+/// scanned for viruses, and a temporary file renamed into place cost twice
+/// as much as one file written in place (#95). A reader that finds the
+/// file before it is whole sees a picture that is not whole yet, and makes
+/// it again rather than deleting it ([`read`]).
+///
+/// A file already there (one cut short, or another thread's) is replaced
+/// through `<path>.<random>.tmp` in the same folder, renamed over it. When
+/// that rename fails but the final file exists, another thread got there
+/// first, and that is success; the temporary file is removed.
+///
+/// The folder is made only when creating the file finds it missing.
 pub fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
-    if let Some(dir) = path.parent() {
-        std::fs::create_dir_all(dir)?;
+    use std::io::Write;
+    let mut file = match create_new(path) {
+        Ok(file) => file,
+        Err(e) if e.kind() == io::ErrorKind::AlreadyExists => return replace(path, bytes),
+        Err(e) => return Err(e),
+    };
+    file.write_all(bytes).inspect_err(|_| {
+        // Ours, and not whole: nobody should find it.
+        let _ = std::fs::remove_file(path);
+    })
+}
+
+/// Creates `path`, which must not exist, making its folder if missing.
+fn create_new(path: &Path) -> io::Result<std::fs::File> {
+    let open = || {
+        std::fs::OpenOptions::new()
+            .write(true)
+            .create_new(true)
+            .open(path)
+    };
+    match open() {
+        Err(e) if e.kind() == io::ErrorKind::NotFound => {
+            if let Some(dir) = path.parent() {
+                std::fs::create_dir_all(dir)?;
+            }
+            open()
+        }
+        other => other,
     }
+}
+
+/// Writes over a file already at `path` through a temporary file renamed
+/// over it.
+fn replace(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let random = uuid::Uuid::new_v4().simple().to_string();
     let mut tmp = path.as_os_str().to_owned();
     tmp.push(format!(".{}.tmp", &random[..12]));
     let tmp = PathBuf::from(tmp);
-    let result = std::fs::write(&tmp, bytes).and_then(|()| std::fs::rename(&tmp, path));
-    let _ = std::fs::remove_file(&tmp);
-    match result {
-        Err(_) if path.is_file() => Ok(()),
-        other => other,
+    match std::fs::write(&tmp, bytes).and_then(|()| std::fs::rename(&tmp, path)) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            let _ = std::fs::remove_file(&tmp);
+            if path.is_file() { Ok(()) } else { Err(e) }
+        }
     }
 }
 
@@ -157,16 +195,59 @@ mod tests {
     }
 
     #[test]
-    fn a_file_cut_short_is_deleted_when_read() {
+    fn write_makes_the_folder_again_after_clear_cache() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = path(tmp.path(), KEY, Kind::Small);
+        write(&p, &[0xFF, 0xD8, 1, 0xFF, 0xD9]).unwrap();
+        std::fs::remove_dir_all(thumbs_dir(tmp.path())).unwrap();
+        write(&p, &[0xFF, 0xD8, 2, 0xFF, 0xD9]).unwrap();
+        assert_eq!(read(&p).unwrap()[2], 2);
+    }
+
+    #[test]
+    fn write_replaces_a_file_another_handle_is_reading() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = path(tmp.path(), KEY, Kind::Medium);
+        write(&p, &[0xFF, 0xD8, 1, 0xFF, 0xD9]).unwrap();
+        let reader = std::fs::File::open(&p).unwrap();
+        write(&p, &[0xFF, 0xD8, 2, 0xFF, 0xD9]).unwrap();
+        drop(reader);
+        assert_eq!(read(&p).unwrap()[2], 2);
+        assert_eq!(std::fs::read_dir(p.parent().unwrap()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn writers_racing_for_one_name_all_succeed() {
+        let tmp = tempfile::tempdir().unwrap();
+        let p = path(tmp.path(), KEY, Kind::Small);
+        std::thread::scope(|s| {
+            for i in 0..8u8 {
+                let p = &p;
+                s.spawn(move || {
+                    for _ in 0..20 {
+                        write(p, &[0xFF, 0xD8, i, 0xFF, 0xD9]).unwrap();
+                    }
+                });
+            }
+        });
+        assert!(is_whole_file(&p));
+        assert_eq!(std::fs::read_dir(p.parent().unwrap()).unwrap().count(), 1);
+    }
+
+    #[test]
+    fn a_file_cut_short_reads_as_none_and_is_written_over() {
         let tmp = tempfile::tempdir().unwrap();
         let p = path(tmp.path(), KEY, Kind::Medium);
         write(&p, &[0xFF, 0xD8, 1, 2, 3]).unwrap();
         assert!(!is_whole_file(&p));
         assert!(read(&p).is_none());
-        assert!(!p.exists());
+        write(&p, &[0xFF, 0xD8, 4, 0xFF, 0xD9]).unwrap();
+        assert_eq!(read(&p).unwrap()[2], 4);
         let empty = path(tmp.path(), KEY, Kind::Full);
         write(&empty, &[]).unwrap();
         assert!(read(&empty).is_none());
-        assert!(!empty.exists());
+        write(&empty, &[0xFF, 0xD8, 5, 0xFF, 0xD9]).unwrap();
+        assert_eq!(read(&empty).unwrap()[2], 5);
+        assert_eq!(std::fs::read_dir(p.parent().unwrap()).unwrap().count(), 1);
     }
 }

@@ -242,7 +242,7 @@ These are the starting choices. A prototype may replace one; the replacement is 
 | Camera RAW | `rawler` (LGPL-2.1) | DNG support and fast preview extraction are checked in the RAW prototype. |
 | Model runtime | `ort` (ONNX Runtime), `tokenizers` | `usls` is tried first for Florence-2 and CLIP. How the runtime library is shipped is decided by the tagging prototype. |
 | Model downloads | `reqwest` (rustls, redirects handled by hand), `sha2` | |
-| Colour profiles | `moxcms` or `lcms2` | Converting embedded profiles to sRGB. Chosen in the thumbnail work. |
+| Colour profiles | `moxcms` | Converting embedded profiles to sRGB (`media::colour`). Chosen by measurement in #7 over `lcms2` and `qcms` ([Media and scanning](03-media-and-scanning.md#open-questions), question 8). `image` already depends on it. |
 | EXIF writing | `little_exif` | Only when an edit is saved into a file: keep the block, reset orientation. |
 | Video thumbnails and facts | The `windows` crate (shell thumbnails, Media Foundation); `gstreamer` linked to the system libraries on Linux | System codecs only. |
 | Country outlines | Natural Earth low-resolution outlines, bundled (public domain) | For the Country row and country search. |

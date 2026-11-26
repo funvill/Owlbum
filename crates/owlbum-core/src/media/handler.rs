@@ -200,8 +200,8 @@ pub struct VideoInfo {
 ///
 /// Every handler:
 /// - returns upright pixels (orientation applied);
-/// - returns sRGB from `preview` and `working` (colour conversion is
-///   roadmap #7) and 8 bits per sample;
+/// - returns sRGB from `preview` and `working`, by passing the embedded
+///   profile to [`super::colour::to_srgb`], and 8 bits per sample;
 /// - opens files read-only and closes them before returning;
 /// - refuses a picture over [`MAX_PIXELS`] with `too_large`, checked on the
 ///   header before pixel memory is allocated;

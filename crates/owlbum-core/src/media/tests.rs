@@ -721,3 +721,195 @@ fn raw_and_video_rows_are_recognised_but_not_read_yet() {
     assert_eq!(e.code, MediaErrorCode::Unsupported);
     assert_eq!(e.message, "This video format is not supported yet.");
 }
+
+// ---- Colour profiles: preview and working are sRGB, source is not ----
+
+/// A colour inside the sRGB gamut that a wide-gamut profile moves a lot.
+const ORANGE: [u8; 3] = [200, 100, 50];
+
+/// `img` encoded as `format` with the ICC profile `icc` embedded.
+fn with_icc(img: &image::DynamicImage, format: ImageFormat, icc: &[u8]) -> Vec<u8> {
+    use image::ImageEncoder;
+    use image::codecs::png::PngEncoder;
+    use image::codecs::tiff::TiffEncoder;
+
+    let mut out = Cursor::new(Vec::new());
+    let (w, h, colour) = (img.width(), img.height(), img.color().into());
+    let bytes = img.as_bytes();
+    let icc = icc.to_vec();
+    match format {
+        ImageFormat::Jpeg => {
+            let mut e = JpegEncoder::new_with_quality(&mut out, 100);
+            e.set_icc_profile(icc).unwrap();
+            e.write_image(bytes, w, h, colour).unwrap();
+        }
+        ImageFormat::Png => {
+            let mut e = PngEncoder::new(&mut out);
+            e.set_icc_profile(icc).unwrap();
+            e.write_image(bytes, w, h, colour).unwrap();
+        }
+        ImageFormat::WebP => {
+            let mut e = WebPEncoder::new_lossless(&mut out);
+            e.set_icc_profile(icc).unwrap();
+            e.write_image(bytes, w, h, colour).unwrap();
+        }
+        ImageFormat::Tiff => {
+            let mut e = TiffEncoder::new(&mut out);
+            e.set_icc_profile(icc).unwrap();
+            e.write_image(bytes, w, h, colour).unwrap();
+        }
+        other => panic!("no ICC writer for {other:?}"),
+    }
+    out.into_inner()
+}
+
+fn assert_near(got: [u8; 4], want: [f64; 3], tolerance: f64, what: &str) {
+    for k in 0..3 {
+        assert!(
+            (f64::from(got[k]) - want[k]).abs() <= tolerance,
+            "{what}: got {got:?}, want {want:?}"
+        );
+    }
+}
+
+#[test]
+fn every_still_format_converts_an_embedded_profile_for_display_only() {
+    use owlbum_fixtures::icc;
+
+    let dir = TempDir::new().unwrap();
+    let img = image::DynamicImage::ImageRgb8(RgbImage::from_pixel(16, 16, Rgb(ORANGE)));
+    let want = icc::DISPLAY_P3.expected_srgb(ORANGE);
+    let p3 = icc::DISPLAY_P3.bytes();
+    // JPEG is lossy: its decoded colour may be a level or two off.
+    for (name, format, lossy) in [
+        ("p3.jpg", ImageFormat::Jpeg, 3.0),
+        ("p3.png", ImageFormat::Png, 0.0),
+        ("p3.webp", ImageFormat::WebP, 0.0),
+        ("p3.tif", ImageFormat::Tiff, 0.0),
+    ] {
+        let path = write(&dir, name, &with_icc(&img, format, &p3));
+        let h = handler_for(&path).handler;
+        let working = h.working(&path).unwrap();
+        assert_near(working.pixel(8, 8), want, 2.0 + lossy, name);
+        assert!(working.pixel(8, 8)[0].abs_diff(ORANGE[0]) >= 10, "{name}");
+        assert_eq!(h.preview(&path, 512).unwrap(), working, "{name}");
+
+        let src = h.source(&path).unwrap();
+        assert_eq!(
+            src.icc.as_deref(),
+            Some(&p3[..]),
+            "{name}: profile untouched"
+        );
+        assert_eq!(src.layout, Layout::Rgb, "{name}");
+        let Samples::U8(s) = &src.samples else {
+            panic!("{name}: 8-bit source")
+        };
+        let mid = (8 * 16 + 8) * 3;
+        let raw = [s[mid], s[mid + 1], s[mid + 2], 255];
+        assert_near(raw, ORANGE.map(f64::from), lossy, name);
+    }
+}
+
+#[test]
+fn a_sixteen_bit_png_with_a_profile_keeps_depth_and_profile_in_source() {
+    use owlbum_fixtures::icc;
+
+    let dir = TempDir::new().unwrap();
+    let deep = ORANGE.map(|v| u16::from(v) * 257);
+    let img = image::DynamicImage::ImageRgb16(image::ImageBuffer::from_pixel(4, 4, Rgb(deep)));
+    let adobe = icc::ADOBE_RGB.bytes();
+    let path = write(&dir, "deep.png", &with_icc(&img, ImageFormat::Png, &adobe));
+    let h = handler_for(&path).handler;
+
+    let working = h.working(&path).unwrap();
+    let want = icc::ADOBE_RGB.expected_srgb(ORANGE);
+    assert_near(working.pixel(1, 1), want, 2.0, "working");
+    assert_ne!(&working.pixel(1, 1)[..3], &ORANGE);
+
+    let src = h.source(&path).unwrap();
+    assert_eq!(src.icc.as_deref(), Some(&adobe[..]));
+    assert_eq!(src.samples, Samples::U16(deep.repeat(16)));
+}
+
+#[test]
+fn a_grey_png_with_a_grey_profile_is_converted() {
+    use owlbum_fixtures::icc;
+
+    let dir = TempDir::new().unwrap();
+    let grey = image::GrayImage::from_fn(16, 1, |x, _| image::Luma([x as u8 * 16]));
+    let profile = icc::grey(461);
+    let path = write(
+        &dir,
+        "grey.png",
+        &with_icc(
+            &image::DynamicImage::ImageLuma8(grey),
+            ImageFormat::Png,
+            &profile,
+        ),
+    );
+    let h = handler_for(&path).handler;
+    let working = h.working(&path).unwrap();
+    for x in 0..16 {
+        let v = x as u8 * 16;
+        let want = icc::expected_grey_srgb(461, v);
+        assert_near(working.pixel(x, 0), [want; 3], 2.0, &format!("level {v}"));
+    }
+    assert!(working.pixel(4, 0)[0].abs_diff(64) >= 10);
+
+    let src = h.source(&path).unwrap();
+    assert_eq!(src.layout, Layout::Grey);
+    assert_eq!(src.icc.as_deref(), Some(&profile[..]));
+    assert_eq!(src.samples, Samples::U8((0..16).map(|x| x * 16).collect()));
+}
+
+#[test]
+fn an_srgb_profile_and_a_broken_profile_leave_the_picture_as_it_is() {
+    use owlbum_fixtures::icc;
+
+    let dir = TempDir::new().unwrap();
+    let img = image::DynamicImage::ImageRgb8(RgbImage::from_pixel(8, 8, Rgb(ORANGE)));
+    let mut broken = icc::DISPLAY_P3.bytes();
+    broken.truncate(100);
+    for (name, profile) in [("srgb.png", icc::SRGB.bytes()), ("broken.png", broken)] {
+        let path = write(&dir, name, &with_icc(&img, ImageFormat::Png, &profile));
+        let h = handler_for(&path).handler;
+        assert_eq!(
+            h.working(&path).unwrap().pixel(3, 3),
+            [200, 100, 50, 255],
+            "{name}"
+        );
+        assert_eq!(h.source(&path).unwrap().icc, Some(profile), "{name}");
+    }
+}
+
+#[test]
+fn jpeg_xl_converts_its_profile_for_display_only() {
+    use owlbum_fixtures::icc;
+
+    // ImageMagick: an 8 × 8 rgb(200,100,50) picture tagged with
+    // `icc::DISPLAY_P3`, written lossless.
+    let path = testdata("p3.jxl");
+    let h = handler_for(&path).handler;
+    let working = h.working(&path).unwrap();
+    assert_near(
+        working.pixel(4, 4),
+        icc::DISPLAY_P3.expected_srgb(ORANGE),
+        2.0,
+        "p3.jxl",
+    );
+    let src = h.source(&path).unwrap();
+    let Samples::U8(s) = &src.samples else {
+        panic!("8-bit source")
+    };
+    assert_eq!(&s[..3], &ORANGE);
+    assert!(!colour::is_srgb(src.icc.as_deref()));
+}
+
+#[test]
+fn an_srgb_jpeg_xl_is_not_converted() {
+    // Every JPEG XL carries a profile; an sRGB one is left alone.
+    let path = testdata("quadrants.jxl");
+    let src = handler_for(&path).handler.source(&path).unwrap();
+    assert!(src.icc.is_some());
+    assert!(colour::is_srgb(src.icc.as_deref()));
+}

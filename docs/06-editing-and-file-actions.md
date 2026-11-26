@@ -630,7 +630,7 @@ The question is asked only when `edit_target` is `file`. The shell asks Rust for
 | Case | Rule |
 |---|---|
 | No colour change | Pixels are not converted. The source's ICC profile is embedded in the output unchanged, so a wide-gamut photo stays wide-gamut after a crop or a turn. |
-| Colour change | Pixels are converted from the source profile to sRGB before step 7, the output is tagged sRGB, and the EXIF ColorSpace tag is set to sRGB. This matches the preview, which draws sRGB thumbnails through an sRGB filter. |
+| Colour change | Pixels are converted from the source profile to sRGB before step 7 with `moxcms`, the library the media handlers use (its 16-bit transform for a 16-bit source), the output is tagged sRGB, and the EXIF ColorSpace tag is set to sRGB. This matches the preview, which draws sRGB thumbnails through an sRGB filter. |
 | No profile | The source is treated as sRGB. |
 
 **Size limit.** A render needs the whole decoded picture in memory. The limit is the one the media handlers already apply, 300,000,000 pixels (see [Media and scanning](03-media-and-scanning.md#media-handlers)): a larger file is never in a result, so it can never be chosen for editing. If a decode still reports a larger picture, the render answers `edit_render_failed` with "This photo is too large to edit."

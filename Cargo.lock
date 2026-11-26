@@ -2667,6 +2667,8 @@ dependencies = [
  "chrono",
  "image",
  "jxl-oxide",
+ "moxcms",
+ "owlbum-fixtures",
  "rusqlite",
  "serde",
  "serde_json",

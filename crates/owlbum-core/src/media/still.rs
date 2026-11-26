@@ -9,6 +9,7 @@ use std::fs::File;
 use std::io::BufReader;
 use std::path::Path;
 
+use image::codecs::tiff::TiffDecoder;
 use image::metadata::Orientation;
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
 
@@ -97,10 +98,23 @@ impl Still {
         let (w, h) = decoder.dimensions();
         check_size(w, h)?;
         let orientation = decoder.orientation().unwrap_or(Orientation::NoTransforms);
-        let icc = decoder.icc_profile().ok().flatten();
+        let mut icc = decoder.icc_profile().ok().flatten();
+        if icc.is_none() && self.format == StillFormat::Tiff {
+            icc = Self::tiff_icc(file);
+        }
         let mut img = DynamicImage::from_decoder(decoder).map_err(self.decode_err())?;
         img.apply_orientation(orientation);
         Ok((img, icc))
+    }
+
+    /// A TIFF's ICC profile, read by a decoder with no limits set. Once
+    /// `image` sets limits on its TIFF decoder, a tag of more values than
+    /// the picture's byte count divided by 32 cannot be read, so a small
+    /// picture loses its profile (`image` 0.25.10 over version 0.11.3 of
+    /// the TIFF crate).
+    fn tiff_icc(file: &Path) -> Option<Vec<u8>> {
+        let mut decoder = TiffDecoder::new(Self::open(file).ok()?).ok()?;
+        decoder.icc_profile().ok().flatten()
     }
 
     fn metadata_inner(&self, file: &Path) -> Result<Metadata, MediaError> {

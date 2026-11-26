@@ -17,6 +17,7 @@ authors = ["Owlbum contributors"]
 [workspace.dependencies]
 owlbum-core = { path = "crates/owlbum-core" }
 chrono = { version = "0.4", default-features = false, features = ["clock", "std"] }
+owlbum-fixtures = { path = "crates/owlbum-fixtures" }
 rusqlite = { version = "0.43", features = ["bundled", "backup"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
@@ -37,6 +38,9 @@ png = "0.18"
 zune-core = "0.5"
 zune-jpegxl = "0.5"
 nom-exif = "3.8"
+# Colour profiles to sRGB (docs/03-media-and-scanning.md, "Media handlers":
+# the sRGB rule). The same version `image` already depends on.
+moxcms = "0.8.1"
 
 [workspace.lints.rust]
 unsafe_code = "deny"
@@ -79,4 +83,10 @@ opt-level = 3
 opt-level = 3
 
 [profile.dev.package.zune-jpegxl]
+opt-level = 3
+
+[profile.dev.package.moxcms]
+opt-level = 3
+
+[profile.dev.package.pxfm]
 opt-level = 3

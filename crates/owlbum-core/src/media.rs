@@ -6,7 +6,8 @@
 //! Every row names a handler; the still handler (`still`) reads JPEG, PNG,
 //! WebP, GIF, TIFF and BMP, and `jxl` reads JPEG XL. RAW (#49) and video
 //! (#50) rows use the placeholder handlers in `pending` until their
-//! decoders are built. Colour profile conversion (#7) goes in `colour`.
+//! decoders are built. `colour` converts embedded colour profiles to sRGB
+//! (#7).
 
 pub mod colour;
 pub mod handler;

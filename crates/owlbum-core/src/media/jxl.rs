@@ -87,7 +87,7 @@ fn layout_of(image: &JxlImage) -> Result<Layout, MediaError> {
         PixelFormat::Graya => Ok(Layout::GreyAlpha),
         PixelFormat::Rgb => Ok(Layout::Rgb),
         PixelFormat::Rgba => Ok(Layout::Rgba),
-        // Rendering CMYK needs a colour management system (roadmap #7).
+        // Rendering CMYK needs `jxl-oxide`'s colour management hook (#82).
         PixelFormat::Cmyk | PixelFormat::Cmyka => Err(decode_error()),
     }
 }

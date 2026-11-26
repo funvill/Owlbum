@@ -658,3 +658,12 @@ fn a_rebuild_finds_bursts_without_changing_the_generation() {
     assert_eq!(bursts_of(&index)[0].1, Some(id(a)));
     assert_eq!(index.generation(), g);
 }
+
+#[test]
+fn a_keeper_that_leaves_hands_the_burst_to_the_next_best() {
+    let (conn, [_, b, c]) = burst_album();
+    let index = AlbumIndex::load(&conn, "").unwrap();
+    set(&conn, c, "missing = 1");
+    index.refresh(&conn, &[c]).unwrap();
+    assert!(index.read(|v| v.get(id(b)).unwrap().derived.keeper));
+}

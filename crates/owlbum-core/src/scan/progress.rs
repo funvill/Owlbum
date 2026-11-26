@@ -177,6 +177,8 @@ struct ChangesState {
     last: Option<Instant>,
     /// When the bursts were last worked out again.
     rebuilt: Option<Instant>,
+    /// A send since then only rescored, so the end must rebuild.
+    bursts_stale: bool,
 }
 
 /// While a scan writes, the bursts are worked out again at most this often
@@ -213,7 +215,7 @@ impl<'a> Changes<'a> {
     /// The scan's last write: sends what has not been sent.
     pub fn flush(&self) {
         let mut s = self.state.lock().unwrap_or_else(|p| p.into_inner());
-        if s.dirty {
+        if s.dirty || s.bursts_stale {
             s.rebuilt = None;
             self.send(&mut s);
         }
@@ -230,8 +232,10 @@ impl<'a> Changes<'a> {
         if s.rebuilt.is_none_or(|t| t.elapsed() >= REBUILD_EVERY) {
             self.album.index().rebuild();
             s.rebuilt = Some(Instant::now());
+            s.bursts_stale = false;
         } else {
             self.album.index().rescore();
+            s.bursts_stale = true;
         }
         let event = AlbumChanged {
             revision: self.album.next_revision(),

@@ -637,6 +637,8 @@ impl State {
                 let keep = !gone.contains(&p.id);
                 if !keep {
                     dead += usize::from(p.name_len);
+                    // A burst that lost a member may have lost its keeper.
+                    rekeep.extend(p.derived.burst);
                 }
                 keep
             });

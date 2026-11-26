@@ -89,7 +89,7 @@ pub fn find(photos: &[Photo]) -> Vec<Option<NonZeroU32>> {
             if b.date - a.date > MAX_MINUTES * 60 {
                 break;
             }
-            if pairs(a, b) {
+            if close(a, b, DATED_BITS) && pairs(a, b) {
                 sets.union(i, j);
             }
         }
@@ -114,7 +114,10 @@ pub fn find(photos: &[Photo]) -> Vec<Option<NonZeroU32>> {
                 let key = segment_key(h, s);
                 let from = undated.partition_point(|&(k, _)| k < key);
                 for &(_, j) in undated[from..].iter().take_while(|&&(k, _)| k == key) {
-                    if j != i && pairs(&photos[i], &photos[j]) {
+                    if j != i
+                        && close(&photos[i], &photos[j], UNDATED_BITS)
+                        && pairs(&photos[i], &photos[j])
+                    {
                         sets.union(i, j);
                     }
                 }
@@ -155,11 +158,11 @@ pub fn keeper_order(a: &Photo, b: &Photo) -> Ordering {
 }
 
 /// Sets [`crate::index::Derived::keeper`] for the members of the bursts
-/// `only` names (every burst when None), from the photos' flags as they
-/// are now. When `only` is None, a photo in no burst is set as its own
-/// keeper.
+/// `only` names (every burst when None; sorted, so a bulk star of many
+/// bursts stays fast), from the photos' flags as they are now. When `only`
+/// is None, a photo in no burst is set as its own keeper.
 pub fn pick_keepers(photos: &mut [Photo], only: Option<&[NonZeroU32]>) {
-    let wanted = |b: NonZeroU32| only.is_none_or(|list| list.contains(&b));
+    let wanted = |b: NonZeroU32| only.is_none_or(|list| list.binary_search(&b).is_ok());
     let mut best: HashMap<NonZeroU32, usize> = HashMap::new();
     for (i, p) in photos.iter().enumerate() {
         let Some(b) = p.derived.burst.filter(|&b| wanted(b)) else {
@@ -205,6 +208,15 @@ pub fn quality(p: &Photo, sharpness: &[f32]) -> f32 {
 
 fn dhash(p: &Photo) -> Option<u64> {
     p.analysis().and_then(|a| a.dhash())
+}
+
+/// The cheap first test before [`pairs`]: the hashes are at most `bits`
+/// apart.
+fn close(a: &Photo, b: &Photo, bits: u32) -> bool {
+    match (dhash(a), dhash(b)) {
+        (Some(x), Some(y)) => (x ^ y).count_ones() <= bits,
+        _ => false,
+    }
 }
 
 /// Segment `s` of the 64 bits cut into [`SEGMENTS`] nearly equal parts

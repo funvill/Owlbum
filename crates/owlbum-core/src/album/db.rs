@@ -204,6 +204,23 @@ impl AlbumDb {
         }
     }
 
+    /// [`AlbumDb::write`], then `after` on the writer thread once the job
+    /// has committed and before this answers ([`Writer::write_then`]).
+    pub fn write_then<T, F, A>(&self, job: F, after: A) -> AppResult<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&Transaction<'_>) -> AppResult<T> + Send + 'static,
+        A: FnOnce(&Connection, &T) + Send + 'static,
+    {
+        match (&self.writer, self.view_only_message()) {
+            (Some(writer), None) => writer.write_then(job, after),
+            (_, message) => Err(AppError::new(
+                ErrorCode::ViewOnly,
+                message.unwrap_or_else(|| text::album::view_only::READ_ONLY.to_owned()),
+            )),
+        }
+    }
+
     /// Runs `f` with a read-only connection.
     pub fn read<T>(&self, f: impl FnOnce(&Connection) -> AppResult<T>) -> AppResult<T> {
         self.readers.read(f)

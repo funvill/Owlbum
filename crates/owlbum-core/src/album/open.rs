@@ -402,7 +402,23 @@ impl Album {
         T: Send + 'static,
         F: FnOnce(&rusqlite::Transaction<'_>, &mut Touched) -> AppResult<T> + Send + 'static,
     {
-        unimplemented!("{}", std::any::type_name_of_val(&job))
+        let index = Arc::clone(&self.index);
+        let (value, _) = self.db.write_then(
+            move |tx| {
+                let mut touched = Touched::default();
+                let value = job(tx, &mut touched)?;
+                Ok((value, touched))
+            },
+            move |conn, (_, touched)| {
+                if let Err(e) = index.refresh(conn, touched.ids()) {
+                    tracing::warn!(target: "album", "the album index could not follow a write ({e}); loading it again");
+                    if let Err(e) = index.reload(conn) {
+                        tracing::error!(target: "album", "the album index could not be loaded again: {e}");
+                    }
+                }
+            },
+        )?;
+        Ok(value)
     }
 }
 

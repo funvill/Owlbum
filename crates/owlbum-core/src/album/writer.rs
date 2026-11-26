@@ -85,6 +85,41 @@ impl Writer {
     }
 }
 
+impl Writer {
+    /// [`Writer::write`], then `after` with the writer's connection and the
+    /// job's answer: after the commit, on the writer thread, before the
+    /// caller gets the answer. Nothing else writes in between. `after` does
+    /// not run when the job fails, and a panic in it does not undo or hide
+    /// the committed answer.
+    ///
+    /// This is how the album index follows each write
+    /// ([`crate::album::Album::write_photos`]).
+    pub fn write_then<T, F, A>(&self, job: F, after: A) -> AppResult<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&Transaction<'_>) -> AppResult<T> + Send + 'static,
+        A: FnOnce(&Connection, &T) + Send + 'static,
+    {
+        let (reply, answer) = mpsc::sync_channel::<AppResult<T>>(1);
+        let job: Job = Box::new(move |conn: &mut Connection| {
+            let result = catch_unwind(AssertUnwindSafe(|| in_transaction(conn, job)))
+                .unwrap_or_else(|_| Err(AppError::internal(text::album::WRITING_DATABASE)));
+            if let Ok(value) = &result {
+                let conn: &Connection = conn;
+                let _ = catch_unwind(AssertUnwindSafe(|| after(conn, value)));
+            }
+            let _ = reply.send(result);
+        });
+        self.jobs
+            .as_ref()
+            .and_then(|jobs| jobs.send(job).ok())
+            .ok_or_else(|| AppError::internal(text::album::WRITING_DATABASE))?;
+        answer
+            .recv()
+            .unwrap_or_else(|_| Err(AppError::internal(text::album::WRITING_DATABASE)))
+    }
+}
+
 fn in_transaction<T>(
     conn: &mut Connection,
     job: impl FnOnce(&Transaction<'_>) -> AppResult<T>,
@@ -216,6 +251,53 @@ mod tests {
             t.join().unwrap();
         }
         assert_eq!(count(&w), 200);
+    }
+
+    #[test]
+    fn the_after_step_runs_after_the_commit_and_before_the_answer() {
+        let w = writer();
+        let seen = Arc::new(std::sync::Mutex::new(None));
+        let id = {
+            let seen = Arc::clone(&seen);
+            w.write_then(
+                |tx| {
+                    tx.execute("INSERT INTO t (n) VALUES (5)", []).unwrap();
+                    Ok(tx.last_insert_rowid())
+                },
+                move |conn, id| {
+                    assert!(conn.is_autocommit(), "the transaction is over");
+                    let n: i64 = conn
+                        .query_row("SELECT n FROM t WHERE rowid = ?1", [id], |r| r.get(0))
+                        .unwrap();
+                    let thread = std::thread::current().name().unwrap_or("").to_owned();
+                    *seen.lock().unwrap() = Some((n, thread));
+                },
+            )
+            .unwrap()
+        };
+        assert_eq!(id, 1);
+        assert_eq!(
+            seen.lock().unwrap().clone(),
+            Some((5, "owlbum-album-writer".to_owned()))
+        );
+    }
+
+    #[test]
+    fn the_after_step_is_skipped_when_the_job_fails_and_cannot_undo_it() {
+        let w = writer();
+        let e = w
+            .write_then(
+                |_| -> AppResult<()> { Err(AppError::new(ErrorCode::ViewOnly, "no")) },
+                |_, _| panic!("not after a failed job"),
+            )
+            .unwrap_err();
+        assert_eq!(e.code, ErrorCode::ViewOnly);
+        w.write_then(
+            |tx| Ok(tx.execute("INSERT INTO t (n) VALUES (1)", []).unwrap()),
+            |_, _| panic!("a bug in the after step"),
+        )
+        .unwrap();
+        assert_eq!(count(&w), 1, "committed, and the writer keeps going");
     }
 
     #[test]

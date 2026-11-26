@@ -8,23 +8,112 @@
 //!
 //! **Case folding.** The spec asks for Unicode simple case folding. The
 //! standard library offers lowercasing, which differs from simple folding
-//! for a few characters. [`fold`] is lowercasing where it maps a character
-//! to exactly one character, with the characters whose simple folding
-//! differs from that listed by hand (from Unicode's `CaseFolding.txt`, status
-//! `C` and `S`, for the scripts file names are likely to use). A character
-//! whose lowercase is several characters (such as `İ`) is kept as it is,
-//! which is also what simple folding does.
+//! for a few characters. [`fold`] is a reduced rule: lowercasing where it
+//! maps a character to exactly one character, with the known differences
+//! from simple folding listed by hand (the Greek symbol forms and final
+//! sigma, long s, micro sign, capital sharp s, Cherokee). A character whose
+//! lowercase is several characters (such as `İ`) is kept as it is, which is
+//! also what simple folding does. Any difference left is in characters file
+//! names almost never hold; the order stays total and the same on every
+//! platform either way, because the tie-breaks end at the id.
 
 use std::cmp::Ordering;
 
 /// Compares two file names (or two folder paths) in the natural order.
 pub fn compare(a: &str, b: &str) -> Ordering {
-    unimplemented!("{a}{b}")
+    let (a, b) = (a.as_bytes(), b.as_bytes());
+    let (mut i, mut j) = (0, 0);
+    loop {
+        match (i < a.len(), j < b.len()) {
+            (false, false) => return Ordering::Equal,
+            (false, true) => return Ordering::Less,
+            (true, false) => return Ordering::Greater,
+            (true, true) => {}
+        }
+        if a[i].is_ascii_digit() && b[j].is_ascii_digit() {
+            let (ra, rb) = (digit_run(a, i), digit_run(b, j));
+            let order = compare_runs(&a[i..ra], &b[j..rb]);
+            if order != Ordering::Equal {
+                return order;
+            }
+            (i, j) = (ra, rb);
+            continue;
+        }
+        let (ca, la) = next_char(a, i);
+        let (cb, lb) = next_char(b, j);
+        let order = fold(ca).cmp(&fold(cb));
+        if order != Ordering::Equal {
+            return order;
+        }
+        (i, j) = (i + la, j + lb);
+    }
+}
+
+/// The end of the run of ASCII digits starting at `at`.
+fn digit_run(s: &[u8], at: usize) -> usize {
+    at + s[at..].iter().take_while(|b| b.is_ascii_digit()).count()
+}
+
+/// Two digit runs as numbers of any length; equal numbers put the run with
+/// fewer leading zeros (the shorter run) first.
+fn compare_runs(a: &[u8], b: &[u8]) -> Ordering {
+    let za = a.iter().take_while(|&&d| d == b'0').count();
+    let zb = b.iter().take_while(|&&d| d == b'0').count();
+    let (na, nb) = (&a[za..], &b[zb..]);
+    na.len()
+        .cmp(&nb.len())
+        .then_with(|| na.cmp(nb))
+        .then_with(|| za.cmp(&zb))
+}
+
+/// The character starting at byte `at` of valid UTF-8, and its length.
+fn next_char(s: &[u8], at: usize) -> (char, usize) {
+    let len = match s[at] {
+        b if b < 0x80 => 1,
+        b if b >= 0xf0 => 4,
+        b if b >= 0xe0 => 3,
+        _ => 2,
+    };
+    let c = std::str::from_utf8(&s[at..at + len])
+        .ok()
+        .and_then(|t| t.chars().next())
+        .unwrap_or(char::REPLACEMENT_CHARACTER);
+    (c, len)
 }
 
 /// One character's simple case folding (see the module notes).
 pub fn fold(c: char) -> char {
-    unimplemented!("{c}")
+    if c.is_ascii() {
+        return c.to_ascii_lowercase();
+    }
+    match c {
+        // Simple folding that lowercasing does not give (CaseFolding.txt,
+        // status C or S, where it differs from the simple lowercase).
+        '\u{b5}' => '\u{3bc}',               // micro sign -> mu
+        '\u{17f}' => 's',                    // long s
+        '\u{345}' | '\u{1fbe}' => '\u{3b9}', // iota subscript, prosgegrammeni
+        '\u{3c2}' => '\u{3c3}',              // final sigma
+        '\u{3d0}' => '\u{3b2}',              // beta symbol
+        '\u{3d1}' => '\u{3b8}',              // theta symbol
+        '\u{3d5}' => '\u{3c6}',              // phi symbol
+        '\u{3d6}' => '\u{3c0}',              // pi symbol
+        '\u{3f0}' => '\u{3ba}',              // kappa symbol
+        '\u{3f1}' => '\u{3c1}',              // rho symbol
+        '\u{3f5}' => '\u{3b5}',              // lunate epsilon
+        '\u{1e9b}' => '\u{1e61}',            // long s with dot above
+        '\u{1e9e}' => '\u{df}',              // capital sharp s
+        // Cherokee folds to its capitals, the other way from lowercasing.
+        '\u{13a0}'..='\u{13f5}' => c,
+        '\u{13f8}'..='\u{13fd}' => char::from_u32(c as u32 - 8).unwrap_or(c), // Cherokee small
+        '\u{ab70}'..='\u{abbf}' => char::from_u32(c as u32 - 0x97d0).unwrap_or(c), // Cherokee small
+        _ => {
+            let mut lower = c.to_lowercase();
+            match (lower.next(), lower.next()) {
+                (Some(l), None) => l,
+                _ => c,
+            }
+        }
+    }
 }
 
 #[cfg(test)]

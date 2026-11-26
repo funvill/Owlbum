@@ -199,13 +199,14 @@ A change of the first kind is applied before the command that made it returns, s
 | Analysis | sharpness, mean luma, the two clipping shares, saliency point, dHash as a 64-bit integer, average colour, colour grid |
 | Derived | quality flags, `quality`, `interesting`, colour bucket and lightness, burst id, keeper flag, score |
 
-It holds every row inside the open scope with `missing = 0` and no `scan_error`, and nothing for missing rows, rows that could not be read or rows outside the scope, because none of them is ever in a result. In a view-only album it also holds the rows that exist only in memory for the session. At about 150 bytes a photo, 100,000 photos take about 15 MB.
+It holds every row inside the open scope with `missing = 0` and no `scan_error`, and nothing for missing rows, rows that could not be read or rows outside the scope, because none of them is ever in a result. In a view-only album it also holds the rows that exist only in memory for the session. At about 150 bytes a photo, 100,000 photos take about 15 MB: a fixed 136-byte record, each file name once in one shared string, each folder once, and the name order at 4 bytes a photo.
 
 ### Loading and keeping in step
 
 - **On open** one `SELECT` reads the columns above for every row, on a worker thread. The grid can show its first window as soon as this finishes. Target: under 2 seconds for 100,000 photos on a local SSD.
-- **On every write** the writer thread applies the same change to the index in the same step as the database commit. The index is never read from a half-applied state: readers hold a lock for the length of one query.
-- **Derived values** are rebuilt as a new snapshot on a worker thread and swapped in whole. Queries keep using the old snapshot until the swap. After a swap Rust emits `album_changed` with reason `facts`.
+- **On every write** the writer thread applies the same change to the index in the same step as the database commit. A write that changes `photos` or `photo_people` goes through `Album::write_photos`: the job reports the photo ids it touched, and after the commit, on the writer thread and before the write answers, the index reads those rows again by id with the same `SELECT` the load uses. A row that is gone, `missing`, has a `scan_error` or is outside the scope leaves the index. A job that fails is rolled back and the index is not touched; if reading the rows again fails after a commit, the write still succeeds and the index is loaded again whole. The index is never read from a half-applied state: readers hold a lock for the length of one query.
+- **In a view-only album** there is no writer. The rows the scan keeps only in memory go into the index directly, built by the same rule as a database row, with the same scope test.
+- **Derived values** are rebuilt as a new snapshot on a worker thread and swapped in whole. Queries keep using the old snapshot until the swap. The snapshot is keyed by photo id: a photo added after the rebuild started has no entry and reads as unscored, and an entry for a photo that has left is ignored. A changed photo keeps its derived values until the next rebuild. After a swap Rust emits `album_changed` with reason `facts`.
 - **While a scan runs** the whole-album rebuild runs at most once every 2000 ms, and once more when the scan finishes. Photos found since the last rebuild are shown at once, unanalysed, with "–" for a score.
 - **Scope.** Derived values cover the rows in the index. When the album is open scoped to a subfolder, that is the scope only: rows outside it are not scored and are in no burst.
 
@@ -348,7 +349,7 @@ The Sort control has five options. Each order is total: no two photos ever compa
 2. then `rel_dir`, compared the same way;
 3. then `id`, ascending.
 
-**The natural comparison** works on the two strings after lower-casing (Unicode simple case folding). It walks both strings together. A run of ASCII digits is compared as a number, whatever its length; if the numbers are equal, the run with fewer leading zeros comes first. Any other character is compared by its code point. A string that ends first comes first. So `IMG_9.jpg` sorts before `img_10.jpg`.
+**The natural comparison** works on the two strings after lower-casing (Unicode simple case folding; the code uses one-to-one lowercasing with the known differences from simple folding mapped by hand, and leaves a character whose lowercase is several characters as it is). It walks both strings together. A run of ASCII digits is compared as a number, whatever its length; if the numbers are equal, the run with fewer leading zeros comes first. Any other character is compared by its code point. A string that ends first comes first. So `IMG_9.jpg` sorts before `img_10.jpg`.
 
 Rust works out the name order once and stores each photo's position as `name_rank`, so no sort compares strings.
 

@@ -30,7 +30,11 @@ impl Kind {
     /// The kind for the database's `kind` text. Anything unknown is an
     /// image.
     pub fn from_db(kind: &str) -> Self {
-        unimplemented!("{kind}")
+        match kind {
+            "raw" => Self::Raw,
+            "video" => Self::Video,
+            _ => Self::Image,
+        }
     }
 }
 
@@ -106,22 +110,49 @@ impl Analysis {
     /// or one of the six scalar measures missing. `dhash`, `avg_colour` and
     /// `colour_grid` are each optional.
     pub fn parse(json: &str) -> Option<Self> {
-        unimplemented!("{json}")
+        let raw: RawAnalysis = serde_json::from_str(json).ok()?;
+        let mut a = Self {
+            sharpness: raw.sharpness? as f32,
+            mean_luma: raw.mean_luma? as f32,
+            clipped_shadows: raw.clipped_shadows? as f32,
+            clipped_highlights: raw.clipped_highlights? as f32,
+            saliency_x: raw.saliency_x? as f32,
+            saliency_y: raw.saliency_y? as f32,
+            ..Self::default()
+        };
+        if let Some(h) = raw
+            .dhash
+            .as_deref()
+            .filter(|h| h.len() == 16)
+            .and_then(|h| u64::from_str_radix(h, 16).ok())
+        {
+            a.dhash = h;
+            a.present |= HAS_DHASH;
+        }
+        if let Some(c) = raw.avg_colour {
+            a.avg_colour = c;
+            a.present |= HAS_AVG_COLOUR;
+        }
+        if let Some(g) = raw.colour_grid.and_then(|g| <[u8; 27]>::try_from(g).ok()) {
+            a.colour_grid = g;
+            a.present |= HAS_COLOUR_GRID;
+        }
+        Some(a)
     }
 
     /// The 64-bit dHash, when there is one.
     pub fn dhash(&self) -> Option<u64> {
-        unimplemented!()
+        (self.present & HAS_DHASH != 0).then_some(self.dhash)
     }
 
     /// `avg_colour` as `[R, G, B]`, when there is one.
     pub fn avg_colour(&self) -> Option<[u8; 3]> {
-        unimplemented!()
+        (self.present & HAS_AVG_COLOUR != 0).then_some(self.avg_colour)
     }
 
     /// `colour_grid`: 27 integers, 3 × 3 row-major RGB, when there is one.
     pub fn colour_grid(&self) -> Option<&[u8; 27]> {
-        unimplemented!()
+        (self.present & HAS_COLOUR_GRID != 0).then_some(&self.colour_grid)
     }
 }
 
@@ -191,32 +222,32 @@ impl Photo {
     /// The effective date, as [`Photo::date`] counts it; None when there is
     /// none.
     pub fn date(&self) -> Option<i64> {
-        unimplemented!()
+        (self.date != NO_DATE).then_some(self.date)
     }
 
     /// Starred.
     pub fn star(&self) -> bool {
-        unimplemented!()
+        self.flags & STAR != 0
     }
 
     /// Hidden.
     pub fn hidden(&self) -> bool {
-        unimplemented!()
+        self.flags & HIDDEN != 0
     }
 
     /// Has a place: a typed location or GPS.
     pub fn has_location(&self) -> bool {
-        unimplemented!()
+        self.flags & HAS_LOCATION != 0
     }
 
     /// Has a stored edit (`photos.edit` is not NULL).
     pub fn has_edit(&self) -> bool {
-        unimplemented!()
+        self.flags & HAS_EDIT != 0
     }
 
     /// The analysis, when the photo is analysed.
     pub fn analysis(&self) -> Option<&Analysis> {
-        unimplemented!()
+        (self.flags & ANALYSED != 0).then_some(&self.analysis)
     }
 }
 
@@ -264,13 +295,110 @@ pub struct PhotoFacts {
 /// `T`) as seconds from 1970-01-01T00:00:00, by calendar arithmetic with no
 /// time zone. None when the text is not such a date.
 pub fn parse_date(text: &str) -> Option<i64> {
-    unimplemented!("{text}")
+    let b = text.as_bytes();
+    if b.len() != 19
+        || b[4] != b'-'
+        || b[7] != b'-'
+        || !matches!(b[10], b'T' | b' ')
+        || b[13] != b':'
+        || b[16] != b':'
+    {
+        return None;
+    }
+    let num = |from: usize, to: usize| -> Option<i64> {
+        b[from..to].iter().try_fold(0_i64, |n, &d| {
+            d.is_ascii_digit().then(|| n * 10 + i64::from(d - b'0'))
+        })
+    };
+    let (y, mo, d) = (num(0, 4)?, num(5, 7)?, num(8, 10)?);
+    let (h, mi, s) = (num(11, 13)?, num(14, 16)?, num(17, 19)?);
+    let leap = y % 4 == 0 && (y % 100 != 0 || y % 400 == 0);
+    let month_days = match mo {
+        1 | 3 | 5 | 7 | 8 | 10 | 12 => 31,
+        4 | 6 | 9 | 11 => 30,
+        2 if leap => 29,
+        2 => 28,
+        _ => return None,
+    };
+    if d < 1 || d > month_days || h > 23 || mi > 59 || s > 59 {
+        return None;
+    }
+    Some(days_from_civil(y, mo, d) * 86_400 + h * 3600 + mi * 60 + s)
 }
 
 /// Builds the record for `facts`, with its name not yet placed and the
 /// default derived values. None when the id does not fit in 32 bits.
 pub(super) fn build(facts: &PhotoFacts, folder: u32) -> Option<Photo> {
-    unimplemented!("{facts:?}{folder}")
+    let id = u32::try_from(facts.id).ok()?;
+    let analysis = facts.analysis.as_deref().and_then(Analysis::parse);
+    let date = facts
+        .date_override
+        .as_deref()
+        .and_then(parse_date)
+        .or_else(|| facts.captured_at.as_deref().and_then(parse_date))
+        .unwrap_or(NO_DATE);
+    let mut flags = 0;
+    for (on, bit) in [
+        (facts.star, STAR),
+        (facts.hidden, HIDDEN),
+        (facts.gps.is_some() || facts.loc.is_some(), HAS_LOCATION),
+        (facts.has_edit, HAS_EDIT),
+        (analysis.is_some(), ANALYSED),
+    ] {
+        if on {
+            flags |= bit;
+        }
+    }
+    Some(Photo {
+        id,
+        folder,
+        name_rank: 0,
+        date,
+        score_adjust: clamp_i32(facts.score_adjust),
+        width: clamp_u32(facts.width),
+        height: clamp_u32(facts.height),
+        people: u16::try_from(facts.people).unwrap_or(u16::MAX),
+        kind: Kind::from_db(&facts.kind),
+        flags,
+        name_at: 0,
+        name_len: 0,
+        analysis: analysis.unwrap_or_default(),
+        derived: Derived::default(),
+    })
+}
+
+fn clamp_i32(n: i64) -> i32 {
+    i32::try_from(n).unwrap_or(if n < 0 { i32::MIN } else { i32::MAX })
+}
+
+fn clamp_u32(n: i64) -> u32 {
+    u32::try_from(n).unwrap_or(if n < 0 { 0 } else { u32::MAX })
+}
+
+/// Days from 1970-01-01 to a proleptic Gregorian date (Howard Hinnant's
+/// `days_from_civil`).
+fn days_from_civil(y: i64, m: i64, d: i64) -> i64 {
+    let y = if m <= 2 { y - 1 } else { y };
+    let era = y.div_euclid(400);
+    let yoe = y - era * 400;
+    let mp = (m + 9) % 12;
+    let doy = (153 * mp + 2) / 5 + d - 1;
+    let doe = yoe * 365 + yoe / 4 - yoe / 100 + doy;
+    era * 146_097 + doe - 719_468
+}
+
+/// The `analysis` JSON as stored; unknown keys are ignored.
+#[derive(Deserialize)]
+struct RawAnalysis {
+    sharpness: Option<f64>,
+    mean_luma: Option<f64>,
+    clipped_shadows: Option<f64>,
+    clipped_highlights: Option<f64>,
+    saliency_x: Option<f64>,
+    saliency_y: Option<f64>,
+    dhash: Option<String>,
+    avg_colour: Option<[u8; 3]>,
+    colour_grid: Option<Vec<u8>>,
 }
 
 #[cfg(test)]

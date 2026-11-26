@@ -23,7 +23,9 @@ use std::time::{Duration, Instant};
 use owlbum_core::album::{Album, OpenOptions};
 use owlbum_core::appdata::AppData;
 use owlbum_core::events::Emitter;
-use owlbum_core::query::{Keep, Located, PhotoAt, Query, QueryEngine, QuerySort};
+use owlbum_core::query::{
+    Filter, Keep, Located, PhotoAt, Query, QueryEngine, QuerySort, ShapeFilter, StarFilter,
+};
 use owlbum_core::scan::{Request, ScanEnv, Scanner};
 use owlbum_core::thumbs::Thumbs;
 use owlbum_core::thumbs::serve;
@@ -152,6 +154,33 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
         other_sorts.push((sort, t.elapsed()));
         assert_eq!(r.count, count);
     }
+    // Column filters (#31): several at once, then the same with the facets
+    // counted in the same pass, then `query_facets` on that result.
+    let filtered = Query {
+        filter: Filter {
+            star: Some(StarFilter::No),
+            shape: Some(ShapeFilter::Landscape),
+            from: Some("1990-01-01".to_owned()),
+            to: Some("2100-12-31".to_owned()),
+            ..Filter::default()
+        },
+        ..Query::default()
+    };
+    let t = Instant::now();
+    let r = engine.run(&album, &filtered, None).unwrap();
+    let run_filtered = t.elapsed();
+    assert!(r.filtered && r.photos <= count);
+    let faceted = Query {
+        want_facets: true,
+        ..filtered
+    };
+    let t = Instant::now();
+    let r = engine.run(&album, &faceted, None).unwrap();
+    let run_faceted = t.elapsed();
+    let t = Instant::now();
+    let facets = engine.facets(&album, &r.token).unwrap();
+    let facets_took = t.elapsed();
+    assert_eq!(Some(facets), r.facets);
     // The engine holds only a few results, and the runs above pushed the
     // date-sorted one out: run it again for the re-run below.
     let by_date = engine.run(&album, &date, None).unwrap();
@@ -241,6 +270,15 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
     for (sort, took) in other_sorts {
         println!("  query_run, {sort:?} (target 30 ms) {}", ms(took));
     }
+    println!(
+        "  query_run, four column filters (target 30 ms) {}",
+        ms(run_filtered)
+    );
+    println!(
+        "  query_run, the same with want_facets (target +10 ms) {}",
+        ms(run_faceted)
+    );
+    println!("  query_facets of that result {}", ms(facets_took));
     println!(
         "  query_run, date, keeping place and 1,000 selected {}",
         ms(run_keep)

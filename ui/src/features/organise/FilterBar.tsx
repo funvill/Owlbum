@@ -1,39 +1,130 @@
+import { useEffect, useRef, useState } from "react";
+import type { Filter } from "../../api/bindings/Filter";
 import type { Query } from "../../api/bindings/QueryShape";
-import { SelectField, type SelectOption } from "../../controls";
+import { Button, SelectField, type SelectOption } from "../../controls";
+import { Icon } from "../../icons";
 import { organiseText as t } from "../../text/organise";
 import { useGridStore } from "../grid";
+import { FilterChip } from "./FilterChip";
+import { FilterPanel } from "./FilterPanel";
 import "./FilterBar.css";
 
 type Sort = Query["sort"];
 
 const SORTS: SelectOption[] = (Object.keys(t.sorts) as Sort[]).map((value) => ({ value, label: t.sorts[value] }));
 
+/** Runs the query with a new filter, keeping the rest of it. */
+function setFilter(filter: Filter): void {
+  const grid = useGridStore.getState();
+  grid.setQuery({ ...grid.query, filter });
+}
+
 /**
  * The filter bar (docs/05-organising.md, "The filter bar"): a search
  * landmark above the body while an album with photos is open. It holds the
- * Sort control (#29); Stack similar, the search box, the Filters button and
- * the count join it with their issues.
+ * Sort control (#29), the Filters button with its panel, and the count; a
+ * second row, "Active filters", shows the chips, "Showing X of Y" and Clear
+ * filter while a filter is on (#31). Stack similar (#30) and the search
+ * box (#32) join it with their issues.
  *
- * A new sort re-runs the query with the selection kept; the grid then
- * scrolls as for any change the user makes (to the current photo, or to
- * the top). In the timeline view the order is always by date, so the
- * control is disabled there.
+ * Every number and chip comes from the result: the page never counts or
+ * builds chip text itself. A change of sort or filter re-runs the query
+ * with the selection kept; the grid then scrolls as for any change the
+ * user makes. In the timeline view the order is always by date, so Sort is
+ * disabled there.
  */
 export function FilterBar() {
   const query = useGridStore((s) => s.query);
+  const result = useGridStore((s) => s.result);
+  const facets = useGridStore((s) => s.facets);
+  const [open, setOpen] = useState(false);
+  const button = useRef<HTMLButtonElement>(null);
+  const area = useRef<HTMLDivElement>(null);
   const timeline = query.view === "timeline";
+  const panelCount = result?.panel_count ?? 0;
+  const filtered = result?.filtered ?? false;
+
+  const show = (on: boolean) => {
+    setOpen(on);
+    void useGridStore.getState().wantFacets(on);
+  };
+
+  useEffect(() => {
+    if (!open) return;
+    // A press outside the panel and its button closes it without moving focus.
+    const press = (e: PointerEvent) => {
+      if (area.current !== null && !area.current.contains(e.target as Node)) {
+        setOpen(false);
+        void useGridStore.getState().wantFacets(false);
+      }
+    };
+    document.addEventListener("pointerdown", press);
+    return () => document.removeEventListener("pointerdown", press);
+  }, [open]);
+
+  // The panel never outlives the bar's album.
+  useEffect(() => () => void useGridStore.getState().wantFacets(false), []);
+
   return (
     <div className="ow-filter-bar" role="search" aria-label={t.bar.label}>
-      <SelectField
-        label={t.bar.sort}
-        value={timeline ? "date" : query.sort}
-        options={SORTS}
-        disabled={timeline}
-        onChange={(sort) => {
-          const grid = useGridStore.getState();
-          grid.setQuery({ ...grid.query, sort: sort as Sort });
-        }}
-      />
+      <div className="ow-filter-bar__main">
+        <SelectField
+          label={t.bar.sort}
+          value={timeline ? "date" : query.sort}
+          options={SORTS}
+          disabled={timeline}
+          onChange={(sort) => {
+            const grid = useGridStore.getState();
+            grid.setQuery({ ...grid.query, sort: sort as Sort });
+          }}
+        />
+        <span className="ow-filter-bar__spacer" />
+        <div
+          ref={area}
+          className="ow-filter-bar__filters"
+          onKeyDown={(e) => {
+            if (e.key === "Escape" && open) {
+              e.preventDefault();
+              e.stopPropagation();
+              show(false);
+              button.current?.focus();
+            }
+          }}
+        >
+          <button
+            ref={button}
+            type="button"
+            className={`ow-button ow-button--default ow-filter-bar__button${panelCount > 0 ? " ow-filter-bar__button--on" : ""}`}
+            aria-expanded={open}
+            onClick={() => show(!open)}
+          >
+            <span className="ow-button__label">{t.bar.filters(panelCount)}</span>
+            <Icon name={open ? "chevron-up" : "chevron-down"} size="sm" />
+          </button>
+          {open && <FilterPanel filter={query.filter} facets={facets} onChange={setFilter} />}
+        </div>
+        {!filtered && result !== null && <span className="ow-filter-bar__count">{t.bar.count(result.total)}</span>}
+      </div>
+      {filtered && result !== null && (
+        <div className="ow-filter-bar__filtered" role="region" aria-label={t.filtered.label}>
+          {result.chips.map((chip) => (
+            <FilterChip key={chip.id} text={chip.text} onRemove={() => setFilter(chip.remove)} />
+          ))}
+          <span className="ow-filter-bar__spacer" />
+          <span className="ow-filter-bar__showing" aria-live="polite">
+            {t.filtered.showing(result.photos, result.total)}
+          </span>
+          <Button
+            size="sm"
+            onClick={() => {
+              const grid = useGridStore.getState();
+              grid.setQuery({ ...grid.query, filter: {}, search: null });
+            }}
+          >
+            {t.filtered.clear}
+          </Button>
+        </div>
+      )}
     </div>
   );
 }

@@ -1,4 +1,3 @@
-import type { Filter } from "../bindings/Filter";
 import type { Keep } from "../bindings/Keep";
 import type { Kept } from "../bindings/Kept";
 import type { MediaKind } from "../bindings/MediaKind";
@@ -9,6 +8,7 @@ import type { Row } from "../bindings/Row";
 import type { JsonValue } from "../bindings/serde_json/JsonValue";
 import type { AppError } from "../bindings/AppError";
 import type { AreaHandlers } from "./types";
+import { chips, folderOf, normalised, pass, validate } from "./queryFilter";
 
 /** How many results are kept, as in Rust. An older token answers `query_expired`. */
 export const TOKENS_KEPT = 4;
@@ -42,6 +42,18 @@ export interface FakePhoto {
   colour?: { bucket: number; lightness: number } | null;
   /** The plan for the stored edit; null (no edit) when absent. */
   edit_plan?: JsonValue | null;
+  /** Has a typed place or GPS. */
+  has_location?: boolean;
+  /** The names of the people on it. */
+  people?: string[];
+  /** Its keyword labels. */
+  keywords?: string[];
+  /** Its object labels. */
+  objects?: string[];
+  /** At least one quality flag is set. */
+  low_quality?: boolean;
+  /** In a burst. */
+  burst?: boolean;
 }
 
 /** The fake album behind the `query_` commands, with what a test needs to change it. */
@@ -62,10 +74,7 @@ function fileName(relPath: string): string {
   return relPath.slice(relPath.lastIndexOf("/") + 1);
 }
 
-function folder(relPath: string): string {
-  const at = relPath.lastIndexOf("/");
-  return at < 0 ? "" : relPath.slice(0, at);
-}
+const folder = folderOf;
 
 /** Splits text into runs of ASCII digits and runs of everything else. */
 function runs(text: string): string[] {
@@ -152,12 +161,6 @@ const ORDERS: Record<Query["sort"], (a: FakePhoto, b: FakePhoto) => number> = {
   colour: keyOrder((p) => (p.colour === undefined || p.colour === null ? null : [p.colour.bucket, p.colour.lightness])),
 };
 
-function filterIsOn(filter: Filter): boolean {
-  return Object.entries(filter).some(
-    ([, v]) => v !== undefined && v !== null && v !== false && !(Array.isArray(v) && v.length === 0),
-  );
-}
-
 function isSearch(search: string | null): boolean {
   return (search?.match(/[\p{L}\p{N}]/gu)?.length ?? 0) >= SEARCH_MIN;
 }
@@ -168,9 +171,7 @@ function check(query: Query): void {
     throw appError("bad_query", `Owlbum can't show ${what} yet.`);
   };
   if (query.view === "timeline") refuse("the timeline view");
-  if (filterIsOn(query.filter)) refuse("filtered photos");
   if (isSearch(query.search)) refuse("search results");
-  if (query.want_facets) refuse("counts beside the filters");
 }
 
 /** Settles `keep` as Rust does (owlbum_core::query::keep). */
@@ -220,7 +221,8 @@ function row(id: number, p: FakePhoto | undefined): Row {
 
 /**
  * A stateful fake of the query engine over `photos`, behaving like Rust:
- * the default view only (every photo not hidden, in any of the five sorts), the
+ * the grid and the map in any of the five sorts, with every filter, its chips
+ * and facets (queryFilter.ts), the
  * last four results kept under tokens, rows read as they are now, and
  * `keep` settled by the four rules. What Rust does not run yet answers
  * `bad_query` here too.
@@ -228,35 +230,41 @@ function row(id: number, p: FakePhoto | undefined): Row {
 export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
   let list = [...photos];
   let revision = 0;
-  const held: { token: string; tiles: number[] }[] = [];
+  const held: { token: string; tiles: number[]; filter: Query["filter"] }[] = [];
 
-  const tilesOf = (token: string): number[] => {
+  const heldOf = (token: string) => {
     const h = held.find((x) => x.token === token);
     if (h === undefined) throw appError("query_expired", "The list of photos changed. Showing it again.");
-    return h.tiles;
+    return h;
   };
+  const tilesOf = (token: string): number[] => heldOf(token).tiles;
 
   const handlers: AreaHandlers<QueryCommands> = {
     query_run: ({ query, keep }) => {
       check(query);
+      const filter = normalised(query.filter);
+      validate(filter);
       const old = keep === null ? undefined : held.find((h) => h.token === keep.token)?.tiles;
-      const shown = list.filter((p) => !(p.hidden ?? false));
+      const passed = pass(list, filter, "", query.want_facets);
+      const shown = passed.shown;
       shown.sort(ORDERS[query.sort]);
       const tiles = shown.map((p) => p.id);
       const token = `q${nextToken++}`;
-      held.push({ token, tiles });
+      held.push({ token, tiles, filter });
       while (held.length > TOKENS_KEPT) held.shift();
+      const chipList = chips(filter, "");
       return {
         token,
         revision,
         count: tiles.length,
         photos: tiles.length,
-        total: tiles.length,
+        total: passed.total,
         album_photos: list.length,
-        filtered: false,
-        panel_count: 0,
-        chips: [],
+        filtered: Object.keys(filter).length > 0 || isSearch(query.search),
+        panel_count: chipList.length,
+        chips: chipList,
         kept: keep === null ? null : settle(keep, old, tiles),
+        ...(passed.facets === undefined ? {} : { facets: passed.facets }),
       };
     },
     query_window: ({ token, offset, limit }) => {
@@ -264,6 +272,7 @@ export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
       const byId = new Map(list.map((p) => [p.id, p]));
       return tiles.slice(offset, offset + Math.min(limit, WINDOW_MAX)).map((id) => row(id, byId.get(id)));
     },
+    query_facets: ({ token }) => pass(list, heldOf(token).filter, "", true).facets!,
     query_ids: ({ token, offset, limit }) => tilesOf(token).slice(offset, offset + limit),
     query_locate: ({ token, id }) => {
       const index = tilesOf(token).indexOf(id);

@@ -7,6 +7,7 @@ import { create } from "zustand";
 import { api, isAppError, toAppError } from "../../api";
 import type { AppError, Unlisten } from "../../api";
 import type { AlbumChanged } from "../../api/bindings/AlbumChanged";
+import type { Facets } from "../../api/bindings/Facets";
 import type { PhotoAt } from "../../api/bindings/PhotoAt";
 import type { Query } from "../../api/bindings/QueryShape";
 import type { QueryResult } from "../../api/bindings/QueryResult";
@@ -81,6 +82,8 @@ export interface GridState extends Selected {
   result: QueryResult | null;
   /** The query of the newest call. */
   query: Query;
+  /** The counts beside the filter panel's options, while the panel asks for them. */
+  facets: Facets | null;
   /** Why the last run failed, if it did. */
   error: AppError | null;
   /** The chosen thumbnail size, 96 to 320. */
@@ -98,6 +101,12 @@ export interface GridState extends Selected {
   stop(): void;
   /** Runs a new query; changes within one animation frame make one call. */
   setQuery(query: Query): void;
+  /**
+   * Starts or stops asking for facets (the filter panel opened or closed).
+   * Starting asks `query_facets` for the result shown and sets `want_facets`
+   * for the runs that follow; neither runs the query again.
+   */
+  wantFacets(on: boolean): Promise<void>;
   /** Sets the thumbnail size at once and saves it 300 ms after the last change. */
   setThumbSize(size: number): void;
   /** Sets the current photo, anchor and selection, dropping anything pending. */
@@ -222,7 +231,8 @@ export const useGridStore = create<GridState>()((set, get) => {
       s.cause === "change" && from !== null && to !== null && to.index !== from.index
         ? { from: from.index, to: to.index, seq: (get().follow?.seq ?? 0) + 1 }
         : get().follow;
-    set({ result, error: null, ...selected, scroll, follow, pending: null });
+    const facets = result.facets ?? (get().query.want_facets ? get().facets : null);
+    set({ result, error: null, ...selected, scroll, follow, pending: null, facets });
     if (s.pickFirst) {
       if (current !== null) s.pickFirst = false;
       else if (result.count > 0) {
@@ -286,6 +296,7 @@ export const useGridStore = create<GridState>()((set, get) => {
   return {
     result: null,
     query: defaultQuery(),
+    facets: null,
     error: null,
     thumbSize: THUMB_DEFAULT,
     scroll: null,
@@ -347,7 +358,7 @@ export const useGridStore = create<GridState>()((set, get) => {
       }
       blocks.clear();
       gridView = () => null;
-      set({ result: null, error: null, query: defaultQuery(), scroll: null, follow: null, pending: null, ...empty });
+      set({ result: null, error: null, query: defaultQuery(), facets: null, scroll: null, follow: null, pending: null, ...empty });
     },
 
     setQuery(query) {
@@ -358,6 +369,18 @@ export const useGridStore = create<GridState>()((set, get) => {
         s.frame = undefined;
         if (session === s) void run(s, "user");
       });
+    },
+
+    async wantFacets(on) {
+      set({ query: { ...get().query, want_facets: on }, ...(on ? {} : { facets: null }) });
+      const token = get().result?.token;
+      if (!on || token === undefined) return;
+      try {
+        const facets = await api().invoke("query_facets", { token });
+        if (get().query.want_facets && get().result?.token === token) set({ facets });
+      } catch {
+        // An expired token: the next run carries the facets.
+      }
     },
 
     setThumbSize(size) {

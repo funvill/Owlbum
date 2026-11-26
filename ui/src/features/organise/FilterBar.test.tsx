@@ -8,6 +8,7 @@ import { defaultQuery } from "../../api/query";
 import { seriousFindings } from "../../test/axe";
 import { useSettingsStore } from "../app";
 import { resetGrid, useGridStore } from "../grid";
+import { focusOf } from "../../keys/match";
 import { FilterBar } from "./FilterBar";
 
 let fake: FakeApi;
@@ -19,9 +20,10 @@ beforeEach(() => {
   useSettingsStore.setState({ settings: null, error: null });
   fake = createFakeApi(
     createQueryFake([
-      { id: 1, rel_path: "b.jpg", date: "2024-01-01T00:00:00", score: 40 },
-      { id: 2, rel_path: "a.jpg", date: "2024-01-02T00:00:00", score: 70 },
-      { id: 3, rel_path: "c.jpg", date: "2024-01-03T00:00:00", score: null },
+      { id: 1, rel_path: "b.jpg", date: "2024-01-01T00:00:00", score: 40, star: true },
+      { id: 2, rel_path: "a.jpg", date: "2024-01-02T00:00:00", score: 70, people: ["Ann"] },
+      { id: 3, rel_path: "Trip/c.jpg", date: "2024-01-03T00:00:00", score: null },
+      { id: 4, rel_path: "d.jpg", date: "2024-01-04T00:00:00", hidden: true },
     ]).handlers,
   );
   setApi(fake);
@@ -67,5 +69,84 @@ describe("FilterBar", () => {
     const sort = screen.getByRole("combobox", { name: "Sort" });
     expect(sort).toBeDisabled();
     expect(sort).toHaveValue("date");
+  });
+
+  it("opens the panel with its counts, focus on the first control", async () => {
+    await grid().start();
+    const { container } = render(<FilterBar />);
+    expect(await screen.findByText("3 photos")).toBeInTheDocument();
+    const button = screen.getByRole("button", { name: "Filters" });
+    expect(button).toHaveAttribute("aria-expanded", "false");
+    await userEvent.click(button);
+    const panel = screen.getByRole("group", { name: "Filters" });
+    const stars = within(panel).getByRole("combobox", { name: "Stars" });
+    expect(stars).toHaveFocus();
+    expect(fake.calls.some((c) => c.command === "query_facets")).toBe(true);
+    await vi.waitFor(() =>
+      expect(within(stars).getAllByRole("option").map((o) => o.textContent)).toEqual([
+        "All",
+        "Starred (1)",
+        "Not starred (2)",
+      ]),
+    );
+    expect(within(panel).getByRole("combobox", { name: "Hidden" })).toHaveTextContent("Show (1)");
+    expect(within(panel).getByRole("checkbox", { name: "Has people (1)" })).not.toBeChecked();
+    // Two folders: the Folder select is shown, the top folder first.
+    const folder = within(panel).getByRole("combobox", { name: "Folder" });
+    expect(within(folder).getAllByRole("option").map((o) => o.textContent)).toEqual([
+      "All folders",
+      "Top folder (2)",
+      "Trip (1)",
+    ]);
+    expect(within(panel).getByText(/Pick a keyword/)).toBeInTheDocument();
+    // The grid's keys do nothing inside the panel.
+    expect(focusOf(stars)).toBe("dialog");
+    expect(await seriousFindings(container)).toEqual([]);
+  });
+
+  it("runs a chosen filter and shows its chip, the count and Clear filter", async () => {
+    await grid().start();
+    render(<FilterBar />);
+    await userEvent.click(screen.getByRole("button", { name: "Filters" }));
+    await userEvent.selectOptions(screen.getByRole("combobox", { name: "Stars" }), "yes");
+    await vi.waitFor(() => expect(runs().at(-1)!.args).toMatchObject({ query: { filter: { star: "yes" }, want_facets: true } }));
+    const row = await screen.findByRole("region", { name: "Active filters" });
+    expect(within(row).getByText("Starred")).toBeInTheDocument();
+    expect(within(row).getByText("Showing 1 of 3")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Filters · 1" })).toBeInTheDocument();
+    expect(screen.queryByText("3 photos")).not.toBeInTheDocument();
+
+    await userEvent.click(within(row).getByRole("button", { name: "Remove filter Starred" }));
+    await vi.waitFor(() => expect(grid().query.filter).toEqual({}));
+    await vi.waitFor(() => expect(screen.queryByRole("region", { name: "Active filters" })).not.toBeInTheDocument());
+
+    // The press on the chip was outside the panel, which closed it.
+    await userEvent.click(screen.getByRole("button", { name: "Filters" }));
+    await userEvent.click(screen.getByRole("checkbox", { name: /Has people/ }));
+    await screen.findByText("Showing 1 of 3");
+    await userEvent.click(screen.getByRole("button", { name: "Clear filter" }));
+    await vi.waitFor(() => expect(grid().query).toMatchObject({ filter: {}, search: null }));
+  });
+
+  it("closes on Esc, returning focus to the button, and on a press outside", async () => {
+    await grid().start();
+    render(
+      <>
+        <FilterBar />
+        <p>outside</p>
+      </>,
+    );
+    const button = screen.getByRole("button", { name: "Filters" });
+    await userEvent.click(button);
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("group", { name: "Filters" })).not.toBeInTheDocument();
+    expect(button).toHaveFocus();
+    expect(grid().query.want_facets).toBe(false);
+
+    await userEvent.click(button);
+    expect(grid().query.want_facets).toBe(true);
+    await userEvent.click(screen.getByText("outside"));
+    expect(screen.queryByRole("group", { name: "Filters" })).not.toBeInTheDocument();
+    expect(grid().facets).toBeNull();
   });
 });

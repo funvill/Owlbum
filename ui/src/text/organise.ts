@@ -1,11 +1,50 @@
 // Text shown by the organise feature (src/features/organise).
 // docs/05-organising.md, "Star and hide", "Sorting", "The filter bar" and "Undo".
 
+/** A whole number with digit grouping: 2,140. */
+function group(n: number): string {
+  return n.toLocaleString("en-US");
+}
+
 export const organiseText = {
   /** The filter bar (docs/05-organising.md, "The filter bar"). */
   bar: {
     label: "Sort and filter",
     sort: "Sort",
+    /** The Filters button: "Filters", or "Filters · N" while N panel filters are on. */
+    filters: (n: number) => (n > 0 ? `Filters · ${n}` : "Filters"),
+    /** "2,140 photos" while no filter is on. */
+    count: (n: number) => (n === 1 ? "1 photo" : `${group(n)} photos`),
+  },
+  /** The filtered row (docs/05-organising.md, "The filtered row"). */
+  filtered: {
+    label: "Active filters",
+    showing: (x: number, y: number) => `Showing ${group(x)} of ${group(y)}`,
+    clear: "Clear filter",
+    remove: (chip: string) => `Remove filter ${chip}`,
+    removeTip: "Remove this filter",
+  },
+  /** The filter panel (docs/05-organising.md, "The filter panel"). */
+  panel: {
+    label: "Filters",
+    groups: { photo: "Photo", when: "When", where: "Where", content: "Content", quality: "Quality" },
+    stars: "Stars",
+    starOptions: { all: "All", yes: "Starred", no: "Not starred" },
+    shape: "Shape",
+    shapeOptions: { any: "Any", portrait: "Portrait", landscape: "Landscape" },
+    hidden: "Hidden",
+    hiddenOptions: { leave: "Leave out", show: "Show", only: "Only" },
+    from: "From",
+    to: "To",
+    folder: "Folder",
+    allFolders: "All folders",
+    hasLocation: "Has location",
+    hasPeople: "Has people",
+    lowQuality: "Low quality",
+    nearDuplicates: "Near-duplicates",
+    noContent: "Pick a keyword under What's in it, or type tag:word in the search box.",
+    /** An option with its facet: "Starred (312)"; no count while none is known. */
+    counted: (label: string, n: number | undefined) => (n === undefined ? label : `${label} (${group(n)})`),
   },
   /** The Sort control's options, in their order (docs/05-organising.md, "Sorting"). */
   sorts: {

@@ -65,6 +65,8 @@ export function TextField({ label, hideLabel, value, onChange, error, type = "te
 export interface SelectOption {
   value: string;
   label: string;
+  /** Drawn in `--muted`, still enabled (a filter option whose count is 0). */
+  muted?: boolean;
 }
 
 interface SelectFieldProps {
@@ -94,7 +96,7 @@ export function SelectField({ label, hideLabel, value, options, onChange, disabl
           onChange={(e) => onChange(e.target.value)}
         >
           {options.map((o) => (
-            <option key={o.value} value={o.value}>
+            <option key={o.value} value={o.value} className={o.muted ? "ow-select__option--muted" : undefined}>
               {o.label}
             </option>
           ))}

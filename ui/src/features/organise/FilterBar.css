@@ -4,16 +4,108 @@
   z-index: var(--z-bar);
   flex: none;
   display: flex;
-  align-items: center;
-  gap: var(--space-4);
-  min-height: var(--size-bar);
-  padding: 0 var(--space-4);
+  flex-direction: column;
   background: var(--panel);
   border-bottom: 1px solid var(--line-soft);
 }
 
+.ow-filter-bar__main {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+  min-height: var(--size-bar);
+  padding: 0 var(--space-4);
+  white-space: nowrap;
+}
+
+.ow-filter-bar__spacer {
+  flex: 1;
+}
+
 /* The label sits beside its control here, not above it. */
-.ow-filter-bar .ow-field {
+.ow-filter-bar .ow-filter-bar__main > .ow-field {
   flex-direction: row;
   align-items: center;
+}
+
+.ow-filter-bar__filters {
+  position: relative;
+}
+
+.ow-filter-bar__button {
+  gap: var(--space-1);
+}
+
+/* While N > 0 panel filters are on. */
+.ow-filter-bar__button--on {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.ow-filter-bar__count,
+.ow-filter-bar__showing {
+  font: var(--text-sm);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The filtered row: shown only while a filter is on. */
+.ow-filter-bar__filtered {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  min-height: var(--size-bar);
+  padding: 0 var(--space-4);
+  background: var(--panel-2);
+  border-top: 1px solid var(--line-soft);
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+/* The panel drops from the Filters button, its right edge on the button's. */
+.ow-filter-panel {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: var(--z-popover);
+  width: min(620px, calc(100vw - 24px));
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: var(--space-4);
+  padding: var(--space-4);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-md);
+  box-shadow: var(--shadow);
+  white-space: normal;
+}
+
+.ow-filter-panel__group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.ow-filter-panel__legend {
+  margin-bottom: var(--space-1);
+  padding: 0;
+  font: var(--text-xs);
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.ow-filter-panel__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-1);
+}
+
+.ow-filter-panel__note {
+  margin: 0;
+  font: var(--text-sm);
+  color: var(--muted);
 }

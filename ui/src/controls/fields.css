@@ -125,3 +125,8 @@
   background: var(--panel-3);
   color: var(--text);
 }
+
+/* An option that stays enabled but is drawn muted (a filter count of 0). */
+.ow-select__option--muted {
+  color: var(--muted);
+}

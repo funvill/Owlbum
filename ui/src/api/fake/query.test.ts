@@ -60,14 +60,39 @@ describe("the fake query commands", () => {
     const refused: Query[] = [
       { ...defaultQuery(), view: "timeline" },
       { ...defaultQuery(), search: "lake" },
-      { ...defaultQuery(), want_facets: true },
-      { ...defaultQuery(), filter: { star: "yes" } },
+      { ...defaultQuery(), filter: { from: "2024-02-30" } },
     ];
     for (const query of refused) {
       await expect(fake.invoke("query_run", { query, keep: null })).rejects.toMatchObject({ code: "bad_query" });
     }
     const absent: Query = { ...defaultQuery(), search: "a", filter: { has_people: false, tags: [] } };
     await expect(fake.invoke("query_run", { query: absent, keep: null })).resolves.toMatchObject({ count: 4 });
+  });
+
+  it("filter like Rust, with chips, X of Y and facets", async () => {
+    const { fake } = setup([
+      { id: 1, rel_path: "a.jpg", date: "2024-06-01T10:00:00", star: true, width: 4, height: 3 },
+      { id: 2, rel_path: "Trip/b.jpg", date: "2024-06-30T23:00:00", width: 3, height: 4, people: ["Ann"] },
+      { id: 3, rel_path: "Trip/c.jpg", date: null, hidden: true, star: true, keywords: ["lake"] },
+    ]);
+    const run = (filter: Query["filter"], want_facets = false) =>
+      fake.invoke("query_run", { query: { ...defaultQuery(), filter, want_facets }, keep: null });
+    const r = await run({ star: "yes", from: "2024-06-01", to: "2024-06-30", has_people: false }, true);
+    expect(await ids(fake, r.token)).toEqual([1]);
+    expect(r).toMatchObject({ photos: 1, total: 2, filtered: true, panel_count: 2 });
+    expect(r.chips.map((c) => [c.id, c.text])).toEqual([
+      ["star", "Starred"],
+      ["dates", "2024-06-01 → 2024-06-30"],
+    ]);
+    expect(r.chips[1]!.remove).toEqual({ star: "yes" });
+    expect(r.facets).toMatchObject({ star: { yes: 1, no: 1 }, shape: { portrait: 0, landscape: 1 }, hidden: 0 });
+    expect(r.facets!.folders).toEqual([
+      { folder: "", label: "Top folder", count: 1 },
+      { folder: "Trip", label: "Trip", count: 0 },
+    ]);
+    expect(await fake.invoke("query_facets", { token: r.token })).toEqual(r.facets);
+    expect(await ids(fake, (await run({ hidden: "only", tags: [{ kind: "keyword", value: "Lake" }] })).token)).toEqual([3]);
+    expect(await ids(fake, (await run({ people: ["ann"], folder: "Trip" })).token)).toEqual([2]);
   });
 
   it("keep the last four tokens", async () => {

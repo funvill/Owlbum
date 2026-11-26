@@ -9,6 +9,7 @@ pub mod bindings;
 pub mod commands;
 pub mod events;
 pub mod keymap;
+pub mod session;
 
 use std::sync::Arc;
 
@@ -19,7 +20,9 @@ use tauri::Runtime;
 /// Adds Owlbum's commands to a Tauri builder. `run` uses it, and shell tests
 /// use it with Tauri's mock runtime.
 pub fn setup<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
-    builder.invoke_handler(commands::registry::invoke_handler(commands::modules()))
+    builder
+        .manage(session::Session::default())
+        .invoke_handler(commands::registry::invoke_handler(commands::modules()))
 }
 
 /// Gives the app its open app data folder, which the `app_` settings and

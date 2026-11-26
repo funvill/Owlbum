@@ -1288,3 +1288,23 @@ fn walker_order_is_natural_and_used_for_rows() {
         .collect();
     assert_eq!(order, ["IMG_1.png", "IMG_2.png", "IMG_10.png"]);
 }
+
+/// Timings for the issue, not a gate: `cargo test -p owlbum-core --release
+/// scan_timings -- --ignored --nocapture`.
+#[test]
+#[ignore]
+fn scan_timings() {
+    for n in [2_000, 10_000] {
+        let fx = Fx::large(n);
+        let t = Instant::now();
+        let first = fx.scan();
+        let first_took = t.elapsed();
+        let t = Instant::now();
+        let again = fx.scan();
+        let again_took = t.elapsed();
+        println!(
+            "{n} files: first scan {first_took:?} ({} done, {} batches), second scan {again_took:?} ({} done)",
+            first.done, first.batches, again.done
+        );
+    }
+}

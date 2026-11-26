@@ -12,6 +12,9 @@ pub fn folder_unreadable(path: impl std::fmt::Display, err: impl std::fmt::Displ
     format!("Can't read the folder {path}: {err}")
 }
 
+/// `no_album`: a command needs an open album and there is none.
+pub const NO_ALBUM: &str = "No album is open.";
+
 /// What was being done, for an `internal` error while opening the album
 /// database ("Something went wrong while ...").
 pub const OPENING_DATABASE: &str = "opening the album database";

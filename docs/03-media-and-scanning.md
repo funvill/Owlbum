@@ -450,7 +450,7 @@ Placeholders on an error row: `kind` and `format` from the extension's registry 
 
 Error rows are **left out of every query result**, like missing rows, and are counted and listed in the scan report. Their typed info and tags are kept, so a photo that was briefly unreadable (a drive glitch) loses nothing when it reads again.
 
-A file modified within the last 2 seconds that fails to decode is assumed to be still being written. It is not recorded as an error; it is tried again 2 seconds later, up to 5 times.
+A file modified within the last 2 seconds that fails to decode is assumed to be still being written. It is not recorded as an error; it is tried again 2 seconds later, up to 5 times. If the fifth try still fails, the error is recorded as usual.
 
 ### Finish
 
@@ -464,7 +464,7 @@ After the last write the scanner emits the final `scan_progress` and starts the 
 
 ### `scan_version`
 
-`SCAN_VERSION` is an integer constant in `owlbum-core`, starting at 1. It is raised in the same commit as any change to the metadata rules, the analysis formulas or the placeholders. On the next scan every row with an older value is treated as changed: facts and analysis are read again. Thumbnails that already exist under the same `thumb_key` are not encoded again.
+`SCAN_VERSION` is an integer constant in `owlbum-core`, starting at 1. Until the [image analysis](#image-analysis) formulas land (issue #10) the pixels pass stores `analysis = '{}'`, so the issue that adds them must raise it. It is raised in the same commit as any change to the metadata rules, the analysis formulas or the placeholders. On the next scan every row with an older value is treated as changed: facts and analysis are read again. Thumbnails that already exist under the same `thumb_key` are not encoded again.
 
 ### Concurrency and writes
 
@@ -472,7 +472,7 @@ After the last write the scanner emits the final `scan_progress` and starts the 
 - Scan threads never touch the database for writing. They send results to the album's writer thread.
 - The writer collects scan results and commits them in one transaction when **200 rows** are waiting or **250 ms** have passed since the first waiting row, whichever comes first. The FTS `search` table is updated in the same transaction.
 - A typed change (a star, a note) is always its own transaction. It waits for at most one scan batch.
-- The compare stage reads `id, rel_path, size, mtime_ms, scan_version, scan_error, missing, file_key` for the scope in one query into a hash map. It never queries per file.
+- The compare stage reads `id, rel_path, size, mtime_ms, scan_version, scan_error, missing, file_key, analysis IS NULL, format, width, height` for the scope in one query (the last four tell a waiting row and give its pixels job its cost) into a hash map. It never queries per file.
 - Two requests for the same photo's pixels (a scan job and an on-demand thumbnail) share one decode: work in flight is keyed by photo id.
 
 ### Progress and change events
@@ -801,7 +801,7 @@ Rust tests in `owlbum-core`, using albums made by `owlbum-fixtures` in a tempora
 | Walker | Dotfiles, dot-folders, `._` files, `.owlbum` and the named system folders are skipped. `natural_cmp` order, independent of locale. Links to files and folders (and a junction on Windows) are skipped and counted. An unreadable subfolder is reported and the rest listed; an unreadable root fails. `.heic` and `.avif` are counted and get no row. A nested album root is skipped and reported. |
 | Scanner: change detection | A second scan reads no file (counting handler). Only a file whose size or modified time changed is read again, keeping its id and typed info. A raised `SCAN_VERSION` re-reads every row and encodes no thumbnail that exists. |
 | Scanner: identity | Rename, move, and case-only rename keep the row and its thumbnails. Two new files with one candidate's key: the first in walker order takes it. A delete seen by one scan and the matching create seen by the next still keep the row. A deleted file becomes missing; putting it back clears the flag. Nothing is marked missing after a cancelled scan, under an unreadable subfolder, or with an unreadable root. |
-| Scanner: errors | A corrupt file gets a `decode` row, is left out of results, is listed, and is retried on Rescan but not on an automatic scan. An `io` error is retried every scan. A file still being written is retried, not recorded. |
+| Scanner: errors | A corrupt file gets a `decode` row, is left out of results, is listed, and is retried on Rescan but not on an automatic scan. An `io` error is retried every scan. A file still being written is retried, not recorded, until its retries run out. |
 | Scanner: running | Writes arrive in transactions of at most 200 rows; a typed change during a scan commits within one batch. A cancelled scan leaves waiting rows that the next scan finishes without repeating the facts pass. A scoped scan touches no row outside the scope. A view-only album scans and writes nothing in the album folder. `scan_progress` never exceeds 10 a second and ends with `finished: true`. |
 | Metadata | Table tests: date strings (both separators, the `T` form, year `0000`, month 13, the order of the three tags); the camera rule's five cases; the lens rule; numeric fields (zero, negative, zero denominator, several ISO values, flash bit); GPS (signs, out of range, 0, 0); a video date with its own offset. |
 | Analysis | Hand-made images with known answers: flat grey (sharpness 0, saliency 0.5), black and white (clipping 1.0), a ramp (a known dHash), an off-centre bright spot. 1% transparent pixels is `transparent`, 0.1% is not. The same file gives byte-identical JSON twice, and the same JSON with the cache above and below 70% of its limit. |

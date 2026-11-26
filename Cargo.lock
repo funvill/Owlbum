@@ -2652,6 +2652,7 @@ version = "0.1.0"
 dependencies = [
  "muda",
  "owlbum-core",
+ "owlbum-fixtures",
  "serde",
  "serde_json",
  "tauri",

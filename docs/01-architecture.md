@@ -1,0 +1,258 @@
+# Architecture
+
+## At a glance
+
+```text
+┌───────────────────────────── Owlbum (one process, Tauri 2) ─────────────────────────────┐
+│                                                                                          │
+│  Webview (WebView2 on Windows, WebKitGTK 4.1 on Linux)                                   │
+│   React + TypeScript page: grid, preview, viewer, details, filters, map, settings       │
+│   It holds view state only: what is selected, what is scrolled into view, what is open.  │
+│        │ invoke (commands)        ▲ events             ▲ owlbum:// (images)             │
+│        ▼                          │                    │                                 │
+│  Shell crate `owlbum` (src-tauri)                                                        │
+│   commands, events, the owlbum:// protocol, menus, dialogs, single instance,             │
+│   drag-out, trash, clipboard, reveal, updater, logs                                      │
+│        │ plain Rust calls                                                                │
+│        ▼                                                                                 │
+│  Core crate `owlbum-core` (no Tauri dependency)                                          │
+│   album database · scanner · media registry · thumbnails · query engine ·                │
+│   photo score and stacks · edit model and renderer · tagging queue and models            │
+│        │                                         │                                       │
+└────────┼─────────────────────────────────────────┼───────────────────────────────────────┘
+         ▼                                         ▼
+  Album folder                              App data folder (a cache)
+   photo files (read only)                   thumbs/  models/  app.sqlite  logs/
+   .owlbum/owlbum.sqlite (the truth)
+```
+
+There is one operating-system process plus the webview's own helper processes. Long work (scanning, thumbnailing, tagging, rendering edits) runs on Rust worker threads, never on the thread that answers the page.
+
+## Repository layout
+
+```text
+Owlbum/
+  Cargo.toml              workspace
+  crates/
+    owlbum-core/          all logic; testable without a window
+    owlbum-fixtures/      generates the synthetic test album (no personal photos in the repo)
+  src-tauri/              the shell crate `owlbum`: Tauri builder, commands, protocol, plugins
+    capabilities/         what the window is allowed to call
+    whats-new.json        release notes bundled with the program
+  ui/                     the React page (Vite, TypeScript, Vitest)
+    src/api/              the only module that calls Tauri; everything else imports from here
+    src/api/fake/         the in-memory backend used by page tests
+    src/text/             every interface string shown by the page
+    src/keys/keymap.json  the one table of keyboard shortcuts
+  e2e/                    the thin WebdriverIO smoke test, run by hand before a release
+  scripts/                check scripts (Windows and Linux) and the notices generator
+  site/                   the marketing page (static HTML), deployed to GitHub Pages by a workflow
+  docs/                   these documents; docs/archive holds the old program's
+  .github/workflows/      release.yml (installers on a tag), pages.yml (site)
+  LICENSE                 MIT
+```
+
+**Interface text has two homes.** Text the page shows lives in `ui/src/text/`. Text that Rust produces (error messages in `AppError`, menu labels, native dialog wording) lives in one `text` module in `owlbum-core`. No sentence for the user is written anywhere else.
+
+## The two Rust crates
+
+**`owlbum-core`** holds everything that can be tested without a window. It has no dependency on Tauri. Its public surface is a small set of types: `Album` (an open album: database, scanner, query engine), `AppData` (cache, settings, models), and plain functions for pure logic (score, stacks, the edit model, query parsing). Every feature's rules are implemented and tested here first.
+
+**`owlbum`** (in `src-tauri/`) is thin. Each Tauri command validates its arguments, calls one core function, and maps the result or error to a serialisable reply. It also owns what only a desktop shell can do: windows, menus, native dialogs, drag-out, trash, clipboard, reveal in file manager, the updater and single-instance handling.
+
+The rule for where code goes: if it could be tested with `cargo test` and a temp folder, it belongs in `owlbum-core`.
+
+**The album index.** An open album keeps a compact in-memory copy of the columns that filters, sorts, scores and stacks need (one small record per photo). It is built when the album opens, patched by the writer thread on every change, and replaced after a scan. Column filters, facets, sorting and stacking run over this index; full-text search and people and label lookups run in SQL. "Rust owns the data" means both. [Organising](05-organising.md) specifies the index.
+
+**Undo** also lives in Rust: each changing command records an undo step on the open album. The page only asks for `album_undo`.
+
+## The page
+
+The page is React 19 and TypeScript, built with Vite. State is held in one small store (zustand). It shows the photos three ways: grid, timeline and map. The map uses Leaflet with marker clustering.
+
+The page never holds the whole album. It holds:
+
+- the current query (filter, sort, search text, view, stack setting);
+- the result's size and a window of rows around what is on screen;
+- the selection, as photo ids;
+- the detail record of the selected photo;
+- interface state (panel widths, open sections, dialogs).
+
+`ui/src/api/` is the only module that imports `@tauri-apps/api`. Page tests replace it with a fake. No component calls `invoke` directly.
+
+## How the page and Rust talk
+
+### Commands
+
+A command is a request with a reply (`invoke`). Names are `snake_case`, grouped by a prefix. Each part's "Commands" section defines its commands in full; this table says which prefix is for what and which part owns it.
+
+| Prefix | Purpose | Owner | Examples |
+|---|---|---|---|
+| `album_` | Open, close, status, scan, undo, tidy, people list | [Browsing](04-browsing.md) (`album_open`, `album_status`), [Media and scanning](03-media-and-scanning.md), [Organising](05-organising.md) | `album_open`, `album_close`, `album_status`, `album_rescan`, `album_undo`, `album_tidy_list` |
+| `query_` | Ask for rows | [Organising](05-organising.md) | `query_run`, `query_window`, `query_locate`, `query_facets`, `query_parse` |
+| `photo_` | Read or change one or more photos | [Browsing](04-browsing.md), [Organising](05-organising.md) | `photo_detail`, `photo_set_info`, `photo_nudge`, `photo_histogram` |
+| `edit_` | The edit model, rendering and saving | [Editing and file actions](06-editing-and-file-actions.md) | `edit_plan`, `edit_set`, `edit_turn`, `edit_save_to_file`, `edit_save_as` |
+| `file_` | File actions | [Editing and file actions](06-editing-and-file-actions.md) | `file_trash`, `file_reveal`, `file_copy_image`, `file_copy_files`, `file_start_drag` |
+| `tagging_` | Models and the queue | [Tagging](07-tagging.md) | `tagging_models`, `tagging_download`, `tagging_pause`, `tagging_regenerate` |
+| `search_` | Search by meaning | [Tagging](07-tagging.md) | `search_meaning` |
+| `app_` | Start-up, settings, recent albums, session, updates, cache | [Desktop, release and tests](08-desktop-and-release.md), [Browsing](04-browsing.md) | `app_startup`, `app_settings_get`, `app_settings_set`, `app_check_updates` |
+
+**Errors.** Every command returns `Result<T, AppError>`. `AppError` serialises as `{ "code": "<stable_code>", "message": "<sentence for the user>", "details"?: { … } }`. The page shows `message` and branches only on `code`; `details` carries structured facts a dialog needs (for example the other computer's name and last-seen time for a stale lock). Codes are an enum in `owlbum-core`; adding one is a code change, never a string typed at the call site. Codes used by more than one part:
+
+| Code | Meaning |
+|---|---|
+| `photo_not_found` | The id is not a photo of the open album. |
+| `query_expired` | The token was dropped; run the query again. |
+| `view_only` | The album cannot be changed right now. |
+| `no_album` | No album is open. |
+| `bad_query` | The query could not be understood. |
+| `scan_running` | The action must wait for the scan. |
+| `album_unreachable` | The album folder cannot be reached (an unplugged drive). |
+| `not_a_folder`, `folder_unreadable` | The path given to `album_open` cannot be used. |
+| `setting_out_of_range` | `app_settings_set` was given a value outside the setting's range. |
+
+**Photo identity.** The page refers to a photo by its integer `id` from the album database, never by a path. Rust resolves ids to paths. A command given an unknown id answers `photo_not_found`. Because the page cannot name a path, it cannot ask Rust to touch a file outside the open album. The only command that takes a path is `album_open`. Rust does send paths to the page for display (the album root, a photo's full path in the details panel); the page never sends one back.
+
+### The query model
+
+Opening a result is two steps, so that 100,000 photos never cross to the page at once.
+
+1. `query_run(query, keep?) → QueryResult`. Rust runs the filter, sort, search and stacking, and keeps the ordered list of ids in memory under a `token`. The result carries the token, the album revision, the counts the interface shows ("Showing X of Y"), the parsed chips, timeline groups when asked for, and where the current photo landed (`keep` names the photo and selection to follow).
+2. `query_window(token, offset, limit) → Row[]`. The page asks for the rows it is about to show. A `Row` is small: id, relative path, thumbnail key, aspect ratio, star, hidden, score, stack info, edit plan (or null), kind and duration.
+
+`query_locate(token, id)` finds where a photo sits in a result, for keeping the selection in view. It answers an index, or says the photo is folded inside a stack, or null. `search_meaning(token)` appends photos found by meaning to the end of a token's list and answers `{ count, photos, meaning_start }`. A re-run of the query makes a new token without that segment until `search_meaning` is called again; in between, a current photo that was inside the segment counts as gone.
+
+**One definition.** [Organising](05-organising.md) owns the exact shapes of `Query`, `QueryResult` and `Row`. Other parts add fields there and refer to it; they do not redefine them.
+
+When the album changes, Rust emits `album_changed` with a revision number and a reason, and the page re-runs its query when the reason can affect what it shows. Rust keeps the last 4 tokens and drops older ones; a dropped token answers `query_expired` and the page re-runs.
+
+### Events
+
+An event is pushed from Rust to the page. There is no polling anywhere.
+
+| Event | Payload | When |
+|---|---|---|
+| `scan_progress` | `{ phase, found, done, failed, finished, cancelled }` | While a scan runs; at most 10 per second. `phase` is `walking`, `reading` or `idle`. |
+| `album_changed` | `{ revision, reason, rekeyed? }` | Rows were added, removed or changed. |
+| `tagging_progress` | `{ total, done, failed, paused, running, not_working, problem }` | While tagging runs, and on any state change. |
+| `download_progress` | `{ model, received, total, error, finished }` | While a model downloads. |
+| `edit_save_progress` | `{ done, total, current }` | While Save all runs. `current` is the id of the photo being saved. |
+| `open_folder` | `{ path }` | A second launch, the File menu, or a folder dropped on the window asked for a folder. A folder given on the command line at start is returned by `app_startup` instead, so it cannot arrive before the page listens. |
+| `app_menu` | `{ item }` | A menu item that the page carries out was chosen. |
+| `app_closing` | `{}` | The window is about to close; the page finishes what it is doing and answers with `app_close_ready`. |
+| `app_fatal` | `{ title, message, advice, details }` | Something failed that the page should show before the program stops. |
+| `update_state` | `{ state, version?, percent? }` | The updater's state changed. `state` is `unavailable`, `idle`, `checking`, `available`, `downloading`, `ready` or `installing`. |
+
+`album_changed.reason` is one of:
+
+| Reason | Cause | The page re-runs its query |
+|---|---|---|
+| `scan` | A scan added, changed or removed rows. Sent in batches while a scan runs. | Yes. |
+| `watch` | The folder watcher saw files change. | Yes. |
+| `info` | Typed info changed (star, hide, notes, people, date, place, score nudge). | Yes. |
+| `edit` | A photo's edit changed. | Only to refresh rows on screen. |
+| `saved` | An edit was saved into a file or as a copy. | Yes. |
+| `trashed` | Photos were moved to the Recycle Bin or Trash. | Yes. |
+| `tidy` | Missing rows were removed. | No. |
+| `facts` | Album-wide facts (bursts, quality) were recomputed. | Yes. |
+| `tags` | Tagging wrote results. Coalesced to one every 5 seconds. | Only when the query uses search text or a keyword or object filter. |
+| `status` | The album's state changed (lock, view-only, conflict copy). | No; the page reads `album_status`. |
+
+`rekeyed` lists photo ids whose file content changed, so their thumbnails and tags are stale.
+
+### The `owlbum://` protocol
+
+Images reach the page through a custom URI scheme registered with the asynchronous handler, so decoding never blocks the main thread.
+
+| URL | Returns | Caching |
+|---|---|---|
+| `owlbum://thumb/<thumb_key>/s` | 512 px JPEG | Immutable; the key changes when the file changes. |
+| `owlbum://thumb/<thumb_key>/m` | 1600 px JPEG | Immutable. |
+| `owlbum://full/<photo_id>?v=<thumb_key>` | Full-size upright JPEG for zooming, cached on disk | One hour. |
+| `owlbum://original/<photo_id>?v=<thumb_key>` | The file's own bytes, for animated GIF and WebP | One hour. |
+| `owlbum://video/<photo_id>` | The video file, with range requests | None. |
+
+On Windows the webview reaches a custom scheme as `http://owlbum.localhost/…`; the page builds addresses through one helper in `ui/src/api/` so no component cares.
+
+The handler serves only thumbnails of the open album and photos of the open album. A thumbnail asked for before the scanner has made it is made on demand. There is no address for an edited picture: the page draws edits itself by applying the edit plan to a thumbnail (see [Editing and file actions](06-editing-and-file-actions.md)). Video delivery on Linux has a known Tauri problem with custom schemes; [Media and scanning](03-media-and-scanning.md) covers the fallback.
+
+## Threads
+
+| Work | Where it runs |
+|---|---|
+| Commands | Tauri's async runtime. A command that touches the database or a file runs on the blocking pool. |
+| Scanning and thumbnails | A scan pool sized to the logical processors minus one, at least one. |
+| Database writes | One writer thread per open album; everything that writes sends it a message. Reads use a small pool of read-only connections. |
+| Tagging | One dedicated thread. Model runs use half the logical processors. A search's text is embedded on the command's own blocking thread, so a search never waits behind a photo being described. |
+| Model downloads and hashing | One download thread. |
+| Edit rendering | The blocking pool. |
+
+One writer per album means writes never collide inside the program, and "database is locked" can only come from another computer.
+
+## Network rules
+
+Owlbum makes four kinds of network request. Map tiles and model downloads are off until the user asks for them; the update check is on by default and can be turned off; feedback opens the user's own browser.
+
+| Use | Made by | Host | Turned on by |
+|---|---|---|---|
+| Map tiles | The webview | `tile.openstreetmap.org` | Choosing "Load maps" on the Map tab. |
+| Model downloads | Rust | `huggingface.co`, `*.huggingface.co`, `*.hf.co`; HTTPS only, default port, no credentials | Choosing Download in Settings. |
+| Update check | Rust (the updater) | `github.com` and its release-asset hosts | On by default, once a day; can be turned off in Help. The first start says so. |
+| Feedback | The user's own browser | `github.com` | Choosing Help > Send feedback. |
+
+The webview is restricted by policy:
+
+- A Content-Security-Policy with `default-src 'self'`; images from `owlbum:`, `data:`, `blob:` and the tile host only; media from `owlbum:` only; bundled fonts only; inline styles allowed (tile positions and the map need them); and connections to Tauri's IPC only. The exact string, including the Windows forms of the custom scheme, is in [Desktop, release and tests](08-desktop-and-release.md).
+- Navigation away from the app's own page is refused, and new windows are refused.
+- The page has no general HTTP capability; it has no way to ask Rust to fetch an arbitrary URL.
+
+This is a policy, not an interception layer. Tauri offers no way to inspect and cancel every webview request, so Owlbum does not claim a proof that nothing else is contacted. A page test asserts that the built page contains no remote URL other than the tile host.
+
+Two more network facts, stated in About and on the site: the Windows installer may download Microsoft's WebView2 runtime if the computer lacks it, and tile requests carry the webview's user agent with `Owlbum/<version>` added.
+
+## Capabilities
+
+Tauri capabilities grant the one window only the app's own commands and events. **No plugin is granted to the page.** Every plugin (dialog, drag, clipboard, opener, updater) is called from Rust behind an Owlbum command that takes photo ids. In particular a drag is started from Rust, never by the drag plugin's own page command, which takes paths.
+
+## Names and folders
+
+- The installed program's identifier is `com.funvill.owlbum`. A development build uses `com.funvill.owlbum.dev`, so its single-instance lock and data never collide with an installed copy.
+- Owlbum computes its own app data path (see [Data](02-data.md#the-app-data-folder)) and does not use Tauri's identifier-named folders. The webview's own data goes in `<app data>/webview`.
+
+## Dependencies chosen
+
+These are the starting choices. A prototype may replace one; the replacement is recorded on the feature's issue.
+
+| Need | Choice | Notes |
+|---|---|---|
+| Database | `rusqlite` with bundled SQLite, FTS5 enabled | |
+| JPEG decode and resize | `zune-jpeg`, `fast_image_resize`; `image` for other formats | |
+| JPEG encode | `mozjpeg` or `image`'s encoder | Chosen by measurement in the thumbnail work. |
+| EXIF and video metadata | `nom-exif` | Read only. |
+| JPEG XL | `jxl-oxide` | |
+| Camera RAW | `rawler` (LGPL-2.1) | DNG support and fast preview extraction are checked in the RAW prototype. |
+| Model runtime | `ort` (ONNX Runtime), `tokenizers` | `usls` is tried first for Florence-2 and CLIP. How the runtime library is shipped is decided by the tagging prototype. |
+| Model downloads | `reqwest` (rustls, redirects handled by hand), `sha2` | |
+| Colour profiles | `moxcms` or `lcms2` | Converting embedded profiles to sRGB. Chosen in the thumbnail work. |
+| EXIF writing | `little_exif` | Only when an edit is saved into a file: keep the block, reset orientation. |
+| Video thumbnails and facts | The `windows` crate (shell thumbnails, Media Foundation); `gstreamer` linked to the system libraries on Linux | System codecs only. |
+| Country outlines | Natural Earth low-resolution outlines, bundled (public domain) | For the Country row and country search. |
+| Logging | `tracing` with a file appender | |
+| Licence notices | `cargo-about` plus a small script for npm packages | |
+| Folder watching | `notify` | |
+| Trash | `trash` | |
+| Drag-out | `tauri-plugin-drag` | Linux reliability is checked by a prototype. |
+| Clipboard | `tauri-plugin-clipboard-manager` for text and one image; platform code for a list of files | |
+| Reveal in file manager | `tauri-plugin-opener` | |
+| Updates | `tauri-plugin-updater` | Needs a signing key, created at final review. |
+| Single instance | `tauri-plugin-single-instance` | |
+| Native dialogs | `tauri-plugin-dialog` | |
+| Page | React, TypeScript, Vite, zustand, Leaflet, `leaflet.markercluster`, Vitest, Testing Library, ESLint | |
+| Smoke test | WebdriverIO with `tauri-driver` | Run by hand before a release. |
+
+## What is deliberately absent
+
+- No local HTTP server and no open port.
+- No telemetry and no crash reporter in version 1.
+- No plug-ins loaded at run time. "Format plug-in" means a module compiled into the program.
+- No second program sharing data with Owlbum.

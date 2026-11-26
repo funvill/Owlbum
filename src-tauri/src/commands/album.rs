@@ -7,6 +7,7 @@ use crate::session::{Session, open_album};
 use crate::{area, command};
 use owlbum_core::album::{Album, AlbumChanged, OpenOptions};
 use owlbum_core::appdata::AppData;
+use owlbum_core::info::typed::{self, PersonCount};
 use owlbum_core::scan::report::{ScanErrors, ScanReport, UnsupportedFiles};
 use owlbum_core::scan::{AlbumOpened, AlbumStatus, Request, ScanProgress};
 use owlbum_core::{AppError, text};
@@ -17,6 +18,7 @@ area! {
     commands: [
         album_close,
         album_open,
+        album_people,
         album_rescan,
         album_scan_cancel,
         album_scan_errors,
@@ -170,4 +172,14 @@ fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))
+}
+
+command! {
+    /// The names used in the album, with the number of photos each is on,
+    /// most used first: the People field's suggestions
+    /// (docs/05-organising.md, "People suggestions").
+    pub async fn album_people(; session: State<'_, Session>) -> Vec<PersonCount> {
+        let scanner = session.queries()?.0;
+        off_main(text::photo::READING_DETAIL, move || typed::album_people(scanner.album())).await
+    }
 }

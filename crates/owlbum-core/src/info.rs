@@ -6,3 +6,5 @@ pub mod country;
 pub mod detail;
 /// One photo's histogram (`photo_histogram`, #23).
 pub mod histogram;
+/// Typed info and the album's people (`photo_set_info`, `album_people`, #24).
+pub mod typed;

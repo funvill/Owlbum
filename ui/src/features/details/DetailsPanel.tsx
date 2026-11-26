@@ -15,7 +15,8 @@ import { useAlbumStore, viewOnlyReason } from "../album";
 import { cameraRows, factRows, formatCoordinates, type FactRow } from "./facts";
 import { HistogramSection } from "./HistogramChart";
 import { SECTION_IDS, sectionShown, useSections } from "./sections";
-import { DateField, LocationField, NotesFields, PeopleField } from "./typed";
+import { DateField, LocationField, NotesFields, PeopleField, useInfoSaver } from "./typed";
+import type { InfoSaver } from "./typed/save";
 import { useDetail, type DetailState } from "./useDetail";
 import "./DetailsPanel.css";
 
@@ -117,7 +118,15 @@ function CameraFacts({ detail }: { detail: PhotoDetail }) {
   return <Rows rows={rows} />;
 }
 
-function PlaceFacts({ detail, disabledReason }: { detail: PhotoDetail; disabledReason: string | null }) {
+function PlaceFacts({
+  detail,
+  disabledReason,
+  saver,
+}: {
+  detail: PhotoDetail;
+  disabledReason: string | null;
+  saver: InfoSaver;
+}) {
   const { lat, lon, country } = detail.place;
   const rows: FactRow[] = [];
   if (lat !== null && lon !== null) {
@@ -127,7 +136,7 @@ function PlaceFacts({ detail, disabledReason }: { detail: PhotoDetail; disabledR
   return (
     <>
       {rows.length > 0 && <Rows rows={rows} />}
-      <LocationField detail={detail} disabledReason={disabledReason} />
+      <LocationField detail={detail} disabledReason={disabledReason} saver={saver} />
     </>
   );
 }
@@ -136,12 +145,14 @@ function SectionBody({
   id,
   detail,
   disabledReason,
+  saver,
 }: {
   id: SectionId;
   detail: PhotoDetail;
   disabledReason: string | null;
+  saver: InfoSaver;
 }) {
-  const typed = { detail, disabledReason };
+  const typed = { detail, disabledReason, saver };
   switch (id) {
     case "photo":
       return <PhotoFacts detail={detail} />;
@@ -166,13 +177,15 @@ function SectionBody({
 /** The panel's body for one photo. Keyed by the photo, so its local state starts again for each. */
 function Body({ detail, sections }: { detail: PhotoDetail; sections: ReturnType<typeof useSections> }) {
   const disabledReason = useAlbumStore((s) => (s.status === null ? null : viewOnlyReason(s.status)));
+  const saver = useInfoSaver(detail.id);
   return (
     <div className="ow-details__body">
       {/* The score card (#28) goes first. */}
       {disabledReason !== null && <p className="ow-details__note">{t.viewOnlyNote}</p>}
+      {saver.error !== null && <p className="ow-details__note ow-details__note--error">{saver.error}</p>}
       {SECTION_IDS.filter((id) => sectionShown(id, detail)).map((id) => (
         <Section key={id} id={id} open={sections.isOpen(id)} onToggle={() => sections.toggle(id)}>
-          <SectionBody id={id} detail={detail} disabledReason={disabledReason} />
+          <SectionBody id={id} detail={detail} disabledReason={disabledReason} saver={saver} />
         </Section>
       ))}
     </div>

@@ -65,6 +65,7 @@ export function fakeStatus(folder: string, overrides: Partial<AlbumStatus> = {})
  * when no album is open.
  */
 export const albumHandlers: AreaHandlers<AlbumCommands> = {
+  album_people: () => [],
   album_open: ({ path }) => ({ status: fakeStatus(path), session: null }),
   album_close: () => null,
   album_status: () => null,

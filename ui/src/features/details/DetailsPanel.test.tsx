@@ -157,7 +157,7 @@ describe("DetailsPanel", () => {
     revision = 6;
     description = "Sunset over the lake";
     await act(async () => fake.emit("album_changed", { revision: 6, reason: "info", rekeyed: [] }));
-    await screen.findByText("Sunset over the lake");
+    await screen.findByDisplayValue("Sunset over the lake");
     expect(calls(fake, "photo_detail")).toHaveLength(2);
   });
 
@@ -335,13 +335,13 @@ describe("DetailsPanel", () => {
     await screen.findByText("This album is view-only, so nothing here can be changed.");
   });
 
-  it("shows people, description and notes read-only until typed info is built", async () => {
+  it("shows people, description and notes in their fields", async () => {
     setup(
       { id: 1 },
       { photo_detail: ({ id }) => fakeDetail(id, { people: ["Ann", "Bob"], description: "Tower", notes: null }) },
     );
     await screen.findByText("Ann");
     expect(screen.getByText("Bob")).toBeInTheDocument();
-    expect(screen.getByText("Tower")).toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue("Tower");
   });
 });

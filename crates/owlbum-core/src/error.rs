@@ -31,6 +31,10 @@ pub enum ErrorCode {
     FolderUnreadable,
     /// Something failed that the user cannot act on; the message says what.
     Internal,
+    /// `photo_set_info`: a typed date that is not a real date and time.
+    InvalidDate,
+    /// `photo_set_info`: a typed place out of range.
+    InvalidLocation,
     /// No album is open.
     NoAlbum,
     /// The path given to `album_open` is not a folder.

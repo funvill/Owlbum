@@ -66,13 +66,27 @@ export const detailsText = {
   coordinates: "Coordinates",
   placeName: "Place name",
 
-  // Typed info, shown read-only until #24 makes them fields
+  // Typed info (docs/04-browsing.md, "How typed fields save")
+  saved: "Saved",
+  location: "Location",
+  latitude: "Latitude",
+  longitude: "Longitude",
   people: "People",
-  noPeople: "No people named",
+  addName: "Add a name, press Enter",
+  suggestions: "Names used in this album",
   dateTaken: "Date and time taken",
+  datePlaceholder: "YYYY-MM-DD HH:MM",
+  useCameraDate: "Use the camera's date",
+  clearDate: "Clear the date",
   description: "Description",
   notes: "Notes",
-  empty: "None",
+  invalidDate: "That is not a valid date and time. Use YYYY-MM-DD HH:MM.",
+  latNumber: "Latitude must be a number.",
+  lonNumber: "Longitude must be a number.",
+  latRange: "Latitude must be between -90 and 90.",
+  lonRange: "Longitude must be between -180 and 180.",
+  bothNeeded: "Enter both latitude and longitude.",
+  nameNeedsPlace: "Add a latitude and longitude for this place, or clear the name.",
 };
 
 export type SectionId = keyof typeof detailsText.sections;

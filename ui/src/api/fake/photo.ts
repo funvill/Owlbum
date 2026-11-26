@@ -69,4 +69,5 @@ export function fakeHistogram(): Histogram {
 export const photoHandlers: AreaHandlers<PhotoCommands> = {
   photo_detail: ({ id }) => fakeDetail(id),
   photo_histogram: () => fakeHistogram(),
+  photo_set_info: ({ ids }) => ({ changed: ids, revision: 2 }),
 };

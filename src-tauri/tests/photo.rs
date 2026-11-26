@@ -166,3 +166,61 @@ fn an_edited_photos_histogram_is_the_files() {
         .unwrap();
     assert_eq!(f.histogram(id).unwrap(), before);
 }
+
+#[test]
+fn photo_set_info_saves_clears_and_tells_the_page() {
+    let f = fixture();
+    let fixture = owlbum_fixtures::trip(&f.tmp.path().join("trip")).unwrap();
+    f.open(&fixture.root);
+    let id = f.id_of("day1/lake.jpg");
+    let (send, heard) = mpsc::channel::<serde_json::Value>();
+    f.app.listen_any("album_changed", move |event| {
+        let _ = send.send(serde_json::from_str(event.payload()).unwrap());
+    });
+
+    let set = |patch: serde_json::Value| {
+        invoke(
+            &f.window,
+            "photo_set_info",
+            json!({ "ids": [id], "patch": patch }),
+        )
+    };
+    let r: serde_json::Value =
+        set(json!({ "notes": "a lake", "description": "Calm", "people": ["Ann"] }))
+            .unwrap()
+            .deserialize()
+            .unwrap();
+    assert_eq!(r["changed"], json!([id]));
+    let event = loop {
+        let e = heard
+            .recv_timeout(Duration::from_secs(10))
+            .expect("album_changed is sent");
+        if e["reason"] == "info" {
+            break e;
+        }
+    };
+    assert_eq!(event["revision"], r["revision"]);
+
+    // An absent field is left alone; a null clears.
+    set(json!({ "notes": null })).unwrap();
+    let d = f.detail(id).unwrap();
+    assert_eq!(d.notes, None);
+    assert_eq!(d.description.as_deref(), Some("Calm"));
+    assert_eq!(d.people, ["Ann"]);
+
+    let people: serde_json::Value = invoke(&f.window, "album_people", json!({}))
+        .unwrap()
+        .deserialize()
+        .unwrap();
+    assert_eq!(people, json!([{ "name": "Ann", "count": 1 }]));
+
+    let err = set(json!({ "date_override": "2024-02-30" })).unwrap_err();
+    assert_eq!(err["code"], "invalid_date");
+    let err = invoke(
+        &f.window,
+        "photo_set_info",
+        json!({ "ids": [987_654], "patch": { "notes": "x" } }),
+    )
+    .unwrap_err();
+    assert_eq!(err["code"], "photo_not_found");
+}

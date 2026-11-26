@@ -858,7 +858,7 @@ The People field in the details panel suggests names already used in the album. 
 | Scope | The whole album, even in a scoped open, so a name is spelled the same way everywhere. |
 | Order | Most used first; ties in the natural order. |
 | In the field | Names already on the photo are left out, ignoring case. Typing narrows the list to names with a word that starts with the typed text, ignoring case and accents. At most 8 are shown. |
-| Spelling | Picking a suggestion uses the stored spelling. Typing a name that differs only in case from a stored one also uses the stored spelling: the first spelling wins. |
+| Spelling | Picking a suggestion uses the stored spelling. Typing a name that differs only in case from a stored one also uses the stored spelling: the first spelling wins. Case is compared in full Unicode ("Émile" and "émile" are one person), by Rust before it writes, because SQLite's `NOCASE` folds only ASCII. |
 | Clean-up | When the last photo loses a name, the writer deletes that name from `people`. |
 
 The `person:` query word reads the same list.

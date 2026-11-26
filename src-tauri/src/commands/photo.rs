@@ -3,15 +3,17 @@
 use crate::commands::off_main;
 use crate::session::Session;
 use crate::{area, command};
+use owlbum_core::album::{AlbumChanged, ChangeReason};
 use owlbum_core::info::detail::{self, PhotoDetail};
 use owlbum_core::info::histogram::{self, Histogram};
+use owlbum_core::info::typed::{self, InfoChanged, InfoPatch};
 use owlbum_core::thumbs::{Thumbs, lookup};
 use owlbum_core::{AppError, ErrorCode, text};
 use tauri::{AppHandle, Manager, Runtime, State};
 
 area! {
     prefix: "photo",
-    commands: [photo_detail, photo_histogram],
+    commands: [photo_detail, photo_histogram, photo_set_info],
     events: [],
 }
 
@@ -49,5 +51,32 @@ command! {
             histogram::of_photo(&thumbs, &photo)
         })
         .await
+    }
+}
+
+command! {
+    /// Changes typed info (description, notes, people, date, place) of the
+    /// photos `ids` (docs/04-browsing.md, "How typed fields save"). A
+    /// field left out of `patch` is left alone; a null clears it. Answers
+    /// the photos whose values changed and the album's revision, and sends
+    /// `album_changed` with reason `info` when any changed. Errors:
+    /// `view_only`, `photo_not_found`, `invalid_date`, `invalid_location`.
+    pub async fn photo_set_info<R: Runtime>(ids: Vec<i64>, patch: InfoPatch; app: AppHandle<R>) -> InfoChanged {
+        let scanner = app.state::<Session>().queries()?.0;
+        let changed = off_main(text::album::WRITING_DATABASE, move || {
+            typed::set_info(scanner.album(), ids, patch)
+        })
+        .await?;
+        if !changed.changed.is_empty() {
+            let _ = crate::events::emit(
+                &app,
+                &AlbumChanged {
+                    revision: changed.revision,
+                    reason: ChangeReason::Info,
+                    rekeyed: Vec::new(),
+                },
+            );
+        }
+        Ok(changed)
     }
 }

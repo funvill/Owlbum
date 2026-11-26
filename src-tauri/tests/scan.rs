@@ -7,6 +7,7 @@ use std::time::Duration;
 
 use common::invoke;
 use owlbum_core::album::{Album, OpenOptions};
+use owlbum_core::scan::report::{ScanErrors, ScanReport, UnsupportedFiles};
 use owlbum_core::scan::{ScanPhase, ScanProgress};
 use tauri::test::{MockRuntime, mock_builder};
 use tauri::{Listener, Manager};
@@ -48,6 +49,62 @@ fn rescan_without_an_album_answers_no_album() {
 fn cancel_without_an_album_is_not_an_error() {
     let (_app, window) = app_window();
     invoke(&window, "album_scan_cancel", serde_json::json!({})).expect("no error");
+}
+
+#[test]
+fn the_report_commands_without_an_album_answer_no_album() {
+    let (_app, window) = app_window();
+    let page = serde_json::json!({ "offset": 0, "limit": 10 });
+    for (command, args) in [
+        ("album_scan_report", serde_json::json!({})),
+        ("album_scan_errors", page.clone()),
+        ("album_unsupported", page),
+    ] {
+        let err = invoke(&window, command, args).unwrap_err();
+        assert_eq!(err["code"], "no_album", "{command}");
+    }
+}
+
+#[test]
+fn the_report_commands_answer_from_the_last_scan() {
+    let tmp = tempfile::tempdir().unwrap();
+    let fixture = owlbum_fixtures::extras(&tmp.path().join("extras")).unwrap();
+    let (app, window) = app_window();
+    let events = progress_events(&app);
+    let album = Album::open(&fixture.root, &OpenOptions::default()).unwrap();
+    owlbum_lib::session::open_album(app.handle(), album);
+    next_finished(&events);
+
+    let report: ScanReport = invoke(&window, "album_scan_report", serde_json::json!({}))
+        .unwrap()
+        .deserialize()
+        .unwrap();
+    assert_eq!(report.nested_album_count, 1);
+    assert_eq!(report.nested_albums[0].rel_path, "nested");
+    let unsupported_count = fixture
+        .files
+        .iter()
+        .filter(|f| f.kind == owlbum_fixtures::Kind::Unsupported)
+        .count();
+    assert_eq!(
+        report.unsupported.iter().map(|u| u.count as usize).sum::<usize>(),
+        unsupported_count
+    );
+
+    let page = serde_json::json!({ "offset": 0, "limit": 500 });
+    let unsupported: UnsupportedFiles = invoke(&window, "album_unsupported", page.clone())
+        .unwrap()
+        .deserialize()
+        .unwrap();
+    assert_eq!(unsupported.total as usize, unsupported_count);
+
+    let errors: ScanErrors = invoke(&window, "album_scan_errors", page)
+        .unwrap()
+        .deserialize()
+        .unwrap();
+    assert!(errors.total > 0);
+    assert!(errors.items.iter().all(|e| !e.code.is_empty()));
+    app.state::<owlbum_lib::session::Session>().close();
 }
 
 #[test]

@@ -269,7 +269,7 @@ fn read_folder(dir: &Path) -> std::io::Result<Vec<std::fs::DirEntry>> {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
     use std::fs;
 
@@ -466,7 +466,50 @@ mod tests {
     }
 
     #[test]
-    fn links_are_not_followed() {
+    fn system_folders_are_skipped_at_any_depth_without_case() {
+        let tmp = tempfile::tempdir().unwrap();
+        for rel in [
+            "$RECYCLE.BIN/a.jpg",
+            "x/System Volume Information/b.jpg",
+            "x/system volume information/c.jpg",
+            "@EADIR/d.jpg",
+            "y/z/@eaDir/e.jpg",
+            "#recycle/f.jpg",
+            "#Snapshot/g.jpg",
+            "__macosx/h.jpg",
+            // Only those exact names, and only folders.
+            "my @eaDir/ok1.jpg",
+            "__MACOSX-old/ok2.jpg",
+            "x/ok3.jpg",
+        ] {
+            touch(tmp.path(), rel);
+        }
+        let w = run(tmp.path(), "");
+        assert_eq!(
+            listed(&w),
+            ["__MACOSX-old/ok2.jpg", "my @eaDir/ok1.jpg", "x/ok3.jpg"]
+        );
+        // Left out silently: not links, not unreadable, not nested.
+        assert_eq!(w.links, 0);
+        assert!(w.unreadable.is_empty());
+        assert!(w.nested.is_empty());
+    }
+
+    #[test]
+    fn a_file_with_a_system_folder_name_is_not_a_folder() {
+        for name in SYSTEM_FOLDERS {
+            assert!(matches!(classify(name, Entry::Folder), Rule::Skip));
+            assert!(matches!(
+                classify(&name.to_uppercase(), Entry::Folder),
+                Rule::Skip
+            ));
+        }
+        assert!(matches!(classify("#recycle", Entry::File), Rule::Skip));
+        assert!(matches!(classify("@eaDir.jpg", Entry::File), Rule::List));
+    }
+
+    #[test]
+    fn links_are_not_followed_and_are_counted() {
         let tmp = tempfile::tempdir().unwrap();
         touch(tmp.path(), "real/a.jpg");
         let made = symlink_dir(&tmp.path().join("real"), &tmp.path().join("link"));
@@ -474,7 +517,211 @@ mod tests {
             eprintln!("skipped: this system will not make a link here");
             return;
         }
-        assert_eq!(listed(&run(tmp.path(), "")), ["real/a.jpg"]);
+        let w = run(tmp.path(), "");
+        assert_eq!(listed(&w), ["real/a.jpg"]);
+        assert_eq!(w.links, 1);
+    }
+
+    #[test]
+    fn a_link_to_a_file_is_skipped_and_counted() {
+        let tmp = tempfile::tempdir().unwrap();
+        touch(tmp.path(), "a.jpg");
+        if !symlink_file(&tmp.path().join("a.jpg"), &tmp.path().join("b.jpg")) {
+            eprintln!("skipped: this system will not make a file link here");
+            return;
+        }
+        let w = run(tmp.path(), "");
+        assert_eq!(listed(&w), ["a.jpg"]);
+        assert_eq!(w.links, 1);
+    }
+
+    /// A junction is the link most Windows users can make; the standard
+    /// library must report it as a link, or the walker would follow it.
+    #[cfg(windows)]
+    #[test]
+    fn a_junction_is_a_link_to_the_standard_library_and_is_counted() {
+        let tmp = tempfile::tempdir().unwrap();
+        touch(tmp.path(), "real/a.jpg");
+        let link = tmp.path().join("junction");
+        let made = std::process::Command::new("cmd")
+            .args(["/C", "mklink", "/J"])
+            .arg(&link)
+            .arg(tmp.path().join("real"))
+            .output()
+            .is_ok_and(|o| o.status.success());
+        assert!(made, "mklink /J needs no special rights");
+        assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        let entry = fs::read_dir(tmp.path())
+            .unwrap()
+            .map(Result::unwrap)
+            .find(|e| e.file_name() == "junction")
+            .unwrap();
+        assert!(entry.file_type().unwrap().is_symlink());
+        let w = run(tmp.path(), "");
+        assert_eq!(listed(&w), ["real/a.jpg"]);
+        assert_eq!(w.links, 1);
+    }
+
+    #[test]
+    fn a_nested_album_root_is_skipped_whole_and_recorded() {
+        let tmp = tempfile::tempdir().unwrap();
+        for rel in [
+            "inner/.owlbum/owlbum.sqlite",
+            "inner/a.jpg",
+            "inner/sub/b.jpg",
+            "deep/x/.owlbum/owlbum.sqlite",
+            "deep/x/d.jpg",
+            "deep/y.jpg",
+            // A `.owlbum` folder without the database is not an album.
+            "half/.owlbum/other.txt",
+            "half/e.jpg",
+            "c.jpg",
+        ] {
+            touch(tmp.path(), rel);
+        }
+        let w = run(tmp.path(), "");
+        assert_eq!(listed(&w), ["c.jpg", "deep/y.jpg", "half/e.jpg"]);
+        assert_eq!(w.nested, ["deep/x", "inner"]);
+        assert!(w.complete);
+    }
+
+    #[test]
+    fn the_walks_own_folder_is_never_nested() {
+        let tmp = tempfile::tempdir().unwrap();
+        for rel in [
+            ".owlbum/owlbum.sqlite",
+            "a.jpg",
+            "inner/.owlbum/owlbum.sqlite",
+            "inner/b.jpg",
+        ] {
+            touch(tmp.path(), rel);
+        }
+        let w = run(tmp.path(), "");
+        assert_eq!(listed(&w), ["a.jpg"]);
+        assert_eq!(w.nested, ["inner"]);
+        // Scoped into the nested root itself, it is the walk's own folder.
+        let w = run(tmp.path(), "inner");
+        assert_eq!(listed(&w), ["inner/b.jpg"]);
+        assert!(w.nested.is_empty());
+    }
+
+    #[test]
+    fn online_only_is_told_by_attributes() {
+        // The values from `windows-sys` (`Win32::Storage::FileSystem`).
+        const READONLY: u32 = 0x1;
+        const ARCHIVE: u32 = 0x20;
+        const REPARSE_POINT: u32 = 0x400;
+        const SPARSE_FILE: u32 = 0x200;
+        const OFFLINE: u32 = 0x1000;
+        const RECALL_ON_OPEN: u32 = 0x0004_0000;
+        const PINNED: u32 = 0x0008_0000;
+        const UNPINNED: u32 = 0x0010_0000;
+        const RECALL_ON_DATA_ACCESS: u32 = 0x0040_0000;
+        // A OneDrive file with "Free up space": a cloud placeholder.
+        assert!(is_online_only(
+            ARCHIVE | REPARSE_POINT | SPARSE_FILE | UNPINNED | RECALL_ON_DATA_ACCESS
+        ));
+        assert!(is_online_only(RECALL_ON_DATA_ACCESS));
+        assert!(is_online_only(OFFLINE));
+        assert!(is_online_only(ARCHIVE | OFFLINE));
+        assert!(is_online_only(RECALL_ON_OPEN));
+        // A cloud file kept on this device, pinned or not: walked and read.
+        assert!(!is_online_only(ARCHIVE | REPARSE_POINT | PINNED));
+        assert!(!is_online_only(ARCHIVE | REPARSE_POINT));
+        assert!(!is_online_only(ARCHIVE | READONLY | SPARSE_FILE));
+        assert!(!is_online_only(0));
+    }
+
+    #[test]
+    fn walk_knows_its_online_only_paths() {
+        let w = Walk {
+            online_only: ["a/b.jpg".to_owned()].into_iter().collect(),
+            ..Walk::default()
+        };
+        assert!(w.is_online_only("a/b.jpg"));
+        assert!(!w.is_online_only("a/c.jpg"));
+        assert!(!w.is_online_only("a"));
+    }
+
+    /// The real attribute on a real NTFS file: `attrib +O` sets OFFLINE,
+    /// which any user can set (RECALL_ON_DATA_ACCESS only a cloud driver
+    /// can, so it is pinned by the attribute test above).
+    #[cfg(windows)]
+    #[test]
+    fn an_offline_file_is_counted_online_only_and_not_listed() {
+        let tmp = tempfile::tempdir().unwrap();
+        for rel in [
+            "a.jpg",
+            "cloud/b.jpg",
+            "cloud/c.heic",
+            "cloud/notes.txt",
+            "cloud/d.jpg",
+        ] {
+            touch(tmp.path(), rel);
+        }
+        for rel in ["cloud", "cloud/b.jpg", "cloud/c.heic", "cloud/notes.txt"] {
+            set_offline(&absolute(tmp.path(), rel));
+        }
+        let w = run(tmp.path(), "");
+        // An offline folder is still walked; only files are left alone.
+        assert_eq!(listed(&w), ["a.jpg", "cloud/d.jpg"]);
+        assert!(w.is_online_only("cloud/b.jpg"));
+        assert_eq!(w.online_only.len(), 1, "{:?}", w.online_only);
+        // A file Owlbum would not list anyway is not counted as online.
+        assert_eq!(w.unsupported.len(), 1);
+        assert_eq!(w.unsupported[0].rel_path, "cloud/c.heic");
+        for rel in ["cloud", "cloud/b.jpg", "cloud/c.heic", "cloud/notes.txt"] {
+            clear_offline(&absolute(tmp.path(), rel));
+        }
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn set_offline(path: &Path) {
+        attrib("+O", path);
+    }
+
+    #[cfg(windows)]
+    pub(crate) fn clear_offline(path: &Path) {
+        attrib("-O", path);
+    }
+
+    #[cfg(windows)]
+    fn attrib(flag: &str, path: &Path) {
+        let out = std::process::Command::new("attrib")
+            .arg(flag)
+            .arg(path)
+            .output()
+            .unwrap();
+        assert!(out.status.success(), "attrib {flag} {}", path.display());
+    }
+
+    #[test]
+    fn a_name_that_is_not_unicode_is_counted() {
+        let tmp = tempfile::tempdir().unwrap();
+        touch(tmp.path(), "ok.jpg");
+        if !make_non_unicode_file(tmp.path()) {
+            eprintln!("skipped: this file system will not store such a name");
+            return;
+        }
+        let w = run(tmp.path(), "");
+        assert_eq!(listed(&w), ["ok.jpg"]);
+        assert_eq!(w.unreadable_names, 1);
+    }
+
+    #[cfg(unix)]
+    fn make_non_unicode_file(dir: &Path) -> bool {
+        use std::os::unix::ffi::OsStrExt;
+        let name = std::ffi::OsStr::from_bytes(b"bad\xff.jpg");
+        fs::write(dir.join(name), b"x").is_ok()
+    }
+
+    #[cfg(windows)]
+    fn make_non_unicode_file(dir: &Path) -> bool {
+        use std::os::windows::ffi::OsStringExt;
+        // An unpaired surrogate: valid to NTFS, not valid Unicode.
+        let wide: Vec<u16> = [0xD800].into_iter().chain(".jpg".encode_utf16()).collect();
+        let name = std::ffi::OsString::from_wide(&wide);
+        fs::write(dir.join(name), b"x").is_ok()
     }
 
     #[cfg(unix)]
@@ -493,5 +740,16 @@ mod tests {
                 .arg(target)
                 .output()
                 .is_ok_and(|o| o.status.success())
+    }
+
+    #[cfg(unix)]
+    fn symlink_file(target: &Path, link: &Path) -> bool {
+        std::os::unix::fs::symlink(target, link).is_ok()
+    }
+
+    #[cfg(windows)]
+    fn symlink_file(target: &Path, link: &Path) -> bool {
+        // Needs developer mode or elevation.
+        std::os::windows::fs::symlink_file(target, link).is_ok()
     }
 }

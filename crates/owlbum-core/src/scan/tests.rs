@@ -493,11 +493,10 @@ fn extras_rows_follow_what_each_file_is() {
                     f.rel_path
                 );
             }
-            Kind::Skipped if f.rel_path.split('/').any(|c| c.starts_with('.')) => {
+            // Dot names, `._` files, system folders, a nested album.
+            Kind::Skipped | Kind::Nested => {
                 assert!(row.is_none(), "{} is skipped", f.rel_path);
             }
-            // System folders, nested albums: #9's rules.
-            Kind::Skipped | Kind::Nested => {}
             Kind::Corrupt => assert_eq!(code(&row.unwrap()), Some("decode")),
             Kind::TooLarge => assert_eq!(code(&row.unwrap()), Some("too_large")),
             Kind::WrongExtension => {
@@ -543,6 +542,304 @@ fn extras_rows_follow_what_each_file_is() {
             }
         }
     }
+}
+
+// ---- What the walker leaves out ----
+
+#[test]
+fn extras_skipped_names_are_never_read_and_the_nested_album_is_reported() {
+    let fx = Fx::extras();
+    let summary = fx.scan();
+    let read: Vec<String> = fx.reads.take().into_iter().map(|(p, _)| p).collect();
+    for f in &fx.manifest.files {
+        if matches!(f.kind, Kind::Skipped | Kind::Nested) {
+            assert!(!read.contains(&f.rel_path), "{} was read", f.rel_path);
+        }
+    }
+    assert_eq!(summary.walk.nested, ["nested"]);
+    let report = report::report(Some(&summary.walk));
+    assert_eq!(
+        report.nested_albums,
+        [report::NestedAlbum {
+            rel_path: "nested".into(),
+            message: "nested is its own album and is not shown here.".into(),
+        }]
+    );
+    assert_eq!(report.nested_album_count, 1);
+}
+
+#[test]
+fn rows_under_a_folder_that_becomes_an_album_go_missing() {
+    let fx = Fx::empty();
+    picture(&fx.path("inner/a.png"), 1);
+    picture(&fx.path("b.png"), 2);
+    fx.scan();
+    assert!(!fx.photo("inner/a.png").unwrap().missing);
+    std::fs::create_dir_all(fx.path("inner/.owlbum")).unwrap();
+    std::fs::write(fx.path("inner/.owlbum/owlbum.sqlite"), b"").unwrap();
+    fx.reads.take();
+    let summary = fx.scan();
+    assert_eq!(fx.reads.take(), [], "nothing under it is read");
+    assert!(fx.photo("inner/a.png").unwrap().missing);
+    assert!(!fx.photo("b.png").unwrap().missing);
+    assert_eq!(summary.missing, 1);
+}
+
+#[test]
+fn rows_of_online_only_files_are_not_gone() {
+    // The rule the scan's Finish uses, on every platform; the Windows test
+    // below drives it with a real attribute.
+    let walk = walk::Walk {
+        complete: true,
+        online_only: ["a.png".to_owned()].into_iter().collect(),
+        ..walk::Walk::default()
+    };
+    assert!(walk.is_online_only("a.png"));
+}
+
+#[cfg(windows)]
+#[test]
+fn an_online_only_file_is_never_read_and_its_row_is_kept() {
+    use super::walk::tests::{clear_offline, set_offline};
+    let fx = Fx::empty();
+    picture(&fx.path("a.png"), 1);
+    picture(&fx.path("b.png"), 2);
+    fx.scan();
+    let b = fx.photo("b.png").unwrap();
+    // "Free up space" on b, and a new file that has never been downloaded.
+    picture(&fx.path("c.png"), 3);
+    set_offline(&fx.path("b.png"));
+    set_offline(&fx.path("c.png"));
+    fx.reads.take();
+
+    let summary = fx.scan();
+    let reads = fx.reads.take();
+    clear_offline(&fx.path("b.png"));
+    clear_offline(&fx.path("c.png"));
+    assert_eq!(reads, [], "no online-only file is read");
+    assert_eq!(fx.photo("b.png").unwrap(), b, "its row is kept as it was");
+    assert!(fx.photo("c.png").is_none());
+    assert_eq!(summary.walk.online_only.len(), 2);
+    assert_eq!(summary.missing, 0);
+    assert_eq!(report::report(Some(&summary.walk)).online_only, 2);
+}
+
+// ---- The scan report ----
+
+#[test]
+fn the_report_counts_what_the_walk_left_out() {
+    let fx = Fx::extras();
+    let summary = fx.scan();
+    let report = report::report(Some(&summary.walk));
+    // Unsupported files by label, in the order of the registry's table.
+    let mut expected: Vec<report::UnsupportedCount> = Vec::new();
+    for u in crate::media::UNSUPPORTED {
+        let count = fx
+            .manifest
+            .files
+            .iter()
+            .filter(|f| {
+                f.kind == Kind::Unsupported
+                    && crate::media::unsupported_of(rows::file_name(&f.rel_path))
+                        .is_some_and(|x| x.label == u.label)
+            })
+            .count();
+        if count > 0 {
+            expected.push(report::UnsupportedCount {
+                label: u.label.to_owned(),
+                count: u32::try_from(count).unwrap(),
+            });
+        }
+    }
+    assert!(!expected.is_empty());
+    assert_eq!(report.unsupported, expected);
+    assert_eq!(report.links, 0);
+    assert_eq!(report.online_only, 0);
+    assert_eq!(report.unreadable_names, 0);
+    assert!(report.unreadable_folders.is_empty());
+    assert!(report.notices.is_empty());
+}
+
+#[test]
+fn before_any_walk_the_report_is_empty() {
+    assert_eq!(report::report(None), report::ScanReport::default());
+    assert_eq!(report::unsupported(None, 0, 10).total, 0);
+}
+
+#[test]
+fn the_report_lists_are_short_and_say_how_many_there_were() {
+    let walk = walk::Walk {
+        complete: true,
+        nested: (0..150).map(|i| format!("n{i}")).collect(),
+        unreadable: (0..120)
+            .map(|i| walk::UnreadableFolder {
+                rel_path: format!("u{i}"),
+                message: "denied".into(),
+            })
+            .collect(),
+        ..walk::Walk::default()
+    };
+    let report = report::report(Some(&walk));
+    assert_eq!(report.nested_albums.len(), report::REPORT_LIST_MAX);
+    assert_eq!(report.nested_album_count, 150);
+    assert_eq!(report.unreadable_folders.len(), report::REPORT_LIST_MAX);
+    assert_eq!(report.unreadable_folder_count, 120);
+}
+
+#[test]
+fn unsupported_files_are_paged_in_walker_order() {
+    let fx = Fx::empty();
+    for name in ["b/10.heic", "b/2.avif", "a.heic"] {
+        std::fs::create_dir_all(fx.path(name).parent().unwrap()).unwrap();
+        std::fs::write(fx.path(name), b"x").unwrap();
+    }
+    let summary = fx.scan();
+    let all = report::unsupported(Some(&summary.walk), 0, 500);
+    assert_eq!(all.total, 3);
+    let paths: Vec<&str> = all.items.iter().map(|u| u.rel_path.as_str()).collect();
+    assert_eq!(paths, ["a.heic", "b/2.avif", "b/10.heic"]);
+    assert_eq!(all.items[0].reason, "HEIC photos are not supported yet.");
+    let page = report::unsupported(Some(&summary.walk), 1, 1);
+    assert_eq!(page.total, 3);
+    assert_eq!(page.items, [all.items[1].clone()]);
+    assert!(
+        report::unsupported(Some(&summary.walk), 5, 10)
+            .items
+            .is_empty()
+    );
+}
+
+#[test]
+fn a_page_holds_at_most_500() {
+    let walk = walk::Walk {
+        complete: true,
+        unsupported: (0..600)
+            .map(|i| walk::UnsupportedFile {
+                rel_path: format!("{i}.heic"),
+                label: "HEIC".into(),
+                reason: "HEIC photos are not supported yet.".into(),
+            })
+            .collect(),
+        ..walk::Walk::default()
+    };
+    let page = report::unsupported(Some(&walk), 0, 10_000);
+    assert_eq!(page.total, 600);
+    assert_eq!(page.items.len(), 500);
+}
+
+#[test]
+fn scan_errors_are_listed_in_walker_order_without_missing_rows() {
+    let fx = Fx::empty();
+    std::fs::create_dir_all(fx.path("sub")).unwrap();
+    std::fs::write(fx.path("sub/10.png"), b"not a picture").unwrap();
+    std::fs::write(fx.path("sub/2.png"), b"not a picture").unwrap();
+    std::fs::write(fx.path("gone.png"), b"not a picture").unwrap();
+    picture(&fx.path("good.png"), 1);
+    fx.scan();
+    let errors = |offset, limit| {
+        let overlay = fx.overlay.lock().unwrap();
+        report::scan_errors(fx.album(), &overlay, offset, limit).unwrap()
+    };
+    let all = errors(0, 500);
+    assert_eq!(all.total, 3);
+    let paths: Vec<&str> = all.items.iter().map(|e| e.rel_path.as_str()).collect();
+    assert_eq!(paths, ["gone.png", "sub/2.png", "sub/10.png"]);
+    let first = &all.items[0];
+    assert_eq!(first.id, fx.photo("gone.png").unwrap().id);
+    assert_eq!(first.code, "decode");
+    assert_eq!(
+        first.message,
+        "This file is damaged or is not a PNG picture."
+    );
+    assert_eq!(errors(2, 5).items, [all.items[2].clone()]);
+    assert_eq!(errors(0, 0).items, []);
+
+    std::fs::remove_file(fx.path("gone.png")).unwrap();
+    fx.scan();
+    assert_eq!(errors(0, 500).total, 2, "a missing row is not listed");
+}
+
+#[test]
+fn scan_errors_keep_to_the_scope() {
+    let mut fx = Fx::empty();
+    std::fs::create_dir_all(fx.path("in")).unwrap();
+    std::fs::write(fx.path("in/a.png"), b"not a picture").unwrap();
+    std::fs::write(fx.path("out.png"), b"not a picture").unwrap();
+    fx.scan();
+    let sub = fx.path("in");
+    fx.reopen(&sub, &OpenOptions::default());
+    let overlay = fx.overlay.lock().unwrap();
+    let all = report::scan_errors(fx.album(), &overlay, 0, 500).unwrap();
+    let paths: Vec<&str> = all.items.iter().map(|e| e.rel_path.as_str()).collect();
+    assert_eq!(paths, ["in/a.png"]);
+}
+
+#[test]
+fn scan_errors_of_a_view_only_album_come_from_memory() {
+    let mut fx = Fx::empty();
+    std::fs::write(fx.path("a.png"), b"not a picture").unwrap();
+    picture(&fx.path("b.png"), 1);
+    fx.scan();
+    let root = fx.root.clone();
+    fx.reopen(
+        &root,
+        &OpenOptions {
+            view_only: true,
+            ..OpenOptions::default()
+        },
+    );
+    // In this session a breaks less and b breaks.
+    picture(&fx.path("a.png"), 2);
+    std::fs::write(fx.path("b.png"), b"broken now").unwrap();
+    fx.scan();
+    let overlay = fx.overlay.lock().unwrap();
+    let all = report::scan_errors(fx.album(), &overlay, 0, 500).unwrap();
+    let paths: Vec<&str> = all.items.iter().map(|e| e.rel_path.as_str()).collect();
+    assert_eq!(paths, ["b.png"]);
+}
+
+#[test]
+fn the_scanner_reports_its_last_whole_walk() {
+    let mut fx = Fx::empty();
+    std::fs::create_dir_all(fx.path("sub/nested/.owlbum")).unwrap();
+    std::fs::write(fx.path("sub/nested/.owlbum/owlbum.sqlite"), b"").unwrap();
+    std::fs::write(fx.path("sub/a.heic"), b"x").unwrap();
+    picture(&fx.path("sub/b.png"), 1);
+    let sub = fx.path("sub");
+    fx.reopen(&sub, &OpenOptions::default());
+    let album = fx.take_album();
+    let scanner = Scanner::new(Arc::clone(&album), fx.env.clone());
+    assert_eq!(scanner.report(), report::ScanReport::default());
+    scanner.scan_and_wait(Request::default());
+    let report = scanner.report();
+    assert_eq!(report.nested_album_count, 1);
+    assert_eq!(scanner.unsupported(0, 500).total, 1);
+    let status = scanner.status();
+    assert_eq!((status.unsupported, status.skipped), (1, 0));
+
+    // The scoped folder goes away (an unplugged drive): the last whole
+    // walk's report stays.
+    std::fs::remove_dir_all(&sub).unwrap();
+    let failed = scanner.scan_and_wait(Request::default());
+    assert!(failed.error.is_some());
+    assert_eq!(scanner.report(), report);
+    assert_eq!(scanner.unsupported(0, 500).total, 1);
+    assert_eq!(scanner.status().unsupported, 1);
+}
+
+#[test]
+fn skipped_counts_links_online_only_files_and_unreadable_names() {
+    let walk = walk::Walk {
+        complete: true,
+        links: 2,
+        online_only: ["a.jpg".to_owned(), "b.jpg".to_owned()]
+            .into_iter()
+            .collect(),
+        unreadable_names: 3,
+        nested: vec!["n".into()],
+        ..walk::Walk::default()
+    };
+    assert_eq!(walk.skipped(), 7);
 }
 
 // ---- Change detection ----

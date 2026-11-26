@@ -546,6 +546,9 @@ mod tests {
         "ui/src/api/fake/app.ts",
         // Generated from this module's types (`SaveFormat`), never edited.
         "ui/src/api/bindings/",
+        // The fixture generator writes one test file per format and names
+        // them by format; it is test data, not a rule Owlbum applies.
+        "crates/owlbum-fixtures/",
     ];
 
     fn known_extensions() -> HashSet<String> {

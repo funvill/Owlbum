@@ -1,0 +1,225 @@
+/*
+ * The window shell: top bar, banners, reading bar and body.
+ * docs/04-browsing.md, "Whole window"; docs/09-visual-design.md, "The bars".
+ */
+
+.ow-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+/* Top bar */
+
+.ow-topbar {
+  position: relative;
+  z-index: var(--z-bar);
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-4);
+  height: var(--size-bar-tall);
+  padding: 0 var(--space-4);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line);
+  white-space: nowrap;
+}
+
+.ow-topbar__left {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.ow-topbar__right {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ow-topbar__name {
+  flex: none;
+  font-weight: var(--weight-heading);
+}
+
+/* The root is cut first, from its start; the scope last. */
+.ow-topbar__path {
+  display: flex;
+  align-items: baseline;
+  gap: var(--space-2);
+  min-width: 0;
+  color: var(--muted);
+}
+
+.ow-topbar__root {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.ow-topbar__sep {
+  flex: none;
+}
+
+.ow-topbar__scope {
+  flex: 0 1 auto;
+  min-width: var(--space-8);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--text);
+}
+
+.ow-topbar__whole {
+  flex: none;
+  padding: 0;
+  font: var(--text-sm);
+  color: var(--accent);
+  background: none;
+  border: 0;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ow-topbar__badge {
+  display: inline-flex;
+  flex: none;
+}
+
+/* Reading bar */
+
+.ow-reading {
+  position: relative;
+  z-index: var(--z-bar);
+  flex: none;
+  padding: var(--space-2) var(--space-4);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+/* Body */
+
+.ow-shell__body {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+
+.ow-body {
+  position: relative;
+  min-height: 100%;
+}
+
+.ow-body__message {
+  padding: var(--space-8) var(--space-4);
+  color: var(--muted);
+  text-align: center;
+}
+
+.ow-review {
+  min-height: 100%;
+}
+
+.ow-drop {
+  position: absolute;
+  inset: var(--space-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: 2px dashed var(--accent);
+  border-radius: var(--radius-lg);
+  background: var(--bg);
+  font: var(--text-lg);
+  pointer-events: none;
+}
+
+/* Start screen */
+
+.ow-start {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  /* docs/04-browsing.md, "Start screen": a 720 px column; its text at most 560 px. */
+  max-width: 720px;
+  margin: 0 auto;
+  padding: var(--space-8) var(--space-4);
+}
+
+.ow-start__heading {
+  font: var(--text-xl);
+  letter-spacing: var(--tracking-heading);
+}
+
+.ow-start__intro {
+  max-width: 560px;
+  color: var(--muted);
+}
+
+.ow-start__subheading {
+  font: var(--text-lg);
+  font-weight: var(--weight-heading);
+}
+
+.ow-start__recent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ow-recent {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ow-recent__item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding-right: var(--space-2);
+  background: var(--panel-2);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-md);
+}
+
+.ow-recent__item--gone {
+  opacity: 0.6;
+}
+
+.ow-recent__open {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  height: var(--size-control);
+  padding: 0 var(--space-3);
+  text-align: left;
+  background: none;
+  border: 0;
+  border-radius: var(--radius-md);
+}
+
+.ow-recent__open:not([aria-disabled="true"]):hover {
+  background: var(--panel-3);
+}
+
+.ow-recent__path {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ow-recent__missing {
+  flex: none;
+  margin-left: auto;
+  color: var(--muted);
+}

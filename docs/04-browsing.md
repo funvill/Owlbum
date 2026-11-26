@@ -162,7 +162,7 @@ Rules:
 - **A drop of several items** opens the first folder among them. A drop that holds nothing openable shows the toast "Drop a folder to open it."
 - **While a drag is over the window**, the body shows a dashed outline in `--accent` and the text "Drop to open this folder".
 - **Opening while an album is open** closes the open album first. No question is asked, because every edit is already in the album: an open edit mode ends as Done, and a running save finishes its current photo first (see [Editing and file actions](06-editing-and-file-actions.md#closing-and-quitting)).
-- **Opening the folder that is already open** does nothing except bring the window forward.
+- **Opening the folder that is already open** does nothing except bring the window forward. The page checks this on each route (the dialog, a recent entry, a drop, `open_folder`) against `AlbumStatus.folder`; `album_open` itself always opens again, which is how **Try again**, **Open for changes** and **Show whole album** work.
 - **A new album** (no `.owlbum` found) is created without asking. The scan starts at once.
 
 `album_open` can answer with an error that needs a decision. The page shows the error's `message` in a dialog, fills the names in from the error's `details` object, and calls again with an option.
@@ -1072,7 +1072,7 @@ Names follow the prefixes in [Architecture](01-architecture.md). Every command a
 | `app_session_save` | `Session` with `selected_id` | nothing | Stores against the open album's folder. A no-op when no album is open. |
 | `app_place_search` | `text` | `CountryMatch[]` = `{ name, lat, lon }[]`, at most 6 | Countries whose name contains the text, in the order [Country search](#how-typed-fields-save) gives; empty text answers `[]`. |
 | `album_open` | `path`, `options?: { take_lock?, view_only?, restore_backup? }` | `{ status: AlbumStatus, session: Session \| null }` | Closes any open album first. It returns as soon as the database is open and starts the scan in the background. Errors: the shared `not_a_folder` and `folder_unreadable`, and this part's `album_lock_stale` and `album_damaged`, each with a `details` object. |
-| `album_close` | none | nothing | Releases the lock. Drops every token. |
+| `album_close` | none | nothing | Releases the lock. Drops every token. Like `album_open`, it runs off the main thread, and the two never overlap: an open waits for a close, so the old album's lock is gone before the new one is taken. |
 | `album_status` | none | `AlbumStatus \| null` | Null when no album is open. |
 | `query_ids` | `token`, `offset`, `limit` | `number[]` | The ids at those places of the token's list, in order: one id per tile, so the face of a closed stack and not its folded members, and the meaning segment when the range reaches it. For Shift ranges, heading clicks and Ctrl+A. No limit on `limit`. Error: `query_expired`. |
 | `query_map` | `token` | `{ points: [id, lat, lon, thumb_key][], unlocated }` | For a token made with `view: "map"`. Error: `query_expired`. |
@@ -1091,13 +1091,15 @@ The names and payloads are those in [Architecture](01-architecture.md#events).
 | `scan_progress` | `{ phase, found, done, failed, finished, cancelled }` | Draws the reading bar. On `finished` (which is also sent for a cancelled scan, with `cancelled: true`), hides it and reads `album_status` for the notices. |
 | `album_changed` | `{ revision, reason, rekeyed? }` | Re-runs the query when the reason calls for it (see [Running a query](#running-a-query)), refreshes the details panel, drops cached pictures of the photos in `rekeyed`, and, when `reason` is `status`, reads `album_status` for the banners. |
 | `open_folder` | `{ path }` | Opens the folder, as described in [Opening a folder](#opening-a-folder). |
+| `folder_drop` | `{ phase: 'over' \| 'left' \| 'refused' }` | Shows the drop outline while `over`, hides it on `left`, and shows the toast "Drop a folder to open it." on `refused`. |
 
 ### Shapes
 
 ```ts
 type AlbumStatus = {
   root: string;              // absolute path of the album root
-  scope: string;             // path of the opened folder relative to the root; '' when the root itself was opened
+  scope: string;             // path of the opened folder relative to the root, with '/'; '' when the root itself was opened
+  folder: string;            // the opened folder, absolute: what the recent list holds and what reopening passes
   name: string;              // the opened folder's own name, for messages
   view_only: null | 'read_only' | 'locked' | 'chosen' | 'newer' | 'damaged';   // the five reasons in Data
   in_memory: boolean;        // true when there is no database file and nothing is saved (a read_only folder with no album)

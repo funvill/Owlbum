@@ -21,7 +21,8 @@ interface DialogProps {
 }
 
 /**
- * A modal dialog in the layer root. It keeps focus inside, makes the rest
+ * A modal dialog in the layer root. Focus starts on the button marked
+ * `data-autofocus` (the safest one), else on its first control. It keeps focus inside, makes the rest
  * of the page inert, closes on Escape, its x, or a click on the backdrop
  * (unless it holds unsaved input), and returns focus to what opened it.
  * docs/09-visual-design.md, "Dialogs" and "Accessibility baseline".
@@ -45,7 +46,11 @@ function OpenDialog({ title, onClose, children, actions, size = "sm", alert = fa
     );
     for (const el of madeInert) el.setAttribute("inert", "");
 
-    const first = (body.current && focusableIn(body.current)[0]) ?? (box.current && focusableIn(box.current)[0]);
+    // The safest button, when the dialog marks one with `data-autofocus`;
+    // else the first control of the body, else of the box.
+    const safest = box.current?.querySelector<HTMLElement>("[data-autofocus]") ?? null;
+    const first =
+      safest ?? (body.current && focusableIn(body.current)[0]) ?? (box.current && focusableIn(box.current)[0]);
     (first ?? box.current)?.focus();
 
     return () => {

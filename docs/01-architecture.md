@@ -150,7 +150,8 @@ An event is pushed from Rust to the page. There is no polling anywhere.
 | `tagging_progress` | `{ total, done, failed, paused, running, not_working, problem }` | While tagging runs, and on any state change. |
 | `download_progress` | `{ model, received, total, error, finished }` | While a model downloads. |
 | `edit_save_progress` | `{ done, total, current }` | While Save all runs. `current` is the id of the photo being saved. |
-| `open_folder` | `{ path }` | A second launch, the File menu, or a folder dropped on the window asked for a folder. A folder given on the command line at start is returned by `app_startup` instead, so it cannot arrive before the page listens. |
+| `open_folder` | `{ path }` | A second launch, the File menu, or a folder dropped on the window asked for a folder. A folder given on the command line at start, or one that arrived before the page called `app_startup`, is returned by `app_startup` instead, so it cannot arrive before the page listens. |
+| `folder_drop` | `{ phase }` | Something is dragged over the window (`over`), the drag left or was dropped (`left`), or a drop held nothing that could be opened (`refused`). The page draws the drop outline from it; a drop that opens a folder sends `left`, then `open_folder`. |
 | `app_menu` | `{ item }` | A menu item that the page carries out was chosen. |
 | `app_closing` | `{}` | The window is about to close; the page finishes what it is doing and answers with `app_close_ready`. |
 | `app_fatal` | `{ title, message, advice, details }` | Something failed that the page should show before the program stops. |
@@ -169,7 +170,7 @@ An event is pushed from Rust to the page. There is no polling anywhere.
 | `tidy` | Missing rows were removed. | No. |
 | `facts` | Album-wide facts (bursts, quality) were recomputed. | Yes. |
 | `tags` | Tagging wrote results. Coalesced to one every 5 seconds. | Only when the query uses search text or a keyword or object filter. |
-| `status` | The album's state changed (lock, view-only, conflict copy). | No; the page reads `album_status`. |
+| `status` | The album's state changed: the lock was taken over, a write the database could not take made the album view-only, or the folder stopped being watched. | No; the page reads `album_status`. |
 
 `rekeyed` lists photo ids whose file content changed, so their thumbnails and tags are stale.
 

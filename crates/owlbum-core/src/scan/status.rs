@@ -29,6 +29,9 @@ pub struct AlbumStatus {
     /// The opened folder relative to the root, `/`-separated; `""` when
     /// the root itself was opened.
     pub scope: String,
+    /// The opened folder, absolute: the root, or the scope inside it. It is
+    /// what the recent list holds, and what reopening it passes.
+    pub folder: String,
     /// The opened folder's own name, for messages.
     pub name: String,
     /// Null when the album can be changed.
@@ -65,6 +68,7 @@ impl AlbumStatus {
         Ok(Self {
             root: location.root.display().to_string(),
             scope: location.scope.clone(),
+            folder: opened.display().to_string(),
             name: display_name(&opened.display().to_string()),
             view_only: safety.view_only,
             in_memory: safety.in_memory,

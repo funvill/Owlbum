@@ -48,7 +48,11 @@ impl Fx {
         root
     }
 
-    fn open(&self, path: &Path, options: serde_json::Value) -> Result<AlbumOpened, serde_json::Value> {
+    fn open(
+        &self,
+        path: &Path,
+        options: serde_json::Value,
+    ) -> Result<AlbumOpened, serde_json::Value> {
         invoke(
             &self.window,
             "album_open",
@@ -65,7 +69,10 @@ impl Fx {
     }
 
     /// Every payload of `event` the app sends, as it is sent.
-    fn events<T: serde::de::DeserializeOwned + Send + 'static>(&self, event: &str) -> mpsc::Receiver<T> {
+    fn events<T: serde::de::DeserializeOwned + Send + 'static>(
+        &self,
+        event: &str,
+    ) -> mpsc::Receiver<T> {
         let (send, receive) = mpsc::channel();
         self.app.listen_any(event, move |e| {
             let _ = send.send(serde_json::from_str(e.payload()).unwrap());
@@ -105,14 +112,20 @@ fn opening_a_folder_answers_its_status_and_puts_it_in_the_recent_list() {
     assert_eq!(opened.status.name, "Trip");
     assert_eq!(opened.status.view_only, None);
     assert_eq!(opened.session, None);
-    assert!(root.join(".owlbum").join("owlbum.sqlite").is_file(), "a new album is created");
+    assert!(
+        root.join(".owlbum").join("owlbum.sqlite").is_file(),
+        "a new album is created"
+    );
     assert_eq!(f.status().unwrap().root, opened.status.root);
     let recent = f.data.recent().unwrap();
     assert_eq!(recent[0].root, shown(&root));
 
     invoke(&f.window, "album_close", json!({})).unwrap();
     assert_eq!(f.status(), None);
-    assert!(!root.join(".owlbum").join("lock").exists(), "the lock is released");
+    assert!(
+        !root.join(".owlbum").join("lock").exists(),
+        "the lock is released"
+    );
 }
 
 #[test]
@@ -120,11 +133,28 @@ fn a_file_opens_its_folder_and_a_subfolder_opens_scoped() {
     let f = fixture();
     let root = f.folder("Trip");
     f.open(&root, json!(null)).unwrap();
-    let scoped = f.open(&root.join("sub").join("a.txt"), json!(null)).unwrap();
+    let scoped = f
+        .open(&root.join("sub").join("a.txt"), json!(null))
+        .unwrap();
     assert_eq!(scoped.status.root, shown(&root));
     assert_eq!(scoped.status.scope, "sub");
     assert_eq!(scoped.status.name, "sub");
-    assert_eq!(scoped.status.view_only, None, "the old album's lock was released first");
+    assert_eq!(
+        scoped.status.folder,
+        Path::new(&scoped.status.root)
+            .join("sub")
+            .display()
+            .to_string()
+    );
+    assert_eq!(
+        f.data.recent().unwrap()[0].root,
+        scoped.status.folder,
+        "the recent list holds the opened folder"
+    );
+    assert_eq!(
+        scoped.status.view_only, None,
+        "the old album's lock was released first"
+    );
 
     // Show whole album: the root again, still writable.
     let whole = f.open(&root, json!(null)).unwrap();
@@ -164,11 +194,17 @@ fn a_stale_lock_is_a_question_answered_with_an_option() {
     assert_eq!(err["details"]["host"], "STUDIO-PC");
 
     let chosen = f.open(&root, json!({ "view_only": true })).unwrap();
-    assert_eq!(chosen.status.view_only, Some(owlbum_core::album::ViewOnly::Chosen));
+    assert_eq!(
+        chosen.status.view_only,
+        Some(owlbum_core::album::ViewOnly::Chosen)
+    );
     assert_eq!(chosen.status.lock_host.as_deref(), Some("STUDIO-PC"));
 
     let taken = f
-        .open(&root, json!({ "take_lock": true, "view_only": false, "restore_backup": false }))
+        .open(
+            &root,
+            json!({ "take_lock": true, "view_only": false, "restore_backup": false }),
+        )
         .unwrap();
     assert_eq!(taken.status.view_only, None);
 }
@@ -181,13 +217,17 @@ fn the_folder_dialog_answers_the_chosen_folder_or_null() {
 
     let chosen = Arc::new(std::sync::Mutex::new(Some(PathBuf::from("/photos/Trip"))));
     let answer = Arc::clone(&chosen);
-    f.app
-        .manage(FolderPicker(Arc::new(move || answer.lock().unwrap().clone())));
+    f.app.manage(FolderPicker(Arc::new(move || {
+        answer.lock().unwrap().clone()
+    })));
     let picked: Option<String> = invoke(&f.window, "app_pick_folder", json!({}))
         .unwrap()
         .deserialize()
         .unwrap();
-    assert_eq!(picked, Some(PathBuf::from("/photos/Trip").display().to_string()));
+    assert_eq!(
+        picked,
+        Some(PathBuf::from("/photos/Trip").display().to_string())
+    );
     *chosen.lock().unwrap() = None;
     let cancelled: Option<String> = invoke(&f.window, "app_pick_folder", json!({}))
         .unwrap()
@@ -228,7 +268,11 @@ fn a_folder_that_arrives_before_startup_is_handed_over_and_later_ones_are_events
     owlbum_lib::handoff::deliver(f.app.handle(), &earlier);
     owlbum_lib::handoff::deliver(f.app.handle(), &early);
     let s = startup(&f);
-    assert_eq!(s.launch_folder, Some(early.display().to_string()), "the later one wins");
+    assert_eq!(
+        s.launch_folder,
+        Some(early.display().to_string()),
+        "the later one wins"
+    );
     assert_eq!(s.reopen, None, "the launch folder wins");
     assert!(opens.try_recv().is_err(), "no event before start");
 
@@ -255,9 +299,15 @@ fn a_drag_shows_the_outline_and_a_drop_opens_its_first_folder() {
             position: Default::default(),
         },
     );
-    assert_eq!(drops.recv_timeout(Duration::from_secs(5)).unwrap().phase, DropPhase::Over);
+    assert_eq!(
+        drops.recv_timeout(Duration::from_secs(5)).unwrap().phase,
+        DropPhase::Over
+    );
     owlbum_lib::dropped(handle, &DragDropEvent::Leave);
-    assert_eq!(drops.recv_timeout(Duration::from_secs(5)).unwrap().phase, DropPhase::Left);
+    assert_eq!(
+        drops.recv_timeout(Duration::from_secs(5)).unwrap().phase,
+        DropPhase::Left
+    );
 
     owlbum_lib::dropped(
         handle,
@@ -266,9 +316,16 @@ fn a_drag_shows_the_outline_and_a_drop_opens_its_first_folder() {
             position: Default::default(),
         },
     );
-    assert_eq!(drops.recv_timeout(Duration::from_secs(5)).unwrap().phase, DropPhase::Left);
+    assert_eq!(
+        drops.recv_timeout(Duration::from_secs(5)).unwrap().phase,
+        DropPhase::Left
+    );
     let open = opens.recv_timeout(Duration::from_secs(5)).unwrap();
-    assert_eq!(open.path, root.display().to_string(), "the first folder, not the file's");
+    assert_eq!(
+        open.path,
+        root.display().to_string(),
+        "the first folder, not the file's"
+    );
 
     owlbum_lib::dropped(
         handle,
@@ -277,7 +334,10 @@ fn a_drag_shows_the_outline_and_a_drop_opens_its_first_folder() {
             position: Default::default(),
         },
     );
-    assert_eq!(drops.recv_timeout(Duration::from_secs(5)).unwrap().phase, DropPhase::Left);
+    assert_eq!(
+        drops.recv_timeout(Duration::from_secs(5)).unwrap().phase,
+        DropPhase::Left
+    );
     assert_eq!(
         drops.recv_timeout(Duration::from_secs(5)).unwrap().phase,
         DropPhase::Refused

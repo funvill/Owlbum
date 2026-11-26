@@ -53,6 +53,8 @@ Cases the table leaves out:
 - A `lock` file that is still empty or not the JSON above after the second read is replaced without asking.
 - **Open anyway** (`take_lock`) never replaces a lock whose heartbeat is under 2 minutes old; the album opens view-only (`locked`) instead.
 - If the heartbeat finds that the lock now names another computer (someone chose Open anyway there), the album becomes view-only (`locked`, naming that computer) from then on, and the lock file is left as the other computer wrote it.
+- If a write fails because the database cannot take it (SQLite answers `SQLITE_READONLY`, `SQLITE_IOERR`, `SQLITE_FULL` or `SQLITE_CANTOPEN`, for example a full disk or a drive that turned read-only), the album becomes view-only (`read_only`) from then on. The write that failed answers its own error. A busy or locked database, a constraint, and any other failure of the job itself leave the album writable.
+- Either change raises the album's revision and sends `album_changed` with reason `status`, so the page reads `album_status` and shows the banner.
 
 The checks run in this order, and a view-only open writes nothing in the album folder: the header's `user_version` (a newer database opens view-only without touching the lock), whether the database file can be written, the lock, then `PRAGMA quick_check` with the lock held. When several reasons apply, the first wins: `newer`, `read_only`, `locked`, `chosen`, `damaged`. **Open view-only** on an album with no old lock gives `damaged` when the database fails the check and `chosen` otherwise; its banner then reads "View only: you opened this album view-only."
 

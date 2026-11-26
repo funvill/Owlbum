@@ -1,5 +1,1 @@
-/* The page's own layout. Colours and sizes come from styles/tokens.css. */
-
-main {
-  padding: var(--space-6);
-}
+/* The page's own layout lives with each feature (src/features/*). Colours and sizes come from styles/tokens.css. */

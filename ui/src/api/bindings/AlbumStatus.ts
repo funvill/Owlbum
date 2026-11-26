@@ -17,6 +17,11 @@ root: string,
  */
 scope: string, 
 /**
+ * The opened folder, absolute: the root, or the scope inside it. It is
+ * what the recent list holds, and what reopening it passes.
+ */
+folder: string, 
+/**
  * The opened folder's own name, for messages.
  */
 name: string, 

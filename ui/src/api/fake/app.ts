@@ -133,6 +133,8 @@ export const appHandlers: AreaHandlers<AppCommands> = {
   app_cache_clear: () => ({ bytes_freed: 0 }),
   app_cache_usage: () => ({ bytes: 0, limit_bytes: defaultSettings["cache.limit_gb"] * 1_000_000_000 }),
   app_formats: () => fakeFormats.map((f) => ({ ...f, extensions: [...f.extensions] })),
+  // The dialog was cancelled. A test that picks a folder replaces this.
+  app_pick_folder: () => null,
   app_place_search: ({ text }) => placeSearch(fakeCountries, text),
   app_recent_list: () => [],
   app_recent_remove: () => [],
@@ -153,5 +155,18 @@ export const appHandlers: AreaHandlers<AppCommands> = {
     }
     return { ...structuredClone(defaultSettings), ...patch } as Settings;
   },
+  // A first start: nothing recent, nothing to open.
+  app_startup: () => ({
+    version: "0.0.0-fake",
+    platform: "windows",
+    arch: "x86_64",
+    package: "dev",
+    dev: true,
+    settings: structuredClone(defaultSettings),
+    recent: [],
+    launch_folder: null,
+    reopen: null,
+    show_update_notice: false,
+  }),
   app_version: () => ({ version: "0.0.0-fake" }),
 };

@@ -1,8 +1,8 @@
 //! `scan_progress` and the scanner's `album_changed`
 //! (docs/03-media-and-scanning.md, "Progress and change events").
 
-use std::sync::Mutex;
 use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
+use std::sync::{Mutex, TryLockError};
 use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
@@ -115,9 +115,11 @@ impl Progress {
     pub fn finish(&self, cancelled: bool) {
         *self.phase.lock().unwrap_or_else(|p| p.into_inner()) = ScanPhase::Idle;
         self.running.store(false, Ordering::SeqCst);
-        let last = self.now(true, cancelled);
-        *self.last_sent.lock().unwrap_or_else(|p| p.into_inner()) = Some(Instant::now());
-        emit(&*self.emitter, &last);
+        // Under the lock, so an event another thread is still sending goes
+        // out before this one, never after it.
+        let mut sent = self.last_sent.lock().unwrap_or_else(|p| p.into_inner());
+        emit(&*self.emitter, &self.now(true, cancelled));
+        *sent = Some(Instant::now());
     }
 
     /// The counts now, as an event payload.
@@ -138,16 +140,22 @@ impl Progress {
     }
 
     /// Sends the counts unless an event went out less than `every` ago.
+    ///
+    /// The send happens under the lock and `every` is measured from the end
+    /// of it, so events reach the emitter in order and at least `every`
+    /// apart however long a thread is held up mid-send (#93). While another
+    /// thread is sending, this tick is not due and returns at once.
     fn tick(&self) {
-        let mut last = self.last_sent.lock().unwrap_or_else(|p| p.into_inner());
-        let now = Instant::now();
-        if last.is_some_and(|t| now.duration_since(t) < self.every) {
+        let mut last = match self.last_sent.try_lock() {
+            Ok(last) => last,
+            Err(TryLockError::Poisoned(p)) => p.into_inner(),
+            Err(TryLockError::WouldBlock) => return,
+        };
+        if last.is_some_and(|t| t.elapsed() < self.every) {
             return;
         }
-        *last = Some(now);
-        let payload = self.now(false, false);
-        drop(last);
-        emit(&*self.emitter, &payload);
+        emit(&*self.emitter, &self.now(false, false));
+        *last = Some(Instant::now());
     }
 }
 
@@ -190,9 +198,8 @@ impl<'a> Changes<'a> {
         let mut s = self.state.lock().unwrap_or_else(|p| p.into_inner());
         s.dirty = true;
         s.rekeyed.extend(rekeyed);
-        let now = Instant::now();
-        if s.last.is_none_or(|t| now.duration_since(t) >= self.every) {
-            self.send(&mut s, now);
+        if s.last.is_none_or(|t| t.elapsed() >= self.every) {
+            self.send(&mut s);
         }
     }
 
@@ -200,18 +207,20 @@ impl<'a> Changes<'a> {
     pub fn flush(&self) {
         let mut s = self.state.lock().unwrap_or_else(|p| p.into_inner());
         if s.dirty {
-            self.send(&mut s, Instant::now());
+            self.send(&mut s);
         }
     }
 
-    fn send(&self, s: &mut ChangesState, now: Instant) {
+    /// Sends under the state lock; `every` runs from the end of the send,
+    /// as for `scan_progress`.
+    fn send(&self, s: &mut ChangesState) {
         let event = AlbumChanged {
             revision: self.album.next_revision(),
             reason: self.reason,
             rekeyed: std::mem::take(&mut s.rekeyed),
         };
         s.dirty = false;
-        s.last = Some(now);
         emit(self.emitter, &event);
+        s.last = Some(Instant::now());
     }
 }

@@ -189,6 +189,7 @@ Rules:
 - **Unsupported files** (HEIC, AVIF and other recognised but unsupported types) get no row. Each scan counts and lists them in memory. The one exception is a file with a supported extension whose content is an unsupported type (a HEIC named `.jpg`): it gets a row with `scan_error` code `unsupported`.
 - **An album with no database on disk** (a read-only folder opened for the first time) is reported by `album_status` as `in_memory`, alongside the `read_only` reason.
 - **Everything goes through the writer thread** in short transactions. A typed change is committed before the command that made it returns.
+- **Reads take turns with the writer** on a lock inside the program: each read holds it shared, each write transaction holds it alone. A read that arrives during a commit waits for that commit to end, not on SQLite's busy handler, which polls and could miss every gap between a scan's back-to-back commits until its timeout ran out ("database is locked"). The 10-second busy timeout remains for other programs that open the file.
 
 ### Identity: renames, moves and missing files
 

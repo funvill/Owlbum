@@ -17,11 +17,18 @@ use std::thread::JoinHandle;
 use rusqlite::{Connection, Transaction, TransactionBehavior};
 
 use crate::AppError;
+use crate::album::db::Gate;
 use crate::album::sqlite_error;
 use crate::error::AppResult;
 use crate::text;
 
-type Job = Box<dyn FnOnce(&mut Connection) + Send>;
+type Job = Box<dyn FnOnce(&mut Gated) + Send>;
+
+/// The writer thread's connection and the gate it holds while it writes.
+struct Gated {
+    conn: Connection,
+    gate: Gate,
+}
 
 /// The handle to an album's writer thread. Dropping it lets the queued jobs
 /// finish, closes the connection and waits for the thread to end.
@@ -39,11 +46,17 @@ impl std::fmt::Debug for Writer {
 impl Writer {
     /// Starts the writer thread with the album's writable connection.
     pub fn start(conn: Connection) -> AppResult<Self> {
+        Self::start_gated(conn, Gate::default())
+    }
+
+    /// [`Writer::start`], holding `gate` alone for each transaction so the
+    /// album's readers take turns with it ([`Gate`]).
+    pub fn start_gated(conn: Connection, gate: Gate) -> AppResult<Self> {
         let (jobs, queue) = mpsc::channel::<Job>();
         let thread = std::thread::Builder::new()
             .name("owlbum-album-writer".into())
             .spawn(move || {
-                let mut conn = conn;
+                let mut conn = Gated { conn, gate };
                 for job in queue {
                     job(&mut conn);
                 }
@@ -69,7 +82,7 @@ impl Writer {
         F: FnOnce(&Transaction<'_>) -> AppResult<T> + Send + 'static,
     {
         let (reply, answer) = mpsc::sync_channel::<AppResult<T>>(1);
-        let job: Job = Box::new(move |conn: &mut Connection| {
+        let job: Job = Box::new(move |conn: &mut Gated| {
             let result = catch_unwind(AssertUnwindSafe(|| in_transaction(conn, job)))
                 .unwrap_or_else(|_| Err(AppError::internal(text::album::WRITING_DATABASE)));
             // The caller may have gone; nothing to tell then.
@@ -101,11 +114,11 @@ impl Writer {
         A: FnOnce(&Connection, &T) + Send + 'static,
     {
         let (reply, answer) = mpsc::sync_channel::<AppResult<T>>(1);
-        let job: Job = Box::new(move |conn: &mut Connection| {
+        let job: Job = Box::new(move |conn: &mut Gated| {
             let result = catch_unwind(AssertUnwindSafe(|| in_transaction(conn, job)))
                 .unwrap_or_else(|_| Err(AppError::internal(text::album::WRITING_DATABASE)));
             if let Ok(value) = &result {
-                let conn: &Connection = conn;
+                let conn: &Connection = &conn.conn;
                 let _ = catch_unwind(AssertUnwindSafe(|| after(conn, value)));
             }
             let _ = reply.send(result);
@@ -121,11 +134,15 @@ impl Writer {
 }
 
 fn in_transaction<T>(
-    conn: &mut Connection,
+    gated: &mut Gated,
     job: impl FnOnce(&Transaction<'_>) -> AppResult<T>,
 ) -> AppResult<T> {
     let failed = sqlite_error(text::album::WRITING_DATABASE);
-    let tx = conn
+    // Readers wait for the commit (or the rollback, which drops `tx` before
+    // this) on the gate rather than on SQLite's busy handler.
+    let _turn = gated.gate.write().unwrap_or_else(|p| p.into_inner());
+    let tx = gated
+        .conn
         .transaction_with_behavior(TransactionBehavior::Immediate)
         .map_err(&failed)?;
     // On `Err` (or a panic) `tx` is dropped here, which rolls it back.

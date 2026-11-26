@@ -1509,11 +1509,13 @@ fn scan_progress_is_at_most_ten_a_second_and_ends_finished() {
     assert_eq!(last.phase, ScanPhase::Idle);
     assert_eq!((last.found, last.done, last.failed), (300, 300, 0));
     assert_eq!(summary.done, 300);
-    // Every event but the last is at least ~100 ms after the one before.
+    // Every event but the last reaches the emitter at least 100 ms after the
+    // one before: the scanner measures the gap from the end of each send, so
+    // no tolerance for a thread held up mid-send is needed (#93).
     let times: Vec<Instant> = events[..events.len() - 1].iter().map(|(_, t)| *t).collect();
     for w in times.windows(2) {
         assert!(
-            w[1] - w[0] >= Duration::from_millis(99),
+            w[1] - w[0] >= Duration::from_millis(100),
             "{:?}",
             w[1] - w[0]
         );
@@ -1542,7 +1544,7 @@ fn album_changed_is_sent_at_most_once_a_second_with_the_revision() {
     }
     let times: Vec<Instant> = changes.iter().map(|(_, t)| *t).collect();
     for w in times[..times.len().saturating_sub(1)].windows(2) {
-        assert!(w[1] - w[0] >= Duration::from_millis(990));
+        assert!(w[1] - w[0] >= Duration::from_secs(1), "{:?}", w[1] - w[0]);
     }
     // An unchanged second scan writes nothing and says nothing.
     fx.events.clear();

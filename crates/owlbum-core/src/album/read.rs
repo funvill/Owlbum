@@ -6,7 +6,8 @@ use std::sync::Mutex;
 
 use rusqlite::{Connection, OpenFlags};
 
-use crate::album::{db, sqlite_error};
+use crate::album::db::{self, Gate};
+use crate::album::sqlite_error;
 use crate::error::AppResult;
 use crate::text;
 
@@ -22,6 +23,8 @@ pub const POOL_SIZE: usize = 4;
 pub struct Readers {
     path: Option<PathBuf>,
     idle: Mutex<Vec<Connection>>,
+    /// Shared with the album's writer; held shared for each read.
+    gate: Gate,
 }
 
 impl Readers {
@@ -30,7 +33,13 @@ impl Readers {
         Self {
             path: Some(path.to_path_buf()),
             idle: Mutex::new(Vec::new()),
+            gate: Gate::default(),
         }
+    }
+
+    /// The gate the album's writer must hold while it writes.
+    pub fn gate(&self) -> Gate {
+        Gate::clone(&self.gate)
     }
 
     /// Reads through one connection held for the session: the in-memory
@@ -39,17 +48,19 @@ impl Readers {
         Self {
             path: None,
             idle: Mutex::new(vec![conn]),
+            gate: Gate::default(),
         }
     }
 
     /// Runs `f` with a read-only connection. Any number of threads may read
-    /// at once; a read waits (up to [`db::BUSY_TIMEOUT`]) only while the
-    /// writer commits.
+    /// at once; a read waits only while the writer has a transaction open,
+    /// and then for its turn on the [`Gate`], not on SQLite's busy handler.
     pub fn read<T>(&self, f: impl FnOnce(&Connection) -> AppResult<T>) -> AppResult<T> {
         let Some(path) = &self.path else {
             let conn = self.idle.lock().unwrap_or_else(|p| p.into_inner());
             return f(&conn[0]);
         };
+        let _turn = self.gate.read().unwrap_or_else(|p| p.into_inner());
         let conn = match self.idle.lock().unwrap_or_else(|p| p.into_inner()).pop() {
             Some(conn) => conn,
             None => open_reader(path)?,

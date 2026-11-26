@@ -24,10 +24,27 @@ use crate::error::AppResult;
 use crate::text;
 use crate::{AppError, ErrorCode};
 
-/// How long a connection waits for another one in this program to finish
-/// (readers wait while the writer commits, and the writer waits for readers
-/// to finish before it commits).
+/// How long a connection waits on SQLite's file lock for another program
+/// (a backup tool, a database browser) to finish. Inside this program reads
+/// and write transactions take turns on a [`Gate`] instead, so they never
+/// wait on the file lock for each other.
 pub const BUSY_TIMEOUT: Duration = Duration::from_secs(10);
+
+/// Turns between this program's reads and its writer (#93). Every read
+/// holds it shared; each write transaction holds it alone, from `BEGIN` to
+/// the commit.
+///
+/// Without it a read that arrives while the writer commits polls SQLite's
+/// busy handler, which sleeps up to 100 ms between tries, while the writer
+/// starts its next commit within microseconds of the last. With
+/// `journal_mode = DELETE` a commit locks out readers for its whole sync, so
+/// during a scan's back-to-back batches a read could miss every gap until
+/// [`BUSY_TIMEOUT`] ran out and fail with "database is locked". A lock
+/// queues the read instead: it runs as soon as the commit ends.
+///
+/// Never read inside a read or a write job, or write inside a read: the
+/// inner call would wait for the outer one.
+pub type Gate = std::sync::Arc<std::sync::RwLock<()>>;
 
 /// The result of opening an album database.
 #[derive(Debug)]
@@ -92,9 +109,11 @@ impl AlbumDb {
         }
         let album_id = schema::meta(&conn, "album_id")?
             .ok_or_else(|| AppError::internal(text::album::OPENING_DATABASE))?;
+        let readers = Readers::new(&path);
+        let writer = Writer::start_gated(conn, readers.gate())?;
         Ok(Opened::Ready(Self {
-            readers: Readers::new(&path),
-            writer: Some(Writer::start(conn)?),
+            readers,
+            writer: Some(writer),
             path: Some(path),
             album_id,
             schema,
@@ -578,8 +597,37 @@ mod tests {
     fn readers_and_the_writer_work_at_the_same_time() {
         let tmp = tempfile::tempdir().unwrap();
         let db = Arc::new(ready(AlbumDb::open_at(tmp.path()).unwrap()));
+        // Every connection gets a busy timeout far shorter than the writes
+        // below take, so a read or a commit that waits on SQLite's lock
+        // instead of taking its turn fails here every time, not only on a
+        // loaded machine (#93).
+        let short = Duration::from_millis(20);
+        let pooled = Arc::new(std::sync::Barrier::new(crate::album::read::POOL_SIZE));
+        let opening: Vec<_> = (0..crate::album::read::POOL_SIZE)
+            .map(|_| {
+                let db = Arc::clone(&db);
+                let pooled = Arc::clone(&pooled);
+                std::thread::spawn(move || {
+                    db.read(|c| {
+                        c.busy_timeout(short).unwrap();
+                        pooled.wait();
+                        Ok(())
+                    })
+                    .unwrap()
+                })
+            })
+            .collect();
+        for t in opening {
+            t.join().unwrap();
+        }
+        db.write(move |tx| {
+            tx.busy_timeout(short).unwrap();
+            Ok(())
+        })
+        .unwrap();
+
         let stop = Arc::new(AtomicBool::new(false));
-        let readers: Vec<_> = (0..4)
+        let readers: Vec<_> = (0..crate::album::read::POOL_SIZE)
             .map(|_| {
                 let db = Arc::clone(&db);
                 let stop = Arc::clone(&stop);

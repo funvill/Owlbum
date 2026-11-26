@@ -70,6 +70,9 @@ pub struct ScanEnv {
     pub busy_wait: Duration,
     /// …at most this many times.
     pub busy_tries: u32,
+    /// Where the pixels pass writes thumbnails, and the warm pass after a
+    /// scan (#11). None writes no thumbnails.
+    pub thumbs: Option<crate::thumbs::Thumbs>,
 }
 
 impl std::fmt::Debug for ScanEnv {
@@ -97,6 +100,7 @@ impl ScanEnv {
             busy_recent: Duration::from_secs(2),
             busy_wait: Duration::from_secs(2),
             busy_tries: 5,
+            thumbs: None,
         }
     }
 }
@@ -811,8 +815,8 @@ impl Work<'_, '_> {
         }
     }
 
-    /// The pixels pass for one row: one decode, then the analysis (and,
-    /// with #11, the thumbnails) from it.
+    /// The pixels pass for one row: one decode, then the thumbnails and the
+    /// analysis from it.
     fn pixels(&self, job: &PixelsJob) {
         let path = walk::absolute(&self.scan.album.location().root, &job.rel_path);
         let decoded = busy_retry(
@@ -823,6 +827,13 @@ impl Work<'_, '_> {
         );
         match decoded {
             Ok(px) => {
+                if let Some(thumbs) = &self.scan.env.thumbs {
+                    let album_id = self.scan.album.db().album_id();
+                    thumbs.write_from_scan(
+                        &keys::thumb_key(album_id, &job.file_key, job.mtime_ms),
+                        &px,
+                    );
+                }
                 self.send(Op::Pixels {
                     rel_path: job.rel_path.clone(),
                     analysis: pixels::analysis(&px),

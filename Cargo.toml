@@ -45,6 +45,9 @@ nom-exif = "3.8"
 # Colour profiles to sRGB (docs/03-media-and-scanning.md, "Media handlers":
 # the sRGB rule). The same version `image` already depends on.
 moxcms = "0.8.1"
+# Thumbnail and zoom-copy JPEGs (docs/03-media-and-scanning.md, "Thumbnails
+# and the zoom copy"): 4:2:0 chroma, which `image`'s own encoder cannot write.
+jpeg-encoder = "0.7.1"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

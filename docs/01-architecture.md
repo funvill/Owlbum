@@ -239,8 +239,8 @@ These are the starting choices. A prototype may replace one; the replacement is 
 | Need | Choice | Notes |
 |---|---|---|
 | Database | `rusqlite` with bundled SQLite, FTS5 enabled | |
-| JPEG decode and resize | `zune-jpeg` (through `image`, which uses it as its JPEG decoder), `fast_image_resize`; `image` for other formats | |
-| JPEG encode | `mozjpeg` or `image`'s encoder | Chosen by measurement in the thumbnail work. |
+| JPEG decode and resize | `zune-jpeg` (through `image`, which uses it as its JPEG decoder); `image` for other formats | Thumbnails are resized with `image`'s Lanczos3 (#11); `fast_image_resize` can replace it if measurement asks for it. |
+| JPEG encode | `jpeg-encoder` | Pure Rust, writes 4:2:0 (which `image`'s encoder cannot); `mozjpeg` was not taken because it needs a C and assembler toolchain on every build machine (#11). |
 | EXIF and video metadata | `nom-exif` | Read only. |
 | JPEG XL | `jxl-oxide` | |
 | Camera RAW | `rawler` (LGPL-2.1) | DNG support and fast preview extraction are checked in the RAW prototype. |

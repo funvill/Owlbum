@@ -3,13 +3,16 @@
 //! `album_open` (#16) puts an album here with [`open_album`]; the scan
 //! commands (`album_rescan`, `album_scan_cancel`) act on it. Opening
 //! another album, closing, and quitting drop the old one, which cancels its
-//! scan and waits for it before the album database closes.
+//! scan and waits for it before the album database closes. A picture
+//! request in flight holds the album ([`Session::scanner`]) until it
+//! answers, so the last of those closes it.
 
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use owlbum_core::album::Album;
 use owlbum_core::error::AppResult;
 use owlbum_core::scan::{Request, ScanEnv, Scanner};
+use owlbum_core::thumbs::Thumbs;
 use owlbum_core::{AppError, ErrorCode, text};
 use tauri::{AppHandle, Manager, Runtime};
 
@@ -18,7 +21,7 @@ use crate::events::TauriEmitter;
 /// An open album: its scanner owns it.
 #[derive(Debug)]
 pub struct OpenAlbum {
-    scanner: Scanner,
+    scanner: Arc<Scanner>,
 }
 
 impl OpenAlbum {
@@ -48,7 +51,7 @@ impl Session {
     /// background. An album already open is closed first.
     pub fn open(&self, album: Album, env: ScanEnv) {
         self.close();
-        let scanner = Scanner::new(Arc::new(album), env);
+        let scanner = Arc::new(Scanner::new(Arc::new(album), env));
         scanner.request(Request::default());
         *self.slot() = Some(OpenAlbum { scanner });
     }
@@ -56,7 +59,16 @@ impl Session {
     /// Closes the open album: cancels its scan and waits for it.
     pub fn close(&self) {
         let old = self.slot().take();
+        if let Some(old) = &old {
+            old.scanner.cancel();
+        }
         drop(old);
+    }
+
+    /// The open album's scanner, held apart from the session's lock: for
+    /// work that takes a while, such as making a picture.
+    pub fn scanner(&self) -> Option<Arc<Scanner>> {
+        self.slot().as_ref().map(|o| Arc::clone(&o.scanner))
     }
 
     /// Runs `f` with the open album; `no_album` when there is none.
@@ -76,6 +88,7 @@ impl Session {
 /// Opens `album` in the app's session, with its scans' events sent to the
 /// page.
 pub fn open_album<R: Runtime>(app: &AppHandle<R>, album: Album) {
-    let env = ScanEnv::new(Arc::new(TauriEmitter(app.clone())));
+    let mut env = ScanEnv::new(Arc::new(TauriEmitter(app.clone())));
+    env.thumbs = app.try_state::<Thumbs>().map(|t| t.inner().clone());
     app.state::<Session>().open(album, env);
 }

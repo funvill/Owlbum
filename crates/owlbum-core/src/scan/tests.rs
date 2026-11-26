@@ -1640,17 +1640,24 @@ fn walker_order_is_natural_and_used_for_rows() {
 #[ignore]
 fn scan_timings() {
     for n in [2_000, 10_000] {
-        let fx = Fx::large(n);
-        let t = Instant::now();
-        let first = fx.scan();
-        let first_took = t.elapsed();
-        let t = Instant::now();
-        let again = fx.scan();
-        let again_took = t.elapsed();
-        println!(
-            "{n} files: first scan {first_took:?} ({} done, {} batches), second scan {again_took:?} ({} done)",
-            first.done, first.batches, again.done
-        );
+        for thumbnails in [false, true] {
+            let mut fx = Fx::large(n);
+            let data = tempfile::tempdir().unwrap();
+            if thumbnails {
+                let app = crate::appdata::AppData::open(data.path()).unwrap();
+                fx.env.thumbs = Some(crate::thumbs::Thumbs::open(app).unwrap());
+            }
+            let t = Instant::now();
+            let first = fx.scan();
+            let first_took = t.elapsed();
+            let t = Instant::now();
+            let again = fx.scan();
+            let again_took = t.elapsed();
+            println!(
+                "{n} files, thumbnails {thumbnails}: first scan {first_took:?} ({} done, {} batches), second scan {again_took:?} ({} done)",
+                first.done, first.batches, again.done
+            );
+        }
     }
 }
 

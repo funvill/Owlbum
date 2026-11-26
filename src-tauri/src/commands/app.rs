@@ -4,6 +4,7 @@ use crate::{area, command};
 use owlbum_core::app::{self, AppVersion};
 use owlbum_core::appdata::{AppData, Recent, Settings};
 use owlbum_core::media::{self, FormatInfo};
+use owlbum_core::thumbs::{CacheCleared, CacheUsage, Thumbs};
 use owlbum_core::{AppError, text};
 use serde_json::{Map, Value};
 use tauri::State;
@@ -11,6 +12,8 @@ use tauri::State;
 area! {
     prefix: "app",
     commands: [
+        app_cache_clear,
+        app_cache_usage,
         app_formats,
         app_recent_list,
         app_recent_remove,
@@ -19,6 +22,24 @@ area! {
         app_version,
     ],
     events: [],
+}
+
+command! {
+    /// Clear cache: deletes `thumbs/`, `full/` and their `cache_entries`
+    /// rows, and answers how many bytes they held (docs/02-data.md,
+    /// "Thumbnail keys and the cache"). Models, settings and albums are not
+    /// touched. Pictures are made again as the page asks for them.
+    pub async fn app_cache_clear(; thumbs: State<'_, Thumbs>) -> CacheCleared {
+        let thumbs = thumbs.inner().clone();
+        blocking(move || Ok(thumbs.cache().clear())).await
+    }
+}
+
+command! {
+    /// The bytes the thumbnail cache holds and its limit, for Settings.
+    pub fn app_cache_usage(; thumbs: State<'_, Thumbs>) -> CacheUsage {
+        Ok(thumbs.cache().usage())
+    }
 }
 
 command! {
@@ -59,9 +80,20 @@ command! {
     /// Saves some settings and answers every setting. Unknown keys are kept.
     /// A value outside its setting's range answers `setting_out_of_range`
     /// and changes nothing.
-    pub async fn app_settings_set(patch: Map<String, Value>; data: State<'_, AppData>) -> Settings {
+    pub async fn app_settings_set(
+        patch: Map<String, Value>;
+        data: State<'_, AppData>,
+        thumbs: State<'_, Thumbs>
+    ) -> Settings {
         let data = data.inner().clone();
-        blocking(move || data.set_settings(&patch)).await
+        let thumbs = thumbs.inner().clone();
+        blocking(move || {
+            let settings = data.set_settings(&patch)?;
+            // Lowering the limit prunes at once.
+            thumbs.cache().set_limit_gb(settings.cache_limit_gb);
+            Ok(settings)
+        })
+        .await
     }
 }
 

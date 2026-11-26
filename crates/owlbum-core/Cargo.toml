@@ -12,6 +12,7 @@ publish = false
 [dependencies]
 chrono.workspace = true
 image = { workspace = true, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
+jpeg-encoder.workspace = true
 jxl-oxide.workspace = true
 moxcms.workspace = true
 rusqlite.workspace = true

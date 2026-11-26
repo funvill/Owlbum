@@ -82,6 +82,9 @@ export const fakeFormats: FormatInfo[] = [
 
 /** The fake backend's `app_` commands. */
 export const appHandlers: AreaHandlers<AppCommands> = {
+  // An empty cache at the default limit. A test that needs a size replaces these.
+  app_cache_clear: () => ({ bytes_freed: 0 }),
+  app_cache_usage: () => ({ bytes: 0, limit_bytes: defaultSettings["cache.limit_gb"] * 1_000_000_000 }),
   app_formats: () => fakeFormats.map((f) => ({ ...f, extensions: [...f.extensions] })),
   app_recent_list: () => [],
   app_recent_remove: () => [],

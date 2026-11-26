@@ -132,7 +132,7 @@ impl AppData {
         recent::save_session(&self.conn(), root, session, now_ms)
     }
 
-    fn conn(&self) -> MutexGuard<'_, Connection> {
+    pub(crate) fn conn(&self) -> MutexGuard<'_, Connection> {
         // A panic while holding the lock leaves the connection usable: every
         // write is one transaction, rolled back if it did not finish.
         match self.inner.conn.lock() {

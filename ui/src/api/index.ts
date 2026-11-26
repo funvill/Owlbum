@@ -6,6 +6,8 @@ import type { Api } from "./types";
 
 export type * from "./types";
 export { isAppError, toAppError } from "./errors";
+export { fullUrl, mediaPlatform, originalUrl, thumbUrl, videoUrl } from "./media";
+export type { MediaPlatform } from "./media";
 
 let current: Api | undefined;
 

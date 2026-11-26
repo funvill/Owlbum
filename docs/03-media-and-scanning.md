@@ -428,7 +428,7 @@ For each waiting row, on the scan pool:
 
 | Priority | Jobs |
 |---|---|
-| 1 | Photos the page has asked for through `owlbum://thumb` and that are still waiting. What is on screen is read first. |
+| 1 | Photos the page has asked for through `owlbum://thumb` and that are still waiting. What is on screen is read first. (Not built yet, #91: on-demand thumbnails run on their own bounded workers; see "Concurrency and writes".) |
 | 2 | Cheap handlers (JPEG, small PNG). |
 | 3 | Decode-cost handlers. |
 | 4 | Heavy handlers (RAW, video, large TIFF). |
@@ -462,7 +462,7 @@ Rows still gone after move matching are set `missing = 1`. This is done **only**
 - rows whose file was listed as online-only;
 - any row, when the walk's root could not be read (an unplugged drive must not mark an album missing).
 
-After the last write the scanner emits the final `scan_progress` and starts the **warm pass**: at lowest priority it makes the small thumbnail for any row in scope that has none in the cache (after the cache was pruned or app data deleted). It finds them from `cache_entries` in one query, not by testing files. The warm pass is not part of the progress count and stops on cancel.
+After the last write the scanner emits the final `scan_progress` and starts the **warm pass**: at lowest priority it makes the small thumbnail (only the small one) for any row in scope that has none in the cache (after the cache was pruned or app data deleted). It finds them from `cache_entries` in one query, not by testing files. The warm pass is not part of the progress count and stops on cancel and when another scan is asked for.
 
 ### `scan_version`
 
@@ -475,7 +475,7 @@ After the last write the scanner emits the final `scan_progress` and starts the 
 - The writer collects scan results and commits them in one transaction when **200 rows** are waiting or **250 ms** have passed since the first waiting row, whichever comes first. The FTS `search` table is updated in the same transaction.
 - A typed change (a star, a note) is always its own transaction. It waits for at most one scan batch.
 - The compare stage reads `id, rel_path, size, mtime_ms, scan_version, scan_error, missing, file_key, analysis IS NULL, format, width, height` for the scope in one query (the last four tell a waiting row and give its pixels job its cost) into a hash map. It never queries per file.
-- Two requests for the same photo's pixels (a scan job and an on-demand thumbnail) share one decode: work in flight is keyed by photo id.
+- Two on-demand requests for the same photo's pixels share one decode: work in flight is keyed by `thumb_key`. A scan job and an on-demand request do not share one yet: when the page asks for a photo still waiting for its pixels pass, the thumbnail is made on demand and the scan's later pass for that photo skips encoding it (a thumbnail already on disk is never encoded again). Running the whole pixels pass on demand, and priority 1 below, wait for a scan pool that outlives a scan stage (#91).
 
 ### Progress and change events
 
@@ -641,7 +641,7 @@ Both are 0.5 when `Σe` is 0.
 | Made by the scan | Always | While the cache is under 70% of its limit |
 | Made on demand | Yes | Yes |
 
-Both qualities and the choice of encoder (`mozjpeg` or `image`) are confirmed by measurement: file size, encode time, and a visual check at 2× screen density.
+The encoder is `jpeg-encoder` (pure Rust, 4:2:0 baseline). `image`'s own encoder writes only 4:4:4, and `mozjpeg` needs a C and assembler toolchain on every build machine, so neither was taken (#11). Both qualities are starting values, still to be confirmed by measurement: file size, encode time, and a visual check at 2× screen density.
 
 The pipeline, in this order:
 
@@ -657,7 +657,7 @@ Making the medium size for every photo of a very large album would fill the cach
 ### Writing
 
 - A thumbnail is written to `<final name>.<random>.tmp` in the same folder, then renamed over the final name. If the rename fails and the final file exists, another thread got there first and that is success. The temporary file is removed in every case.
-- After the rename, a `cache_entries` row is written with kind `s` or `m` and the file's size.
+- After the rename, a `cache_entries` row is written with kind `s` or `m` and the file's size. Rows are written in batches (when 200 wait or a second after the first), because `app.sqlite` runs with `synchronous = FULL`; the cache's total size is kept in memory, so the size limit and the 70% rule cost no query.
 - `last_used` is updated in memory when a thumbnail is served and flushed to `app.sqlite` every 60 seconds, not once per request.
 - Thumbnail files are not flushed to disk with `fsync`; they are a cache. To catch a file cut short by a power loss, the protocol handler checks that a thumbnail is not empty and ends with the JPEG end marker (`FF D9`) before serving it. A file that fails is deleted and made again.
 
@@ -667,7 +667,7 @@ Making the medium size for every photo of a very large album would fill the cach
 
 1. Find the photo. `thumb_key` is a stored column of `photos` with its own index (`photos_thumb_key`, see [Data](02-data.md#schema)), so this is one indexed read on a pooled read-only connection. A key that belongs to no row of the open album that is in scope and not missing answers 404, even if a file for it sits in the shared cache.
 2. If the file exists and passes the end-marker check, serve it. Nothing is written to any database.
-3. Otherwise make the thumbnail on the scan pool at priority 1 and serve it. If the row is still waiting for its pixels pass, the whole pass runs for that photo now, so the work is done once. Requests for the same key and size share one job.
+3. Otherwise make the thumbnail and serve it. Requests for the same key share one job, whichever size they ask for: the job decodes once with `preview(1600)`, writes the small thumbnail and the one asked for, and the medium one too while the cache is under 70% of its limit. On-demand jobs run on the blocking pool, at most as many decodes at once as the scan pool has threads.
 4. If the photo cannot be decoded, answer 404. A video with no poster answers 404 and the page shows its placeholder tile.
 
 `query_window` reads each row's `thumb_key` from the same stored column, so no hashing happens per request. The scanner writes the column whenever it writes `file_key` or `mtime_ms`. In a view-only album the keys of rows held only in memory are kept with those rows.
@@ -764,9 +764,9 @@ Both are shared codes listed in [Architecture](01-architecture.md#commands); thi
 | `owlbum://thumb/<thumb_key>/s` and `/m` | JPEG thumbnail, made on demand if absent. `Cache-Control: private, max-age=31536000, immutable`. | 200, 404 |
 | `owlbum://full/<photo_id>?v=<thumb_key>` | The zoom copy. `Cache-Control: private, max-age=3600`. | 200, 404 |
 | `owlbum://original/<photo_id>?v=<thumb_key>` | The original file's bytes, **only** for a still whose `duration_ms` is set (an animated GIF or WebP). `Cache-Control: private, max-age=3600`. | 200, 404 |
-| `owlbum://video/<photo_id>` | The video file in ranges of at most 4 MiB. `Cache-Control: no-store`. | 206, 404, 416 |
+| `owlbum://video/<photo_id>` | The video file in ranges of at most 4 MiB. `Cache-Control: no-store`. Until playback is built (#50) a video's id answers `501` with the text "Video playback is not built yet." | 206, 404, 416 (501 until #50) |
 
-Every URL resolves only to a photo of the open album whose row is not missing. A photo id of the wrong kind for the URL answers 404. On Windows the webview addresses the scheme as `http://owlbum.localhost/…`; `ui/src/api/` builds the URL for the platform and nothing else does.
+Every URL resolves only to a photo of the open album that is in scope, whose row is not missing and has no scan error. A photo id of the wrong kind for the URL answers 404. Every reply carries `Access-Control-Allow-Origin: *` (the page draws edits from a thumbnail on a canvas, which needs the picture readable from the page's origin) and `X-Content-Type-Options: nosniff`. The handler accepts `owlbum://thumb/…`, `owlbum://localhost/thumb/…` and `http://owlbum.localhost/thumb/…` alike. On Windows the webview addresses the scheme as `http://owlbum.localhost/…`; `ui/src/api/` builds the URL for the platform and nothing else does.
 
 ## Constants
 
@@ -820,7 +820,7 @@ Only things a prototype or a measurement must settle. Each has an issue.
 4. **Tauri issue #3725.** Which of the three Linux playback steps works on current WebKitGTK, and does `<video>` over `owlbum://` with ranges behave on WebView2 for multi-gigabyte files?
 5. **Linux poster frames.** Is the GStreamer pipeline reliable across distributions with only the base plug-ins, and how is its absence detected cleanly at run time?
 6. **Windows poster frames.** Does the shell thumbnail give at least 1600 px, and does it block on cloud or network files? If so, use the Media Foundation path first.
-7. **Thumbnail encoding.** JPEG qualities for 512 px and 1600 px, and `mozjpeg` against `image`'s encoder. (`zune-jpeg` 0.5.15 has no reduced-size decode; checked in #6.)
+7. **Thumbnail encoding.** JPEG qualities for 512 px and 1600 px. The encoder is `jpeg-encoder` (#11); `mozjpeg` could still be measured against it if file size matters. (`zune-jpeg` 0.5.15 has no reduced-size decode; checked in #6.)
 8. **Colour conversion.** Settled in #7: `moxcms` 0.8.1, already a dependency of `image`. Measured against `lcms2` 6.3 (Little CMS 2.20) and `qcms` 0.3 on hand-built Display P3, Adobe RGB, sRGB and grey profiles, against values worked out from each profile's own numbers: all three stay within 1.5 levels (`moxcms` at most 1.2, mean 0.2). On five real monitor profiles `moxcms` and `lcms2` differ by at most 2 levels. All three refuse truncated, random and out-of-range profiles without panicking; given a profile whose colorants are all zero, `lcms2` and `qcms` turn every colour black while `moxcms` refuses it. The Windows "sRGB Color Space Profile" is recognised as sRGB and skipped. Converting a 6000 × 4000 picture on one thread: `moxcms` 57 to 77 ms, `qcms` 67 to 71 ms, `lcms2` 520 to 550 ms; building a transform takes 0.6 ms (`lcms2` 4 to 5 ms). The edit renderer in [Editing and file actions](06-editing-and-file-actions.md#rendering) uses `moxcms` too, with its 16-bit transform.
 9. **Encoders and decoders assumed here.** Settled in #6: `jxl-oxide` 0.12.6 has no encoder and `image` 0.25.10 writes only lossless WebP, so the capability table stands.
 10. **Analysis numbers.** The score thresholds in Organising were tuned on the old program's resampler. They must be checked against the pipeline pinned here on the `trip` fixture before they are trusted.

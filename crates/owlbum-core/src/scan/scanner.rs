@@ -208,6 +208,14 @@ impl Scanner {
         report::scan_errors(&self.shared.album, &overlay, offset, limit)
     }
 
+    /// The open album and its rows held in memory, for the picture URLs.
+    pub fn open(&self) -> crate::thumbs::serve::Open<'_> {
+        crate::thumbs::serve::Open {
+            album: &self.shared.album,
+            overlay: &self.shared.overlay,
+        }
+    }
+
     /// The scan facts held in memory for a view-only album.
     pub fn overlay(&self) -> MutexGuard<'_, Overlay> {
         self.shared
@@ -245,8 +253,31 @@ fn scan_loop(shared: &Shared) {
             // The report answers from this walk while the passes run.
             |walk| shared.state().walk = Some(walk.clone()),
         );
+        let cancelled = summary.cancelled;
         shared.state().last = Some(summary);
+        if !cancelled {
+            warm(shared);
+        }
     }
+}
+
+/// The warm pass after a scan (docs/03, "Finish"): the small thumbnail of
+/// every photo in scope that has none in the cache. Lowest priority: it
+/// stops on cancel and when another scan is asked for.
+fn warm(shared: &Shared) {
+    let Some(thumbs) = &shared.env.thumbs else {
+        return;
+    };
+    thumbs.cache().flush();
+    let photos = match crate::thumbs::lookup::complete_in_scope(&shared.album, &shared.overlay) {
+        Ok(p) => p,
+        Err(e) => {
+            tracing::warn!(target: "thumbs", "reading photos for the warm pass: {}", e.message);
+            return;
+        }
+    };
+    let stop = || shared.cancel.load(Ordering::SeqCst) || shared.state().pending.is_some();
+    thumbs.warm(&photos, &stop);
 }
 
 impl Drop for Scanner {

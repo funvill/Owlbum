@@ -9,26 +9,38 @@ pub mod bindings;
 pub mod commands;
 pub mod events;
 pub mod keymap;
+pub mod protocol;
 pub mod session;
 
 use std::sync::Arc;
 
 use owlbum_core::appdata::log::{self, LogFile, Logger};
 use owlbum_core::appdata::{self, AppData};
+use owlbum_core::thumbs::Thumbs;
 use tauri::Runtime;
 
-/// Adds Owlbum's commands to a Tauri builder. `run` uses it, and shell tests
-/// use it with Tauri's mock runtime.
+/// Adds Owlbum's commands and the `owlbum://` protocol to a Tauri builder.
+/// `run` uses it, and shell tests use it with Tauri's mock runtime.
 pub fn setup<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
-    builder
+    protocol::register(builder)
         .manage(session::Session::default())
         .invoke_handler(commands::registry::invoke_handler(commands::modules()))
 }
 
 /// Gives the app its open app data folder, which the `app_` settings and
-/// recent-list commands use. `run` passes the real folder; shell tests pass
-/// one in a temp folder, so no test touches a real install's data.
+/// recent-list commands use, and the thumbnail cache inside it. `run`
+/// passes the real folder; shell tests pass one in a temp folder, so no
+/// test touches a real install's data.
 pub fn with_app_data<R: Runtime>(builder: tauri::Builder<R>, data: AppData) -> tauri::Builder<R> {
+    let builder = match Thumbs::open(data.clone()) {
+        Ok(thumbs) => builder.manage(thumbs),
+        Err(e) => {
+            // Pictures answer 404 and the cache commands fail; the rest of
+            // the program works.
+            tracing::error!(target: "thumbs", "the thumbnail cache could not open: {}", e.message);
+            builder
+        }
+    };
     builder.manage(data)
 }
 

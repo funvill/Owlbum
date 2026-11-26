@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { setApi, thumbUrl } from "../../api";
 import { createFakeApi, type FakeApi } from "../../api/fake";
+import { fakeFormats } from "../../api/fake/app";
 import { createQueryFake, type FakePhoto } from "../../api/fake/query";
 import type { Row } from "../../api/bindings/Row";
 import { seriousFindings } from "../../test/axe";
@@ -168,24 +169,28 @@ describe("the grid", () => {
   });
 
   it("draws the marks of docs/04", async () => {
+    // Animated formats come from the registry (app_formats), never from a list here.
+    const gif = fakeFormats.find((f) => f.animated)!;
+    const moving = { ...gif, id: "moving", extensions: [".moving"], label: "Moving" };
     useAlbum(
       [
         { id: 1, rel_path: "a.jpg", date: "2024-01-01T00:00:01", star: true, score: 74 },
         { id: 2, rel_path: "b.jpg", date: "2024-01-01T00:00:02" },
         { id: 3, rel_path: "c.mp4", date: "2024-01-01T00:00:03", kind: "video", duration_ms: 65_400 },
-        { id: 4, rel_path: "d.gif", date: "2024-01-01T00:00:04", duration_ms: 900 },
-        { id: 5, rel_path: "e.webp", date: "2024-01-01T00:00:05", duration_ms: 900 },
+        { id: 4, rel_path: `d${gif.extensions[0]}`, date: "2024-01-01T00:00:04", duration_ms: 900 },
+        { id: 5, rel_path: `e${moving.extensions[0]}`, date: "2024-01-01T00:00:05", duration_ms: 900 },
         { id: 6, rel_path: "f.mov", date: "2024-01-01T00:00:06", kind: "video", duration_ms: 3_725_000 },
       ],
     );
+    fake.handle("app_formats", () => [...fakeFormats, moving]);
     // Rows as Rust would send them with a stack, an edit and a hidden photo shown.
     fake.handle("query_window", ({ offset, limit }) => {
       const rows: Row[] = [
         { id: 1, file_name: "a.jpg", rel_path: "a.jpg", star: true, score: 74 },
         { id: 2, file_name: "b.jpg", rel_path: "b.jpg", hidden: true },
         { id: 3, file_name: "c.mp4", rel_path: "c.mp4", kind: "video" as const, duration_ms: 65_400 },
-        { id: 4, file_name: "d.gif", rel_path: "d.gif", duration_ms: 900 },
-        { id: 5, file_name: "e.webp", rel_path: "e.webp", duration_ms: 900 },
+        { id: 4, file_name: `d${gif.extensions[0]}`, rel_path: "d", duration_ms: 900 },
+        { id: 5, file_name: `e${moving.extensions[0]}`, rel_path: "e", duration_ms: 900 },
         { id: 6, file_name: "f.mov", rel_path: "f.mov", kind: "video" as const, duration_ms: 3_725_000 },
       ].map((r) => ({
         thumb_key: `tk-${r.id}`,
@@ -217,10 +222,10 @@ describe("the grid", () => {
     expect(within(b!).getByRole("button", { name: gridText.star })).toBeInTheDocument();
 
     expect(within(c!).getByText("1:05")).toBeInTheDocument();
-    expect(within(d!).getByText("GIF")).toBeInTheDocument();
-    expect(within(e!).getByText("WebP")).toBeInTheDocument();
+    expect(within(d!).getByText(gif.label)).toBeInTheDocument();
+    expect(within(e!).getByText(moving.label)).toBeInTheDocument();
     expect(within(f!).getByText("1:02:05")).toBeInTheDocument();
-    expect(within(c!).queryByText("GIF")).toBeNull();
+    expect(within(c!).queryByText(gif.label)).toBeNull();
   });
 
   it("shows a warning and the file name when the thumbnail does not load", async () => {

@@ -23,7 +23,7 @@ import {
   type GridLayout,
   type VisibleRange,
 } from "./layout";
-import { gridBlocks, useGridStore } from "./store";
+import { animatedLabel, gridBlocks, useGridStore } from "./store";
 import { Tile, type TileActions } from "./Tile";
 import "./Grid.css";
 
@@ -51,6 +51,7 @@ export function Grid(props: GridProps) {
   const anchor = useGridStore((s) => s.anchor);
   const selection = useGridStore((s) => s.selection);
   const scroll = useGridStore((s) => s.scroll);
+  useGridStore((s) => s.formats);
   const editTarget = useSettingsStore((s) => s.settings?.edit_target ?? "album");
   const count = result?.count ?? 0;
 
@@ -285,6 +286,7 @@ export function Grid(props: GridProps) {
           current={current !== null && current.index === i}
           tabbable={i === focusIndex}
           editTarget={editTarget}
+          animatedLabel={row === undefined ? null : animatedLabel(row.file_name)}
           actions={stableActions}
         />,
       );

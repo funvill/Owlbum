@@ -45,6 +45,8 @@ interface TileProps {
   current: boolean;
   tabbable: boolean;
   editTarget: EditTarget;
+  /** The pill of an animated picture: its format's label from the registry. */
+  animatedLabel: string | null;
   actions: TileActions;
 }
 
@@ -59,6 +61,7 @@ export const Tile = memo(function Tile({
   current,
   tabbable,
   editTarget,
+  animatedLabel,
   actions,
 }: TileProps) {
   const [, redraw] = useState(0);
@@ -204,9 +207,7 @@ export const Tile = memo(function Tile({
               {row.duration_ms !== null && videoLength(row.duration_ms)}
             </span>
           )}
-          {animated && (
-            <span className="ow-pill ow-pill--badge">{/\.gif$/i.test(row.file_name) ? "GIF" : "WebP"}</span>
-          )}
+          {animated && animatedLabel !== null && <span className="ow-pill ow-pill--badge">{animatedLabel}</span>}
         </span>
 
         <span className="ow-tile__corner ow-tile__corner--bottom-right">

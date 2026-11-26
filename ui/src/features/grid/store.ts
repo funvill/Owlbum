@@ -55,6 +55,8 @@ export interface GridState extends Selected {
   /** The chosen thumbnail size, 96 to 320. */
   thumbSize: number;
   scroll: ScrollRequest | null;
+  /** Moves on when the formats from `app_formats` arrive. */
+  formats: number;
   /** Runs the query and follows `album_changed`. Calling it again does nothing. */
   start(options?: GridOptions): Promise<void>;
   /** Stops following the album and forgets its result (the album closed). */
@@ -108,6 +110,27 @@ function newBlocks(): BlockStore {
       if (!(isAppError(e) && e.code === "query_expired")) useGridStore.setState({ error: toAppError(e) });
     },
   );
+}
+
+/** File extension (".gif") to the label of an animated format, from `app_formats`. */
+let animatedLabels = new Map<string, string>();
+
+/** The label of the animated format of `fileName`, such as "GIF"; null when none is known. */
+export function animatedLabel(fileName: string): string | null {
+  const dot = fileName.lastIndexOf(".");
+  return dot < 0 ? null : (animatedLabels.get(fileName.slice(dot).toLowerCase()) ?? null);
+}
+
+async function loadFormats(): Promise<void> {
+  try {
+    const formats = await api().invoke("app_formats");
+    animatedLabels = new Map(
+      formats.filter((f) => f.animated).flatMap((f) => f.extensions.map((e) => [e.toLowerCase(), f.label] as const)),
+    );
+    useGridStore.setState((s) => ({ formats: s.formats + 1 }));
+  } catch {
+    // Without the formats an animated picture has no pill; nothing else changes.
+  }
 }
 
 /** The rows of the current result. */
@@ -177,6 +200,7 @@ export const useGridStore = create<GridState>()((set, get) => {
     error: null,
     thumbSize: THUMB_DEFAULT,
     scroll: null,
+    formats: 0,
     ...empty,
 
     start(options = {}) {
@@ -201,6 +225,8 @@ export const useGridStore = create<GridState>()((set, get) => {
       s.ready = (async () => {
         const settings = useSettingsStore.getState();
         if (settings.settings === null) await settings.load();
+        if (session !== s) return;
+        if (animatedLabels.size === 0) await loadFormats();
         if (session !== s) return;
         if (!sizeChosen) set({ thumbSize: clampThumbSize(useSettingsStore.getState().settings?.thumb_size) });
         const unlisten = await api().listen("album_changed", (change) => changed(s, change));
@@ -263,6 +289,7 @@ export function resetGrid(): void {
   clearTimeout(saveTimer);
   saveTimer = undefined;
   sizeChosen = false;
+  animatedLabels = new Map();
   blocks = newBlocks();
   useGridStore.setState({ thumbSize: THUMB_DEFAULT });
 }

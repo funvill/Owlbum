@@ -33,10 +33,6 @@ class FakeResizeObserver {
 }
 
 const isGrid = (el: Element) => el.classList.contains("ow-grid");
-const saved = {
-  width: Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientWidth")!,
-  height: Object.getOwnPropertyDescriptor(HTMLElement.prototype, "clientHeight")!,
-};
 
 beforeAll(() => {
   Object.defineProperty(HTMLElement.prototype, "clientWidth", {
@@ -55,8 +51,9 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  Object.defineProperty(HTMLElement.prototype, "clientWidth", saved.width);
-  Object.defineProperty(HTMLElement.prototype, "clientHeight", saved.height);
+  // Remove the stubs: the getters on Element.prototype show through again.
+  delete (HTMLElement.prototype as { clientWidth?: number }).clientWidth;
+  delete (HTMLElement.prototype as { clientHeight?: number }).clientHeight;
   vi.unstubAllGlobals();
 });
 
@@ -72,9 +69,13 @@ function photos(n: number, extra: (i: number) => Partial<FakePhoto> = () => ({})
 
 let fake: FakeApi;
 
-function useAlbum(list: FakePhoto[], overrides: Parameters<typeof createFakeApi>[0] = {}) {
+/** A fake backend over `list`. `overrides` may wrap the album's own handlers, so tokens stay valid. */
+function useAlbum(
+  list: FakePhoto[],
+  overrides: (album: ReturnType<typeof createQueryFake>) => Parameters<typeof createFakeApi>[0] = () => ({}),
+) {
   const album = createQueryFake(list);
-  fake = createFakeApi({ ...album.handlers, ...overrides });
+  fake = createFakeApi({ ...album.handlers, ...overrides(album) });
   setApi(fake);
   return album;
 }
@@ -122,13 +123,12 @@ describe("the grid", () => {
 
   it("shows placeholders until rows arrive, then the small thumbnails", async () => {
     let answer: (() => void) | undefined;
-    const album = createQueryFake(photos(10));
-    useAlbum(photos(10), {
+    useAlbum(photos(10), (album) => ({
       query_window: (args) =>
         new Promise<Row[]>((resolve) => {
           answer = () => resolve(album.handlers.query_window(args) as Row[]);
         }),
-    });
+    }));
     render(<Grid />);
     await waitFor(() => expect(tiles().length).toBe(10));
     expect(tiles()[0]).toHaveAccessibleName(gridText.loading);
@@ -257,13 +257,12 @@ describe("the grid", () => {
 
   it("hands clicks to the page, and placeholders take none", async () => {
     let answer: (() => void) | undefined;
-    const album = createQueryFake(photos(4));
-    useAlbum(photos(4), {
+    useAlbum(photos(4), (album) => ({
       query_window: (args) =>
         new Promise<Row[]>((resolve) => {
           answer = () => resolve(album.handlers.query_window(args) as Row[]);
         }),
-    });
+    }));
     const onTileClick = vi.fn();
     const onOpen = vi.fn();
     const onStar = vi.fn();
@@ -284,24 +283,26 @@ describe("the grid", () => {
   });
 
   it("says when no photos match the filter, with a way to clear it", async () => {
-    useAlbum(photos(3));
-    fake.handle("query_run", ({ query }) => {
-      const filtered = query.filter.starred === true;
-      return {
-        token: filtered ? "f" : "all",
-        revision: 0,
-        count: filtered ? 0 : 3,
-        photos: filtered ? 0 : 3,
-        total: 3,
-        album_photos: 3,
-        filtered,
-        panel_count: filtered ? 1 : 0,
-        chips: [],
-        kept: null,
-      };
-    });
+    // Starred photos only: none. The rest is the album's own engine, so its tokens hold.
+    useAlbum(photos(3), (album) => ({
+      query_run: (args) =>
+        args.query.filter.star === "yes"
+          ? {
+              token: "none",
+              revision: 0,
+              count: 0,
+              photos: 0,
+              total: 3,
+              album_photos: 3,
+              filtered: true,
+              panel_count: 1,
+              chips: [],
+              kept: null,
+            }
+          : album.handlers.query_run(args),
+    }));
     render(<Grid />);
-    act(() => useGridStore.getState().setQuery({ ...useGridStore.getState().query, filter: { starred: true } }));
+    act(() => useGridStore.getState().setQuery({ ...useGridStore.getState().query, filter: { star: "yes" } }));
     expect(await screen.findByText(gridText.noMatch)).toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: gridText.clearFilter }));
     await waitFor(() => expect(useGridStore.getState().result?.count).toBe(3));
@@ -365,8 +366,7 @@ describe("100,000 photos", () => {
   it("fetches and draws only the window in view, even across a drag to the end", async () => {
     let inFlight = 0;
     let most = 0;
-    const album = createQueryFake(all);
-    useAlbum(all, {
+    useAlbum(all, (album) => ({
       query_window: async (args) => {
         inFlight++;
         most = Math.max(most, inFlight);
@@ -374,7 +374,7 @@ describe("100,000 photos", () => {
         inFlight--;
         return album.handlers.query_window(args) as Row[];
       },
-    });
+    }));
     render(<Grid />);
     const grid = await screen.findByRole("grid");
     await waitFor(() => expect(grid).toHaveAttribute("aria-rowcount", String(N / 2)), { timeout: 10_000 });
@@ -383,7 +383,8 @@ describe("100,000 photos", () => {
     const l = gridLayout(420, N, 160);
     expect(l.total).toBeGreaterThan(MAX_SCROLL);
     const inner = gridBox().firstElementChild as HTMLElement;
-    expect(inner.style.height).toBe(`${l.height}px`);
+    // jsdom writes CSS numbers to 6 significant figures.
+    expect(Math.abs(parseFloat(inner.style.height) - l.height)).toBeLessThan(10);
     const drawnMax = (Math.ceil(600 / l.stride) + 8) * 2;
     expect(tiles().length).toBeLessThanOrEqual(drawnMax);
     // At the start: the first block only.

@@ -190,3 +190,18 @@ describe("thumbnail size", () => {
     expect(saves).toEqual([{ command: "app_settings_set", args: { patch: { thumb_size: 240 } } }]);
   });
 });
+
+describe("expired tokens", () => {
+  it("runs the query again and repeats the window, without spinning when it keeps expiring", async () => {
+    await grid().start();
+    fake.handle("query_window", () => {
+      throw appError("query_expired", "The list of photos changed. Showing it again.");
+    });
+    gridBlocks().want({ first: 0, last: 9, span: 10, direction: 1, current: null, anchor: null });
+    await new Promise((r) => setTimeout(r, RERUN_IDLE_MS * 3 + 50));
+    // At most one re-run per 100 ms, however often the token expires.
+    expect(runs().length).toBeGreaterThan(1);
+    expect(runs().length).toBeLessThanOrEqual(5);
+    expect(grid().error).toBeNull();
+  });
+});

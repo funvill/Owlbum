@@ -1,0 +1,211 @@
+/* docs/04-browsing.md, "The grid" and "Tiles"; docs/09-visual-design.md, "Badges on tiles". */
+
+.ow-grid {
+  position: relative;
+  height: 100%;
+  overflow-x: hidden;
+  overflow-y: auto;
+  background: var(--stage);
+  overscroll-behavior: contain;
+}
+
+.ow-grid--empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-3);
+  padding: var(--space-4);
+}
+
+.ow-grid__message {
+  color: var(--muted);
+}
+
+.ow-grid__link {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+}
+
+.ow-grid__content {
+  position: relative;
+  overflow: hidden;
+}
+
+.ow-grid__layer {
+  position: absolute;
+  inset: 0 0 auto;
+  will-change: transform;
+}
+
+.ow-grid__row {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+}
+
+/* A tile: a square placed by transform, its picture under its marks. */
+.ow-tile {
+  position: absolute;
+  top: 0;
+  left: 0;
+  contain: strict;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: var(--panel-2);
+  box-shadow: inset 0 0 0 1px var(--line-soft);
+  user-select: none;
+}
+
+.ow-tile__picture {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.ow-tile--hidden .ow-tile__picture {
+  opacity: 0.45;
+}
+
+.ow-tile__missing {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  height: 100%;
+  padding: var(--space-3);
+  color: var(--muted);
+  font: var(--text-xs);
+  text-align: center;
+}
+
+.ow-tile__missing-name {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.ow-tile__corner {
+  position: absolute;
+  z-index: var(--z-raised);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.ow-tile__corner--top-left {
+  top: var(--space-2);
+  left: var(--space-2);
+}
+
+.ow-tile__corner--top-right {
+  top: var(--space-2);
+  right: var(--space-2);
+}
+
+.ow-tile__corner--bottom-left {
+  bottom: var(--space-2);
+  left: var(--space-2);
+}
+
+.ow-tile__corner--bottom-right {
+  bottom: var(--space-2);
+  right: var(--space-2);
+}
+
+.ow-tile__badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: var(--size-badge);
+  min-width: var(--size-badge);
+  border-radius: var(--radius-full);
+  background: var(--badge-bg);
+  color: var(--badge-text);
+}
+
+.ow-tile__edit {
+  width: var(--size-edit-dot);
+  height: var(--size-edit-dot);
+  border-radius: var(--radius-full);
+  box-shadow: 0 0 0 1px var(--badge-bg);
+}
+
+.ow-tile__edit--album {
+  background: var(--marker-edited);
+}
+
+.ow-tile__edit--file {
+  background: var(--marker-unsaved);
+}
+
+.ow-tile__stack {
+  height: var(--size-badge-stack);
+  min-width: var(--size-badge-stack-min);
+  border: 0;
+}
+
+/* The star: always shown when on; otherwise on hover, on the selected tile and with focus inside. */
+.ow-tile__star {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: var(--size-target);
+  height: var(--size-target);
+  padding: 0;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--badge-bg);
+  color: var(--badge-text);
+  opacity: 0;
+  transition: opacity var(--motion-fast) var(--ease);
+}
+
+.ow-tile__star--on {
+  color: var(--accent);
+  opacity: 1;
+}
+
+.ow-tile:hover .ow-tile__star,
+.ow-tile--selected .ow-tile__star,
+.ow-tile:focus-within .ow-tile__star {
+  opacity: 1;
+}
+
+/* Outlines sit above the picture, so a dimmed or edited picture never covers them. */
+.ow-tile__outline {
+  position: absolute;
+  inset: 0;
+  z-index: var(--z-raised);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+.ow-tile--selected .ow-tile__outline {
+  outline: 2px solid var(--select);
+  outline-offset: -2px;
+}
+
+.ow-tile--current .ow-tile__outline {
+  outline: 3px solid var(--select);
+  outline-offset: -3px;
+}
+
+.ow-thumb-size {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-3);
+  color: var(--muted);
+}
+
+.ow-thumb-size .ow-slider__input {
+  width: 120px;
+}

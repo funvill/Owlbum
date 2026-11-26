@@ -87,7 +87,7 @@ describe("block store", () => {
     const { store, blocksAsked, answer } = setup(100_000);
     store.want({ first: 380, last: 420, span: 200, direction: 1, current: null, anchor: null });
     // A drag of the scrollbar to far away before anything answered.
-    store.want({ first: 90_100, last: 90_140, span: 40, direction: 1, current: null, anchor: null });
+    store.want({ first: 90_100, last: 90_140, span: 20, direction: 1, current: null, anchor: null });
     await answer(1);
     await answer(2);
     await answer(3);
@@ -159,7 +159,8 @@ describe("block store", () => {
     asked[0]!.resolve();
     await new Promise((r) => setTimeout(r, 0));
     expect(store.row(3)).toBeUndefined();
-    expect(store.inFlight).toBe(0);
+    // Only the new result's own request is left.
+    expect(store.inFlight).toBe(1);
   });
 
   it("asks again for the rows on screen after a refresh, showing the old ones meanwhile", async () => {
@@ -169,6 +170,7 @@ describe("block store", () => {
     await answer(0);
     store.refresh();
     expect(store.row(3)).toBeDefined();
+    expect(store.fresh(3)).toBe(false);
     store.want(want);
     expect(blocksAsked()).toEqual([0, 0]);
   });

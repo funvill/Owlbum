@@ -179,7 +179,12 @@ impl QueryEngine {
         });
         album.db().read(|conn| {
             let failed = sqlite_error(text::query::READING_ROWS);
-            let mut stmt = conn
+            // One read transaction for the whole window. Without it each
+            // lookup is its own transaction, which takes and drops the
+            // file's shared lock: 200 rows took 20 to 30 ms at 100,000
+            // photos on Windows, against 0.4 ms in one (#26).
+            let tx = conn.unchecked_transaction().map_err(&failed)?;
+            let mut stmt = tx
                 .prepare_cached(
                     "SELECT rel_path, file_name, thumb_key, kind, width, height, duration_ms, star, hidden
                        FROM photos WHERE id = ?1",
@@ -208,6 +213,8 @@ impl QueryEngine {
                     .optional()
                     .map_err(&failed)?;
             }
+            drop(stmt);
+            tx.commit().map_err(&failed)?;
             Ok(())
         })?;
 

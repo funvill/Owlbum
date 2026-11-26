@@ -789,6 +789,8 @@ Measured on the `large-100000` fixture, on a release build, on a local SSD.
 
 The first three rows are the common queries: they are what "stays quick" in the [README](README.md)'s principles means for 100,000 photos. A benchmark for each row lives in `owlbum-core` and is run before a release. It is not a pass-or-fail test, because timings depend on the machine.
 
+**Measured (#26).** `crates/owlbum-core/tests/large_album.rs` opens and scans the `large-100000` fixture, reopens it with its thumbnails kept and times the commands the grid uses (its header says how to run it). Windows development machine, release build, local SSD, one run each, after the two fixes below: `query_run` 1.9 ms by date and 5.3 ms by name; the same re-run keeping the current photo and 1,000 selected, 2.0 ms; `query_window` of 200 rows 0.4 to 1.0 ms; `query_locate` of the last photo 0.1 ms; `query_ids` of the whole result 0.2 ms; one star written through `Album::write_photos`, index included, 8.9 ms (the star command itself is #27). Loading the album index took 0.76 to 1.2 s inside an `Album::open` of 1.0 to 3.0 s, which also runs `quick_check` (0.3 to 0.5 s). Before the fixes, `query_window` took 65 to 110 ms, because each of its 200 lookups was its own read transaction; it now reads the window in one. A re-run with `keep` took 42 ms, almost all of it a hash map of 100,000 places; `settle` now uses a table indexed by id. The rows for filters, search, facets, `query_parse`, the other sorts and the derived rebuild are measured when #28 to #32 build them (#125).
+
 ## Undo (Ctrl+Z)
 
 Ctrl+Z takes back the last change to typed info. The undo list is kept by Rust, per open album, in memory.

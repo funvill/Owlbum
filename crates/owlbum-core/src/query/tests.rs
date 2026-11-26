@@ -712,6 +712,29 @@ fn rule_1_the_current_photo_stays_with_its_new_index() {
 }
 
 #[test]
+fn settling_works_the_same_with_sparse_ids() {
+    // Ids far apart (a view-only album's rows sit above the database's)
+    // take the map instead of the table; the answers are the same.
+    let big = 4_000_000_000u32;
+    let old = [1, big, 3, 4, 5];
+    let new = [9, 1, 3, 5, big];
+    let kept = settle(
+        &keep(Some((3, 2)), Some(5), &[3, 4, i64::from(big)]),
+        Some(&old),
+        &new,
+    );
+    assert_eq!(kept.current, at(3, 2));
+    assert_eq!(kept.anchor, at(5, 3));
+    assert_eq!(kept.selection, [3, i64::from(big)]);
+    let kept = settle(&keep(Some((4, 3)), None, &[]), Some(&old), &[big, 5]);
+    assert_eq!(
+        kept.current,
+        at(5, 1),
+        "k = 1: only the big id was before it"
+    );
+}
+
+#[test]
 fn the_view_photo_is_followed_like_the_current_photo() {
     // Rows arrive before the photo the grid's place is kept by: it moves
     // on by the rows that came before it.

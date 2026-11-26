@@ -228,7 +228,9 @@ On Windows the folder is deliberately not `%LOCALAPPDATA%\Owlbum`, because a per
   logs/owlbum.log          and owlbum.previous.log; rotated at 2,000,000 bytes when first opened in a run
 ```
 
-If the app data folder cannot be written, logs go to a folder in the system temp directory. A damaged `app.sqlite` is renamed `app.damaged-<timestamp>.sqlite` and a new one is made; only preferences and the recent list are lost.
+If the app data folder cannot be written, logs go to a folder in the system temp directory. A damaged `app.sqlite` (not a database, or failing `PRAGMA quick_check`) is renamed `app.damaged-<timestamp>.sqlite` (the UTC time as `YYYYMMDD-HHMMSS`, with `-2`, `-3`, … if taken) and a new one is made; only preferences and the recent list are lost. Any other failure to open it (the folder cannot be written, the file is busy) leaves the file alone and is fatal at start.
+
+`app.sqlite` follows the album database's patterns: `PRAGMA user_version` holds its schema version, its migrations are numbered SQL scripts (`crates/owlbum-core/src/appdata/migrations/`) run in one transaction, and it uses `journal_mode = DELETE` and `synchronous = FULL`. Its migrations only ever add, so a file made by a newer Owlbum is used as it is, without migrating, rather than set aside.
 
 ### Thumbnail keys and the cache
 
@@ -252,7 +254,7 @@ CREATE TABLE cache_entries (
 ) WITHOUT ROWID;
 ```
 
-Settings keys (each has a default in code; an unknown key is ignored and kept):
+Settings keys (each has a default in code; an unknown key is ignored and kept). `app_settings_set` checks the whole patch before writing any of it: a value of the wrong kind or outside its range answers `setting_out_of_range` with `details.key`, and nothing is written. A stored value this version cannot use reads as the default and is left in the table. A setting whose default is null or unset can be set back to null.
 
 | Key | Default | Meaning |
 |---|---|---|
@@ -273,7 +275,7 @@ Settings keys (each has a default in code; an unknown key is ignored and kept):
 | `window` | 1440 × 900 | `{ x, y, width, height, maximised }` in physical pixels. |
 | `whats_new.last_seen` | null | The last version whose notes were shown. |
 
-The recent list keeps 12 entries; an entry can be removed from the start screen. The page keeps nothing in `localStorage`; every preference goes through `app_settings_get` and `app_settings_set`.
+The recent list keeps 12 entries, newest first by `opened_at`; an entry can be removed from the start screen. Opening a folder or saving its session moves it to the top, with an `opened_at` later than every other entry's even when the clock gives the same millisecond. `root` is matched exactly as given. Saving a session keeps fields of the stored one that the new one does not have. The page keeps nothing in `localStorage`; every preference goes through `app_settings_get` and `app_settings_set`.
 
 ## Test fixtures
 

@@ -2656,6 +2656,7 @@ dependencies = [
  "tauri",
  "tauri-build",
  "tempfile",
+ "tracing",
  "ts-rs",
 ]
 
@@ -2671,6 +2672,7 @@ dependencies = [
  "serde_json",
  "tempfile",
  "thiserror 2.0.21",
+ "tracing",
  "ts-rs",
  "uuid",
  "windows-sys 0.61.2",

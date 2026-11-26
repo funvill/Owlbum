@@ -247,7 +247,7 @@ These are the starting choices. A prototype may replace one; the replacement is 
 | Video thumbnails and facts | The `windows` crate (shell thumbnails, Media Foundation); `gstreamer` linked to the system libraries on Linux | System codecs only. |
 | Country outlines | Natural Earth low-resolution outlines, bundled (public domain) | For the Country row and country search. |
 | Local dates and times | `chrono` (clock only) | Backup file names and the time shown for a stale lock. |
-| Logging | `tracing` with a file appender | |
+| Logging | `tracing`, with Owlbum's own small subscriber writing the file (`owlbum_core::appdata::log`) | `tracing-subscriber` and `tracing-appender` were not needed: the line format, the one rotation at open and the temp-folder fallback are a few dozen lines. |
 | Licence notices | `cargo-about` plus a small script for npm packages | |
 | Folder watching | `notify` | |
 | Trash | `trash` | |

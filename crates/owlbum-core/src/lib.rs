@@ -20,7 +20,7 @@ pub mod app;
 /// The app data folder: `app.sqlite`, settings, recent albums, logs (#5).
 pub mod appdata;
 /// Desktop rules that need no window: update rules, What's new rules, window
-/// restore, feedback address, log rotation (#58 to #63).
+/// restore, feedback address (#58 to #63). Log rotation is in `appdata`.
 pub mod desktop;
 /// The edit model and renderer, saving edits (#43 to #47).
 pub mod edit;

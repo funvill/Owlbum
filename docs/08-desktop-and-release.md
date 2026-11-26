@@ -18,7 +18,7 @@ Behaviour of the grid, viewer, filters, edits and tagging belongs to parts 4 to 
 
 **The version has one source.** It is `version` under `[workspace.package]` in the root `Cargo.toml`. Both crates inherit it. `src-tauri/tauri.conf.json` has no `version` key, so Tauri reads it from the crate. `ui/package.json` is private and its version is never shown; the page learns the version from `app_startup`.
 
-**A development build** is one compiled with debug assertions. It uses the identifier `com.funvill.owlbum.dev`, the name `Owlbum Dev` and the `Owlbum Dev` / `owlbum-dev` app data folder (see [Data](02-data.md)), so it runs beside an installed copy and never touches its data. These come from `src-tauri/tauri.dev.conf.json`, merged by the page's `app:dev` script (`npm --prefix ui run app:dev`).
+**A development build** is one compiled with debug assertions. It uses the identifier `com.funvill.owlbum.dev`, the name `Owlbum Dev` and the `OwlbumData Dev` / `owlbum-dev` app data folder (see [Data](02-data.md)), so it runs beside an installed copy and never touches its data. The identifier and name come from `src-tauri/tauri.dev.conf.json`, merged by the page's `app:dev` script (`npm --prefix ui run app:dev`); the shell picks the `Dev` app data folder when the build has debug assertions **or** carries an identifier ending in `.dev` (`owlbum_lib::is_dev_build`), so a release-profile build started with the dev config still never touches an installed copy's data.
 
 ## Starting
 

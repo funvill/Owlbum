@@ -7,5 +7,6 @@
 //! files. Text shared by several areas goes in `errors`.
 
 pub mod album;
+pub mod appdata;
 pub mod errors;
 pub mod media;

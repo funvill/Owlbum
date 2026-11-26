@@ -224,3 +224,44 @@ fn photo_set_info_saves_clears_and_tells_the_page() {
     .unwrap_err();
     assert_eq!(err["code"], "photo_not_found");
 }
+
+#[test]
+fn photo_set_info_stars_and_hides_and_tells_the_page() {
+    let f = fixture();
+    let fixture = owlbum_fixtures::trip(&f.tmp.path().join("trip")).unwrap();
+    f.open(&fixture.root);
+    let id = f.id_of("day1/lake.jpg");
+    let (send, heard) = mpsc::channel::<serde_json::Value>();
+    f.app.listen_any("album_changed", move |event| {
+        let _ = send.send(serde_json::from_str(event.payload()).unwrap());
+    });
+    let set = |patch: serde_json::Value| -> serde_json::Value {
+        invoke(
+            &f.window,
+            "photo_set_info",
+            json!({ "ids": [id], "patch": patch }),
+        )
+        .unwrap()
+        .deserialize()
+        .unwrap()
+    };
+
+    let r = set(json!({ "star": true }));
+    assert_eq!(r["changed"], json!([id]));
+    let event = loop {
+        let e = heard
+            .recv_timeout(Duration::from_secs(10))
+            .expect("album_changed is sent");
+        if e["reason"] == "info" {
+            break e;
+        }
+    };
+    assert_eq!(event["revision"], r["revision"]);
+    let d = f.detail(id).unwrap();
+    assert!(d.star && !d.hidden);
+
+    set(json!({ "hidden": true }));
+    assert!(f.detail(id).unwrap().hidden);
+    // Already hidden: nothing changes.
+    assert_eq!(set(json!({ "hidden": true }))["changed"], json!([]));
+}

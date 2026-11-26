@@ -44,7 +44,7 @@ Nothing in the album index is information about a photo that could be lost. It i
 
 Photos that already have the new value are left alone and are not part of the undo step.
 
-The page sends `photo_set_info(ids, { star })` or `photo_set_info(ids, { hidden })`. Rust writes every row in one transaction, records one undo step, updates the album index, and emits `album_changed`. The change is committed before the command returns, so a second press always sees the first.
+The page sends `photo_set_info(ids, { star })` or `photo_set_info(ids, { hidden })`. Rust writes every row in one transaction, records one undo step, updates the album index, and emits `album_changed`. The change is committed before the command returns, so a second press always sees the first. Presses are sent one after another, and until a row of a later result arrives the page reads a photo's value from what it last sent, so a second press made before the re-run lands still toggles back. A press made while a step is still waiting for its row does nothing.
 
 ### Where the selection goes afterwards
 
@@ -65,10 +65,10 @@ When a star or hide is made with a key, a mark plays over the preview pane, or o
 |---|---|
 | Starred | A filled star in `--accent`. |
 | Unstarred | A star outline in `--mark-off`. |
-| Hidden | A filled eye-off icon in `--mark-off`. |
+| Hidden | The eye-off icon in `--mark-off`. |
 | Unhidden | An eye outline in `--mark-off`. |
 
-The mark is 180 px, centred, and plays for 0.8 s (it grows slightly and fades). A new press restarts it. With reduced motion it does not move: it is shown for 0.8 s and removed. Clicking the star button on a tile plays no mark; the badge changing is enough.
+The mark is 180 px (`--size-flag-mark`), centred, and plays for 0.8 s (it grows slightly and fades). A new press restarts it. Its accessible names are "Starred", "Star removed", "Hidden" and "Shown again". With reduced motion it does not move: it is shown for 0.8 s and removed. Clicking the star button on a tile plays no mark; the badge changing is enough.
 
 ### Hidden photos
 

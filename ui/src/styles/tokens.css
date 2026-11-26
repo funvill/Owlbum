@@ -134,6 +134,7 @@
   --size-toast-edge: 3px;
   --size-focus: 2px;
   --size-mark: 64px;
+  --size-flag-mark: 180px;
 
   /* Radii */
   --radius-sm: 4px;
@@ -149,6 +150,9 @@
   --ease: cubic-bezier(0.2, 0, 0, 1);
   --motion-travel: 4px;
   --motion-press: 1px;
+  --motion-mark: 800ms;
+  --mark-grow: 1.08;
+  --mark-fade: 0;
   --progress-unknown-width: 25%;
   --progress-unknown-stripes: none;
 
@@ -172,6 +176,9 @@
     --motion-slow: 0ms;
     --motion-travel: 0px;
     --motion-press: 0px;
+    /* The star and hide mark is shown still, then removed. */
+    --mark-grow: 1;
+    --mark-fade: 1;
     /* A progress bar with no known total stands still, striped. */
     --progress-unknown-width: 100%;
     --progress-unknown-stripes: repeating-linear-gradient(-45deg, var(--accent) 0 4px, var(--panel-3) 4px 8px);

@@ -340,9 +340,101 @@ fn every_change_answers_view_only_in_a_view_only_album() {
         json!({ "people": ["Ann"] }),
         json!({ "date_override": "2020-01-01" }),
         json!({ "location": null }),
+        json!({ "star": true }),
+        json!({ "hidden": true }),
     ] {
         let e = set(&album, id, p).unwrap_err();
         assert_eq!(e.code, ErrorCode::ViewOnly);
     }
     assert_eq!(detail(&album, id).notes, None);
+}
+
+fn flags(album: &Album, id: i64) -> (bool, bool) {
+    album
+        .db()
+        .read(move |c| {
+            Ok(
+                c.query_row("SELECT star, hidden FROM photos WHERE id = ?1", [id], |r| {
+                    Ok((r.get::<_, i64>(0)? != 0, r.get::<_, i64>(1)? != 0))
+                })
+                .unwrap(),
+            )
+        })
+        .unwrap()
+}
+
+fn indexed_flags(album: &Album, id: i64) -> (bool, bool) {
+    album.index().read(|v| {
+        let p = v.get(u32::try_from(id).unwrap()).unwrap();
+        (p.star(), p.hidden())
+    })
+}
+
+#[test]
+fn star_and_hidden_are_set_and_cleared_and_the_index_follows() {
+    let tmp = tempfile::tempdir().unwrap();
+    let album = album(tmp.path());
+    let id = photo(&album, "a.jpg");
+    assert_eq!(patch(json!({ "star": true })).star, Some(true));
+    assert_eq!(patch(json!({})).star, None);
+
+    let r = set(&album, id, json!({ "star": true })).unwrap();
+    assert_eq!(r.changed, [id]);
+    assert_eq!(flags(&album, id), (true, false));
+    assert_eq!(indexed_flags(&album, id), (true, false));
+    let d = detail(&album, id);
+    assert!(d.star && !d.hidden);
+
+    set(&album, id, json!({ "hidden": true })).unwrap();
+    assert_eq!(flags(&album, id), (true, true));
+    assert_eq!(indexed_flags(&album, id), (true, true));
+
+    set(&album, id, json!({ "star": false, "hidden": false })).unwrap();
+    assert_eq!(flags(&album, id), (false, false));
+    assert_eq!(indexed_flags(&album, id), (false, false));
+}
+
+#[test]
+fn photos_that_already_have_the_value_are_left_alone() {
+    let tmp = tempfile::tempdir().unwrap();
+    let album = album(tmp.path());
+    let a = photo(&album, "a.jpg");
+    let b = photo(&album, "b.jpg");
+    let c = photo(&album, "c.jpg");
+    set(&album, b, json!({ "star": true })).unwrap();
+    let rev = album.revision();
+
+    let (r, step) = set_info_step(&album, vec![a, b, c], patch(json!({ "star": true }))).unwrap();
+    assert_eq!(r.changed, [a, c]);
+    assert!(r.revision > rev);
+    let step = step.expect("a change makes an undo step");
+    assert_eq!(step.label, "star");
+    assert_eq!(step.before.iter().map(|p| p.id).collect::<Vec<_>>(), [a, c]);
+    assert!(step.before.iter().all(|p| !p.star));
+
+    let (r, step) = set_info_step(&album, vec![a, b, c], patch(json!({ "star": true }))).unwrap();
+    assert!(r.changed.is_empty());
+    assert_eq!(r.revision, album.revision());
+    assert!(
+        step.is_none(),
+        "a command that changes nothing records no step"
+    );
+}
+
+#[test]
+fn each_patch_has_its_undo_label() {
+    for (p, label) in [
+        (json!({ "star": true }), "star"),
+        (json!({ "hidden": true }), "hide"),
+        (json!({ "description": "x" }), "description"),
+        (json!({ "notes": "x" }), "notes"),
+        (json!({ "people": ["Ann"] }), "people"),
+        (json!({ "date_override": "2020-01-01" }), "date"),
+        (
+            json!({ "location": { "lat": 1.0, "lon": 2.0, "name": null } }),
+            "place",
+        ),
+    ] {
+        assert_eq!(undo_label(&patch(p)), label);
+    }
 }

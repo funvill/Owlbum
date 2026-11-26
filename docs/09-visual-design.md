@@ -266,6 +266,7 @@ The sizes above are tokens as well, so that no component writes a pixel size of 
 | `--size-toast-edge` | 3 px | The coloured left edge of a toast. |
 | `--size-focus` | 2 px | The focus ring, and the gap inside it. |
 | `--size-mark` | 64 px | The owl mark in empty states. |
+| `--size-flag-mark` | 180 px | The star and hide mark that plays over the photo ([Organising](05-organising.md#the-mark)). |
 
 | Token | Value | Use |
 |---|---|---|
@@ -296,6 +297,9 @@ The old program used 7 px on buttons; that becomes 6 px. Its single `--radius` t
 | `--ease` | `cubic-bezier(0.2, 0, 0, 1)` | Everything. |
 | `--motion-travel` | 4 px | How far menus, popovers and toasts travel as they appear. |
 | `--motion-press` | 1 px | How far a button moves down while pressed. |
+| `--motion-mark` | 800 ms | How long the star and hide mark plays. |
+| `--mark-grow` | `1.08` | How much the mark grows as it plays. With reduced motion it is `1`. |
+| `--mark-fade` | `0` | The mark's opacity at the end. With reduced motion it is `1`: the mark stands still and is removed after 800 ms. |
 | `--progress-unknown-width` | `25%` | The travelling block of a progress bar with no known total. |
 | `--progress-unknown-stripes` | `none` | Its stripes: none, so the block is plain. |
 

@@ -1,0 +1,33 @@
+/* docs/05-organising.md, "The mark": 180 px, centred, grows slightly and fades. */
+.ow-flag-mark {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: var(--size-flag-mark);
+  height: var(--size-flag-mark);
+  margin: calc(var(--size-flag-mark) / -2) 0 0 calc(var(--size-flag-mark) / -2);
+  color: var(--mark-off);
+  pointer-events: none;
+  z-index: var(--z-raised);
+  animation: ow-flag-mark var(--motion-mark) var(--ease) forwards;
+}
+
+.ow-flag-mark--starred {
+  color: var(--accent);
+}
+
+.ow-flag-mark .ow-icon {
+  width: 100%;
+  height: 100%;
+}
+
+@keyframes ow-flag-mark {
+  from {
+    opacity: 1;
+    transform: scale(1);
+  }
+  to {
+    opacity: var(--mark-fade);
+    transform: scale(var(--mark-grow));
+  }
+}

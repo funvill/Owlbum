@@ -16,6 +16,7 @@ import type { PhotoDetail } from "../../api/bindings/PhotoDetail";
 import { previewText as t } from "../../text/preview";
 import { useSettingsStore } from "../app";
 import { useGridStore } from "../grid";
+import { FlagMark } from "../organise";
 import { Caption } from "./Caption";
 import { useCachedReady, usePreload } from "./preload";
 import { useShownRow } from "./shownRow";
@@ -77,6 +78,7 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
           onMenu={onMenu === undefined ? undefined : (e) => onMenu(at, e)}
           handle={zoom}
         />
+        <FlagMark place="preview" />
       </div>
       <Caption row={row} selected={selected} fullPath={own?.abs_path ?? null} editTarget={editTarget} />
     </section>

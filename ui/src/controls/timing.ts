@@ -13,3 +13,6 @@ export const toastMs = {
 
 /** The viewer's top bar fades out after this long without pointer movement or a key. */
 export const viewerBarMs = 3000;
+
+/** How long the star or hide mark stays over the photo (docs/05-organising.md, "The mark"). */
+export const markMs = 800;

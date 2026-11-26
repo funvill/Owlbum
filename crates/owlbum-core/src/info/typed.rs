@@ -1,5 +1,6 @@
 //! Typed info: description, notes, people, date and place
-//! (`photo_set_info`, docs/04-browsing.md, "How typed fields save"), and
+//! (`photo_set_info`, docs/04-browsing.md, "How typed fields save"), star
+//! and hidden (docs/05-organising.md, "Star and hide"), and
 //! the album's people for the People field's suggestions (`album_people`,
 //! docs/05-organising.md, "People suggestions").
 //!
@@ -45,7 +46,7 @@ pub struct TypedLocation {
 }
 
 /// The fields `photo_set_info` changes. A field left out is left alone; a
-/// null clears it. `star` and `hidden` are added by Organising (#27).
+/// null clears it. `star` and `hidden` cannot be null.
 #[derive(Debug, Clone, Default, PartialEq, Serialize, Deserialize, TS)]
 pub struct InfoPatch {
     #[serde(
@@ -85,6 +86,12 @@ pub struct InfoPatch {
     )]
     #[ts(optional = nullable)]
     pub location: Option<Option<TypedLocation>>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub star: Option<bool>,
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub hidden: Option<bool>,
 }
 
 /// `photo_set_info`'s answer.
@@ -94,6 +101,30 @@ pub struct InfoChanged {
     pub changed: Vec<i64>,
     /// The album's revision after the change; unchanged when nothing changed.
     pub revision: u64,
+}
+
+/// One photo's typed info as it was before a `photo_set_info` changed it:
+/// what an undo step holds for that photo (docs/05-organising.md, "Undo").
+#[derive(Debug, Clone, PartialEq)]
+pub struct PriorInfo {
+    pub id: i64,
+    pub description: Option<String>,
+    pub notes: Option<String>,
+    pub date_override: Option<String>,
+    pub loc: Option<(f64, f64)>,
+    pub loc_name: Option<String>,
+    pub people: Vec<String>,
+    pub star: bool,
+    pub hidden: bool,
+}
+
+/// The undo step one `photo_set_info` call makes: its label and the photos
+/// it changed, with their values before. Photos that already had the new
+/// value are not in it.
+#[derive(Debug, Clone, PartialEq)]
+pub struct UndoStep {
+    pub label: &'static str,
+    pub before: Vec<PriorInfo>,
 }
 
 /// One name of `album_people`, with the number of photos it is on.
@@ -218,8 +249,26 @@ struct Stored {
     loc: Option<(f64, f64)>,
     loc_name: Option<String>,
     people: Vec<String>,
+    star: bool,
+    hidden: bool,
     captured_at: Option<String>,
     gps: Option<(f64, f64)>,
+}
+
+impl Stored {
+    fn prior(self, id: i64) -> PriorInfo {
+        PriorInfo {
+            id,
+            description: self.description,
+            notes: self.notes,
+            date_override: self.date_override,
+            loc: self.loc,
+            loc_name: self.loc_name,
+            people: self.people,
+            star: self.star,
+            hidden: self.hidden,
+        }
+    }
 }
 
 fn failed() -> impl Fn(rusqlite::Error) -> AppError {
@@ -234,7 +283,7 @@ fn stored(tx: &Transaction<'_>, id: i64) -> AppResult<Option<Stored>> {
     let row = tx
         .query_row(
             "SELECT description, notes, date_override, loc_lat, loc_lon, loc_name, captured_at,
-                    gps_lat, gps_lon
+                    gps_lat, gps_lon, star, hidden
                FROM photos WHERE id = ?1",
             [id],
             |r| {
@@ -246,6 +295,8 @@ fn stored(tx: &Transaction<'_>, id: i64) -> AppResult<Option<Stored>> {
                     loc_name: r.get(5)?,
                     captured_at: r.get(6)?,
                     gps: r.get::<_, Option<f64>>(7)?.zip(r.get::<_, Option<f64>>(8)?),
+                    star: r.get::<_, i64>(9)? != 0,
+                    hidden: r.get::<_, i64>(10)? != 0,
                     people: Vec::new(),
                 })
             },
@@ -274,6 +325,29 @@ struct Checked {
     people: Option<Vec<String>>,
     date: Option<Option<String>>,
     location: Option<Option<TypedLocation>>,
+    star: Option<bool>,
+    hidden: Option<bool>,
+}
+
+/// The undo label of a patch (docs/05-organising.md, "What can be undone").
+/// The page sends one kind of change per call; for a patch of several the
+/// first in this order names the step.
+pub fn undo_label(patch: &InfoPatch) -> &'static str {
+    if patch.star.is_some() {
+        "star"
+    } else if patch.hidden.is_some() {
+        "hide"
+    } else if patch.people.is_some() {
+        "people"
+    } else if patch.description.is_some() {
+        "description"
+    } else if patch.notes.is_some() {
+        "notes"
+    } else if patch.date_override.is_some() {
+        "date"
+    } else {
+        "place"
+    }
 }
 
 fn check(patch: InfoPatch) -> AppResult<Checked> {
@@ -304,6 +378,8 @@ fn check(patch: InfoPatch) -> AppResult<Checked> {
         people: patch.people.map(|p| clean_names(p.unwrap_or_default())),
         date,
         location,
+        star: patch.star,
+        hidden: patch.hidden,
     })
 }
 
@@ -381,9 +457,22 @@ fn spelled(known: &HashMap<String, (i64, String)>, names: &[String]) -> Vec<Stri
 /// keeps the revision; otherwise the revision is raised and the caller
 /// sends `album_changed` with reason `info`.
 pub fn set_info(album: &Album, ids: Vec<i64>, patch: InfoPatch) -> AppResult<InfoChanged> {
+    let (changed, _step) = set_info_step(album, ids, patch)?;
+    // Undo (#33) records `_step` on the open album's undo list here.
+    Ok(changed)
+}
+
+/// [`set_info`], also answering the undo step the call makes: None when
+/// nothing changed.
+pub fn set_info_step(
+    album: &Album,
+    ids: Vec<i64>,
+    patch: InfoPatch,
+) -> AppResult<(InfoChanged, Option<UndoStep>)> {
     if album.is_view_only() {
         return Err(AppError::new(ErrorCode::ViewOnly, text::photo::VIEW_ONLY));
     }
+    let label = undo_label(&patch);
     let checked = check(patch)?;
     // Whether each id is a photo the album shows, read before the write so
     // `servable` can be given the album.
@@ -408,8 +497,8 @@ pub fn set_info(album: &Album, ids: Vec<i64>, patch: InfoPatch) -> AppResult<Inf
         return Err(not_found());
     }
 
-    let changed = album.write_photos(move |tx, touched| {
-        let mut changed = Vec::new();
+    let before = album.write_photos(move |tx, touched| {
+        let mut before_all = Vec::new();
         for id in ids {
             let before = stored(tx, id)?.ok_or_else(not_found)?;
             let mut after = before.clone();
@@ -424,6 +513,12 @@ pub fn set_info(album: &Album, ids: Vec<i64>, patch: InfoPatch) -> AppResult<Inf
                     Some(d) if Some(d) == before.captured_at.as_ref() => None,
                     other => other.clone(),
                 };
+            }
+            if let Some(v) = checked.star {
+                after.star = v;
+            }
+            if let Some(v) = checked.hidden {
+                after.hidden = v;
             }
             if let Some(v) = &checked.location {
                 (after.loc, after.loc_name) = match v {
@@ -452,9 +547,15 @@ pub fn set_info(album: &Album, ids: Vec<i64>, patch: InfoPatch) -> AppResult<Inf
             if after == before {
                 continue;
             }
+            let flags_only = Stored {
+                star: before.star,
+                hidden: before.hidden,
+                ..after.clone()
+            } == before;
             tx.execute(
                 "UPDATE photos SET description = ?2, notes = ?3, date_override = ?4,
-                        loc_lat = ?5, loc_lon = ?6, loc_name = ?7, info_updated_at = ?8
+                        loc_lat = ?5, loc_lon = ?6, loc_name = ?7, info_updated_at = ?8,
+                        star = ?9, hidden = ?10
                   WHERE id = ?1",
                 params![
                     id,
@@ -465,17 +566,22 @@ pub fn set_info(album: &Album, ids: Vec<i64>, patch: InfoPatch) -> AppResult<Inf
                     after.loc.map(|l| l.1),
                     after.loc_name,
                     now_ms(),
+                    after.star,
+                    after.hidden,
                 ],
             )
             .map_err(failed())?;
             if people_changed && let Some(names) = &checked.people {
                 write_people(tx, id, names)?;
             }
-            search::reindex(tx, id)?;
+            // Star and hidden are not in the search text.
+            if !flags_only {
+                search::reindex(tx, id)?;
+            }
             touched.photo(id);
-            changed.push(id);
+            before_all.push(before.prior(id));
         }
-        if !changed.is_empty() {
+        if !before_all.is_empty() {
             // A name no photo uses any more is forgotten (docs/02-data.md).
             tx.execute(
                 "DELETE FROM people WHERE id NOT IN (SELECT person_id FROM photo_people)",
@@ -483,14 +589,16 @@ pub fn set_info(album: &Album, ids: Vec<i64>, patch: InfoPatch) -> AppResult<Inf
             )
             .map_err(failed())?;
         }
-        Ok(changed)
+        Ok(before_all)
     })?;
-    let revision = if changed.is_empty() {
-        album.revision()
-    } else {
-        album.next_revision()
-    };
-    Ok(InfoChanged { changed, revision })
+    let changed: Vec<i64> = before.iter().map(|p| p.id).collect();
+    if changed.is_empty() {
+        let revision = album.revision();
+        return Ok((InfoChanged { changed, revision }, None));
+    }
+    let revision = album.next_revision();
+    let step = UndoStep { label, before };
+    Ok((InfoChanged { changed, revision }, Some(step)))
 }
 
 /// `album_people()`: every name on at least one photo that is not

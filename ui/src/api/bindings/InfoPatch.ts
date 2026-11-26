@@ -3,11 +3,11 @@ import type { TypedLocation } from "./TypedLocation";
 
 /**
  * The fields `photo_set_info` changes. A field left out is left alone; a
- * null clears it. `star` and `hidden` are added by Organising (#27).
+ * null clears it. `star` and `hidden` cannot be null.
  */
 export type InfoPatch = { description?: string | null | null, notes?: string | null | null, people?: Array<string> | null | null, 
 /**
  * `YYYY-MM-DDTHH:MM:SS`; the shorter forms the page accepts are
  * accepted here too.
  */
-date_override?: string | null | null, location?: TypedLocation | null | null, };
+date_override?: string | null | null, location?: TypedLocation | null | null, star?: boolean, hidden?: boolean, };

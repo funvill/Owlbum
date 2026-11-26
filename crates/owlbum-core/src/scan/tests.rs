@@ -1350,17 +1350,18 @@ fn a_typed_change_during_a_scan_commits_within_one_batch() {
         std::thread::sleep(Duration::from_millis(5));
     };
     assert!(scanner.is_running(), "the scan is still running");
-    let t = Instant::now();
-    album
+    // Docs/03 promises the star waits for at most one scan batch, not a
+    // time: count the writer jobs it waited for, so a slow commit on a
+    // loaded machine cannot fail this (#100).
+    let (_, waited) = album
         .db()
-        .write(move |tx| {
+        .write_counted(move |tx| {
             tx.execute("UPDATE photos SET star = 1 WHERE id = ?1", [id])
                 .map_err(sqlite_error(text::album::WRITING_DATABASE))
         })
         .unwrap();
-    let took = t.elapsed();
     scanner.wait();
-    assert!(took < Duration::from_secs(1), "the star waited {took:?}");
+    assert!(waited <= 1, "the star waited for {waited} batches");
 }
 
 #[test]

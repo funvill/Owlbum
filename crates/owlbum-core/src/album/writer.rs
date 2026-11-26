@@ -11,7 +11,8 @@
 //! docs/03-media-and-scanning.md) is built on top of this by #8.
 
 use std::panic::{AssertUnwindSafe, catch_unwind};
-use std::sync::mpsc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, Mutex, mpsc};
 use std::thread::JoinHandle;
 
 use rusqlite::{Connection, Transaction, TransactionBehavior};
@@ -34,6 +35,11 @@ struct Gated {
 /// finish, closes the connection and waits for the thread to end.
 pub struct Writer {
     jobs: Option<mpsc::Sender<Job>>,
+    /// Held while a job is counted and queued, so its place in the queue
+    /// and the count it was given agree.
+    queueing: Mutex<()>,
+    /// Jobs the writer thread has finished.
+    done: Arc<AtomicU64>,
     thread: Option<JoinHandle<()>>,
 }
 
@@ -53,20 +59,41 @@ impl Writer {
     /// album's readers take turns with it ([`Gate`]).
     pub fn start_gated(conn: Connection, gate: Gate) -> AppResult<Self> {
         let (jobs, queue) = mpsc::channel::<Job>();
+        let done = Arc::new(AtomicU64::new(0));
+        let finished = Arc::clone(&done);
         let thread = std::thread::Builder::new()
             .name("owlbum-album-writer".into())
             .spawn(move || {
                 let mut conn = Gated { conn, gate };
                 for job in queue {
                     job(&mut conn);
+                    finished.fetch_add(1, Ordering::SeqCst);
                 }
                 // The connection closes here, after the last job.
             })
             .map_err(|_| AppError::internal(text::album::OPENING_DATABASE))?;
         Ok(Self {
             jobs: Some(jobs),
+            queueing: Mutex::new(()),
+            done,
             thread: Some(thread),
         })
+    }
+
+    /// Queues `job`, which is given how many jobs ran on the writer thread
+    /// after it was queued and before it started: the ones it waited for.
+    fn queue(&self, job: impl FnOnce(&mut Gated, u64) + Send + 'static) -> AppResult<()> {
+        let done = Arc::clone(&self.done);
+        let _order = self.queueing.lock().unwrap_or_else(|p| p.into_inner());
+        let at_queue = done.load(Ordering::SeqCst);
+        let job: Job = Box::new(move |conn: &mut Gated| {
+            let waited = done.load(Ordering::SeqCst) - at_queue;
+            job(conn, waited);
+        });
+        self.jobs
+            .as_ref()
+            .and_then(|jobs| jobs.send(job).ok())
+            .ok_or_else(|| AppError::internal(text::album::WRITING_DATABASE))
     }
 
     /// Runs `job` in a transaction on the writer thread and waits for it.
@@ -81,17 +108,25 @@ impl Writer {
         T: Send + 'static,
         F: FnOnce(&Transaction<'_>) -> AppResult<T> + Send + 'static,
     {
-        let (reply, answer) = mpsc::sync_channel::<AppResult<T>>(1);
-        let job: Job = Box::new(move |conn: &mut Gated| {
+        self.write_counted(job).map(|(value, _)| value)
+    }
+
+    /// [`Writer::write`], also answering how many earlier jobs (other
+    /// writes, a scan's batches) the job waited for on the writer thread.
+    /// Docs/03 promises a typed change waits for at most one scan batch;
+    /// this is how a test checks it without a clock.
+    pub fn write_counted<T, F>(&self, job: F) -> AppResult<(T, u64)>
+    where
+        T: Send + 'static,
+        F: FnOnce(&Transaction<'_>) -> AppResult<T> + Send + 'static,
+    {
+        let (reply, answer) = mpsc::sync_channel::<AppResult<(T, u64)>>(1);
+        self.queue(move |conn, waited| {
             let result = catch_unwind(AssertUnwindSafe(|| in_transaction(conn, job)))
                 .unwrap_or_else(|_| Err(AppError::internal(text::album::WRITING_DATABASE)));
             // The caller may have gone; nothing to tell then.
-            let _ = reply.send(result);
-        });
-        self.jobs
-            .as_ref()
-            .and_then(|jobs| jobs.send(job).ok())
-            .ok_or_else(|| AppError::internal(text::album::WRITING_DATABASE))?;
+            let _ = reply.send(result.map(|value| (value, waited)));
+        })?;
         answer
             .recv()
             .unwrap_or_else(|_| Err(AppError::internal(text::album::WRITING_DATABASE)))
@@ -114,7 +149,7 @@ impl Writer {
         A: FnOnce(&Connection, &T) + Send + 'static,
     {
         let (reply, answer) = mpsc::sync_channel::<AppResult<T>>(1);
-        let job: Job = Box::new(move |conn: &mut Gated| {
+        self.queue(move |conn, _| {
             let result = catch_unwind(AssertUnwindSafe(|| in_transaction(conn, job)))
                 .unwrap_or_else(|_| Err(AppError::internal(text::album::WRITING_DATABASE)));
             if let Ok(value) = &result {
@@ -122,11 +157,7 @@ impl Writer {
                 let _ = catch_unwind(AssertUnwindSafe(|| after(conn, value)));
             }
             let _ = reply.send(result);
-        });
-        self.jobs
-            .as_ref()
-            .and_then(|jobs| jobs.send(job).ok())
-            .ok_or_else(|| AppError::internal(text::album::WRITING_DATABASE))?;
+        })?;
         answer
             .recv()
             .unwrap_or_else(|_| Err(AppError::internal(text::album::WRITING_DATABASE)))
@@ -165,7 +196,6 @@ impl Drop for Writer {
 mod tests {
     use super::*;
     use crate::ErrorCode;
-    use std::sync::Arc;
 
     fn writer() -> Writer {
         let conn = Connection::open_in_memory().unwrap();
@@ -246,6 +276,28 @@ mod tests {
         );
         let cause = e.details.unwrap()["cause"].as_str().unwrap().to_owned();
         assert!(cause.contains("nope"), "{cause}");
+    }
+
+    #[test]
+    fn a_write_counts_the_jobs_it_waited_for() {
+        let w = writer();
+        assert_eq!(w.write_counted(|_| Ok(())).unwrap().1, 0, "an idle writer");
+
+        // One job running and two queued behind it, then the counted one.
+        let (release, held) = mpsc::channel::<()>();
+        let (running, started) = mpsc::channel::<()>();
+        w.queue(move |_, _| {
+            running.send(()).unwrap();
+            held.recv().unwrap();
+        })
+        .unwrap();
+        started.recv().unwrap();
+        w.queue(|_, _| {}).unwrap();
+        w.queue(|_, _| {}).unwrap();
+        let (tell, waited) = mpsc::channel::<u64>();
+        w.queue(move |_, n| tell.send(n).unwrap()).unwrap();
+        release.send(()).unwrap();
+        assert_eq!(waited.recv().unwrap(), 3);
     }
 
     #[test]

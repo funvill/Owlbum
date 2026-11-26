@@ -240,6 +240,23 @@ impl AlbumDb {
         }
     }
 
+    /// [`AlbumDb::write`], also answering how many earlier writer jobs it
+    /// waited for ([`Writer::write_counted`]).
+    #[cfg(test)]
+    pub fn write_counted<T, F>(&self, job: F) -> AppResult<(T, u64)>
+    where
+        T: Send + 'static,
+        F: FnOnce(&Transaction<'_>) -> AppResult<T> + Send + 'static,
+    {
+        match (&self.writer, self.view_only_message()) {
+            (Some(writer), None) => writer.write_counted(job),
+            (_, message) => Err(AppError::new(
+                ErrorCode::ViewOnly,
+                message.unwrap_or_else(|| text::album::view_only::READ_ONLY.to_owned()),
+            )),
+        }
+    }
+
     /// [`AlbumDb::write`], then `after` on the writer thread once the job
     /// has committed and before this answers ([`Writer::write_then`]).
     pub fn write_then<T, F, A>(&self, job: F, after: A) -> AppResult<T>

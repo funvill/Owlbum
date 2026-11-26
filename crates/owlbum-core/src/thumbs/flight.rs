@@ -76,17 +76,37 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
 
+    /// Requests that joined `key`'s flight and wait on it (the map and the
+    /// job's own handle are the other two references).
+    fn joined(flights: &Flights<Option<u32>>, key: &str) -> usize {
+        let jobs = flights.jobs.lock().unwrap();
+        jobs.get(key).map_or(0, |f| Arc::strong_count(f) - 2)
+    }
+
     #[test]
     fn concurrent_requests_for_one_key_run_one_job() {
+        const REQUESTS: usize = 8;
         let flights = Flights::<Option<u32>>::default();
         let runs = AtomicUsize::new(0);
         let answers: Vec<_> = std::thread::scope(|s| {
-            let handles: Vec<_> = (0..8)
+            let handles: Vec<_> = (0..REQUESTS)
                 .map(|_| {
                     s.spawn(|| {
                         flights.share("k", || {
                             runs.fetch_add(1, Ordering::SeqCst);
-                            std::thread::sleep(Duration::from_millis(200));
+                            // Hold the job until every other request has
+                            // joined it, however late its thread starts
+                            // (#100). A second job would never see them all
+                            // join, and the deadline below fails it.
+                            let start = std::time::Instant::now();
+                            while joined(&flights, "k") < REQUESTS - 1 {
+                                assert!(
+                                    start.elapsed() < Duration::from_secs(60),
+                                    "only {} requests joined",
+                                    joined(&flights, "k")
+                                );
+                                std::thread::sleep(Duration::from_millis(1));
+                            }
                             Some(7)
                         })
                     })

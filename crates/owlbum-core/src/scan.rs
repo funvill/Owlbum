@@ -20,9 +20,10 @@
 //! thread, which commits them in batches of 200 rows or 250 ms, or, in a
 //! view-only album, to the in-memory [`memory::Overlay`].
 //!
-//! Left for other issues, with their seams here: the walker's rules for
-//! system folders, nested album roots, links and online-only files, and the
-//! scan report commands (#9, [`walk::classify`]); metadata reading (#10,
+//! What the walk left out, and the files not shown, are answered from the
+//! last whole walk and the error rows by [`report`].
+//!
+//! Left for other issues, with their seams here: metadata reading (#10,
 //! the facts pass in [`run`]) and image analysis (#10, [`pixels`]);
 //! thumbnails and on-demand priority (#11, [`pixels`]); targeted rescans
 //! from the folder watcher (#14, [`Request`]).
@@ -33,6 +34,7 @@ pub mod order;
 pub mod pixels;
 pub mod progress;
 pub mod reader;
+pub mod report;
 pub mod rows;
 mod run;
 mod scanner;

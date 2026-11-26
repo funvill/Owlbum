@@ -125,7 +125,7 @@ pub struct ScanSummary {
     /// Why the scan stopped early: the scope could not be read, or a write
     /// failed. Nothing is marked missing then.
     pub error: Option<AppError>,
-    /// What the walk found, for the scan report (#9).
+    /// What the walk found, for the scan report ([`super::report`]).
     pub walk: Walk,
     /// New rows.
     pub added: u32,
@@ -439,10 +439,11 @@ impl Work<'_, '_> {
             }
         }
         // What is left in `by_path` is gone. Rows under a folder the walk
-        // could not read are not gone, and are no one's candidates.
+        // could not read, and rows of files stored online only, are not
+        // gone, and are no one's candidates.
         let mut gone: Vec<&Known> = by_path
             .into_values()
-            .filter(|k| !walk.is_under_unreadable(&k.rel_path))
+            .filter(|k| !walk.is_under_unreadable(&k.rel_path) && !walk.is_online_only(&k.rel_path))
             .collect();
         gone.sort_by(|a, b| natural_cmp(&a.rel_path, &b.rel_path));
         progress.reading();

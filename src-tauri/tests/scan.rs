@@ -87,7 +87,11 @@ fn the_report_commands_answer_from_the_last_scan() {
         .filter(|f| f.kind == owlbum_fixtures::Kind::Unsupported)
         .count();
     assert_eq!(
-        report.unsupported.iter().map(|u| u.count as usize).sum::<usize>(),
+        report
+            .unsupported
+            .iter()
+            .map(|u| u.count as usize)
+            .sum::<usize>(),
         unsupported_count
     );
 

@@ -2,11 +2,13 @@
 //!
 //! It lists the files of the scope (the album root, or the scoped folder),
 //! always with subfolders, reading directory entries without following
-//! links. What it leaves out is decided per entry by [`classify`]; roadmap
-//! #9 adds the rules for system folders, nested album roots, counted links
-//! and online-only files there, and the scan report commands over
-//! [`Walk`].
+//! links. What it leaves out is decided per entry by [`classify`]: dot
+//! names, system folders and links by name and type; nested album roots by
+//! one existence test per folder; online-only files by the attributes the
+//! directory listing gives. The scan report ([`super::report`]) is made
+//! from what a [`Walk`] counted.
 
+use std::collections::HashSet;
 use std::fs::{FileType, Metadata};
 use std::path::{Path, PathBuf};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -64,7 +66,16 @@ pub struct Walk {
     pub unreadable: Vec<UnreadableFolder>,
     /// Names that are not valid Unicode, skipped.
     pub unreadable_names: u32,
-    /// False when the walk was cancelled before it ended.
+    /// Symbolic links (and, on Windows, junctions), skipped.
+    pub links: u32,
+    /// Supported files stored online only (cloud placeholders): not listed,
+    /// never read, and their rows are not gone.
+    pub online_only: HashSet<String>,
+    /// Subfolders that are album roots of their own, skipped whole, in
+    /// walker order.
+    pub nested: Vec<String>,
+    /// False when the walk was cancelled before it ended (and for a walk
+    /// that never ran).
     pub complete: bool,
 }
 
@@ -74,6 +85,22 @@ impl Walk {
         self.unreadable
             .iter()
             .any(|f| is_under(rel_path, &f.rel_path))
+    }
+
+    /// True when the file at `rel_path` was found stored online only.
+    pub fn is_online_only(&self, rel_path: &str) -> bool {
+        self.online_only.contains(rel_path)
+    }
+
+    /// The `skipped` count of `album_status`: links, online-only files and
+    /// names that are not Unicode. System folders and dot names are left
+    /// out silently; nested albums and unreadable folders are listed in the
+    /// scan report instead.
+    pub fn skipped(&self) -> u32 {
+        let online = u32::try_from(self.online_only.len()).unwrap_or(u32::MAX);
+        self.links
+            .saturating_add(online)
+            .saturating_add(self.unreadable_names)
     }
 }
 
@@ -86,46 +113,110 @@ pub fn is_under(rel_path: &str, folder: &str) -> bool {
         || (rel_path.starts_with(folder) && rel_path.as_bytes().get(folder.len()) == Some(&b'/'))
 }
 
+/// Folders that hold deleted files or another program's thumbnails,
+/// skipped wherever they are. Compared without case.
+pub const SYSTEM_FOLDERS: [&str; 6] = [
+    "$RECYCLE.BIN",
+    "System Volume Information",
+    "@eaDir",
+    "#recycle",
+    "#snapshot",
+    "__MACOSX",
+];
+
+/// Windows file attributes that mark a file whose content is not on this
+/// computer: reading it would download it (values from `windows-sys`).
+const OFFLINE: u32 = 0x1000;
+const RECALL_ON_OPEN: u32 = 0x0004_0000;
+const RECALL_ON_DATA_ACCESS: u32 = 0x0040_0000;
+
+/// True when a file with these Windows attributes is stored online only:
+/// `RECALL_ON_DATA_ACCESS` (a cloud placeholder, such as a OneDrive file
+/// after "Free up space"), `RECALL_ON_OPEN` or `OFFLINE`.
+pub fn is_online_only(attributes: u32) -> bool {
+    attributes & (OFFLINE | RECALL_ON_OPEN | RECALL_ON_DATA_ACCESS) != 0
+}
+
+/// True when the file `meta` describes is stored online only. The
+/// attributes come from the directory listing, so nothing is opened. Never
+/// on systems other than Windows.
+fn online_only(meta: &Metadata) -> bool {
+    #[cfg(windows)]
+    {
+        use std::os::windows::fs::MetadataExt;
+        is_online_only(meta.file_attributes())
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = meta;
+        false
+    }
+}
+
+/// True when `dir` holds an album database of its own.
+fn is_album_root(dir: &Path) -> bool {
+    std::fs::symlink_metadata(dir.join(".owlbum").join("owlbum.sqlite")).is_ok()
+}
+
+/// A directory entry's type, as the listing reports it (links are not
+/// followed).
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub(crate) enum Entry {
+    /// A symbolic link or junction, to anything.
+    Link,
+    Folder,
+    File,
+    /// A device, socket, pipe and so on.
+    Other,
+}
+
+impl From<FileType> for Entry {
+    fn from(kind: FileType) -> Self {
+        if kind.is_symlink() {
+            Self::Link
+        } else if kind.is_dir() {
+            Self::Folder
+        } else if kind.is_file() {
+            Self::File
+        } else {
+            Self::Other
+        }
+    }
+}
+
 /// What the walker does with one directory entry.
 #[derive(Debug, Clone, Copy)]
 pub(crate) enum Rule {
     /// Left out silently.
     Skip,
-    /// A folder to walk into.
+    /// A link: left out and counted.
+    Link,
+    /// A folder to walk into, unless it is an album root of its own.
     Descend,
-    /// A supported file to list.
+    /// A supported file to list, unless it is stored online only.
     List,
     /// A recognised but unsupported file, counted.
     Unsupported(&'static UnsupportedFormat),
 }
 
-/// Decides what to do with an entry, by its name and its type as the
-/// directory reports it (links are not followed). Roadmap #9 extends it.
-pub(crate) fn classify(name: &str, kind: FileType) -> Rule {
+/// Decides what to do with an entry, by its name and its type.
+pub(crate) fn classify(name: &str, entry: Entry) -> Rule {
     // `.owlbum`, `.git`, `.Trash-1000`, dotfiles, and `._` AppleDouble
     // files (which also start with a dot; `is_supported` refuses them on
     // its own too, should this rule ever change).
     if name.starts_with('.') {
         return Rule::Skip;
     }
-    // Links are never followed: they can loop, leave the album, or list one
-    // file twice. Counting them for the scan report is #9.
-    if kind.is_symlink() {
-        return Rule::Skip;
+    match entry {
+        // Never followed: links can loop, leave the album, or list one file
+        // twice.
+        Entry::Link => Rule::Link,
+        Entry::Folder if SYSTEM_FOLDERS.iter().any(|s| s.eq_ignore_ascii_case(name)) => Rule::Skip,
+        Entry::Folder => Rule::Descend,
+        Entry::Other => Rule::Skip,
+        Entry::File if media::is_supported(name) => Rule::List,
+        Entry::File => media::unsupported_of(name).map_or(Rule::Skip, Rule::Unsupported),
     }
-    if kind.is_dir() {
-        return Rule::Descend;
-    }
-    if !kind.is_file() {
-        return Rule::Skip;
-    }
-    if media::is_supported(name) {
-        return Rule::List;
-    }
-    if let Some(u) = media::unsupported_of(name) {
-        return Rule::Unsupported(u);
-    }
-    Rule::Skip
 }
 
 /// The modified time of `meta` in ms since the epoch, rounded to the
@@ -201,6 +292,11 @@ pub fn walk(
             break;
         }
         let dir = absolute(root, &rel_dir);
+        // The walk's own folder is never nested.
+        if !first && is_album_root(&dir) {
+            out.nested.push(rel_dir);
+            continue;
+        }
         let entries = match read_folder(&dir) {
             Ok(entries) => entries,
             Err(e) if first => {
@@ -231,15 +327,21 @@ pub fn walk(
             } else {
                 format!("{rel_dir}/{name}")
             };
-            match classify(&name, kind) {
+            match classify(&name, Entry::from(kind)) {
                 Rule::Skip => {}
+                Rule::Link => out.links += 1,
                 Rule::Descend => folders.push(rel_path),
                 Rule::List => {
-                    // A file that vanished between listing and stat is
-                    // simply not there.
+                    // On Windows this comes from the directory listing and
+                    // opens nothing. A file that vanished between listing
+                    // and stat is simply not there.
                     let Ok(meta) = entry.metadata() else {
                         continue;
                     };
+                    if online_only(&meta) {
+                        out.online_only.insert(rel_path);
+                        continue;
+                    }
                     out.files.push(Listed {
                         rel_path,
                         size: meta.len(),
@@ -259,6 +361,7 @@ pub fn walk(
         .sort_by(|a, b| natural_cmp(&a.rel_path, &b.rel_path));
     out.unsupported
         .sort_by(|a, b| natural_cmp(&a.rel_path, &b.rel_path));
+    out.nested.sort_by(|a, b| natural_cmp(a, b));
     Ok(out)
 }
 
@@ -550,7 +653,12 @@ pub(crate) mod tests {
             .output()
             .is_ok_and(|o| o.status.success());
         assert!(made, "mklink /J needs no special rights");
-        assert!(fs::symlink_metadata(&link).unwrap().file_type().is_symlink());
+        assert!(
+            fs::symlink_metadata(&link)
+                .unwrap()
+                .file_type()
+                .is_symlink()
+        );
         let entry = fs::read_dir(tmp.path())
             .unwrap()
             .map(Result::unwrap)

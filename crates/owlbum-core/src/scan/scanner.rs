@@ -10,8 +10,11 @@ use ts_rs::TS;
 
 use super::memory::Overlay;
 use super::progress::{Progress, ScanPhase};
+use super::report::{self, ScanErrors, ScanReport, UnsupportedFiles};
 use super::run::{Request, Scan, ScanEnv, ScanSummary, run};
+use super::walk::Walk;
 use crate::album::Album;
+use crate::error::AppResult;
 
 /// The `scan` object of `album_status` (docs/03, "Commands").
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
@@ -22,10 +25,10 @@ pub struct ScanStatus {
     pub failed: u32,
     /// False when the folder cannot be watched (#14 sets it).
     pub watching: bool,
-    /// Recognised but unsupported files in the last walk.
+    /// Recognised but unsupported files in the last whole walk.
     pub unsupported: u32,
-    /// Entries the last walk skipped and counts for the report (#9 adds
-    /// links and online-only files to the unreadable names counted now).
+    /// Links, online-only files and unreadable names the last whole walk
+    /// skipped ([`Walk::skipped`]).
     pub skipped: u32,
 }
 
@@ -51,6 +54,9 @@ struct State {
     running: bool,
     pending: Option<Request>,
     last: Option<ScanSummary>,
+    /// The last walk that ended, for the report: a walk that failed or was
+    /// cancelled does not replace it.
+    walk: Option<Walk>,
     closed: bool,
 }
 
@@ -170,7 +176,7 @@ impl Scanner {
     pub fn status(&self) -> ScanStatus {
         let now = self.shared.progress.now(false, false);
         let state = self.shared.state();
-        let walk = state.last.as_ref().map(|s| &s.walk);
+        let walk = state.walk.as_ref();
         ScanStatus {
             phase: now.phase,
             found: now.found,
@@ -180,8 +186,26 @@ impl Scanner {
             unsupported: walk.map_or(0, |w| {
                 u32::try_from(w.unsupported.len()).unwrap_or(u32::MAX)
             }),
-            skipped: walk.map_or(0, |w| w.unreadable_names),
+            skipped: walk.map_or(0, Walk::skipped),
         }
+    }
+
+    /// `album_scan_report`: what the last whole walk left out.
+    pub fn report(&self) -> ScanReport {
+        report::report(self.shared.state().walk.as_ref())
+    }
+
+    /// `album_unsupported`: one page of the last whole walk's unsupported
+    /// files.
+    pub fn unsupported(&self, offset: u32, limit: u32) -> UnsupportedFiles {
+        report::unsupported(self.shared.state().walk.as_ref(), offset, limit)
+    }
+
+    /// `album_scan_errors`: one page of the rows in scope with a scan
+    /// error.
+    pub fn scan_errors(&self, offset: u32, limit: u32) -> AppResult<ScanErrors> {
+        let overlay = self.overlay();
+        report::scan_errors(&self.shared.album, &overlay, offset, limit)
     }
 
     /// The scan facts held in memory for a view-only album.
@@ -219,7 +243,11 @@ fn scan_loop(shared: &Shared) {
             },
             request,
         );
-        shared.state().last = Some(summary);
+        let mut state = shared.state();
+        if summary.walk.complete {
+            state.walk = Some(summary.walk.clone());
+        }
+        state.last = Some(summary);
     }
 }
 

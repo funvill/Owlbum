@@ -17,11 +17,13 @@ use serde_json::json;
 use tauri::test::{MockRuntime, mock_builder};
 use tauri::{DragDropEvent, Listener, Manager};
 
+// Fields drop in order: the app lets go of the album and app data before
+// the temporary folder is deleted (issue #97).
 struct Fx {
-    tmp: tempfile::TempDir,
-    data: AppData,
-    app: tauri::App<MockRuntime>,
     window: tauri::WebviewWindow<MockRuntime>,
+    app: common::TestApp,
+    data: AppData,
+    tmp: tempfile::TempDir,
 }
 
 fn fixture() -> Fx {
@@ -32,10 +34,10 @@ fn fixture() -> Fx {
         data.clone(),
     ));
     Fx {
-        tmp,
-        data,
-        app,
         window,
+        app,
+        data,
+        tmp,
     }
 }
 

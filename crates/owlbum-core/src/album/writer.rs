@@ -61,6 +61,8 @@ impl Writer {
     /// The transaction commits when `job` answers `Ok` and rolls back when it
     /// answers `Err` or panics; either way the writer keeps running. The
     /// answer comes back after the commit.
+    ///
+    /// Never call it from inside a job: the job would wait for itself.
     pub fn write<T, F>(&self, job: F) -> AppResult<T>
     where
         T: Send + 'static,

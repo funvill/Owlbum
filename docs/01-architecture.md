@@ -103,7 +103,7 @@ A command is a request with a reply (`invoke`). Names are `snake_case`, grouped 
 | `search_` | Search by meaning | [Tagging](07-tagging.md) | `search_meaning` |
 | `app_` | Start-up, settings, recent albums, session, updates, cache | [Desktop, release and tests](08-desktop-and-release.md), [Browsing](04-browsing.md) | `app_startup`, `app_settings_get`, `app_settings_set`, `app_check_updates` |
 
-**Errors.** Every command returns `Result<T, AppError>`. `AppError` serialises as `{ "code": "<stable_code>", "message": "<sentence for the user>", "details"?: { … } }`. The page shows `message` and branches only on `code`; `details` carries structured facts a dialog needs (for example the other computer's name and last-seen time for a stale lock). Codes are an enum in `owlbum-core`; adding one is a code change, never a string typed at the call site. Codes used by more than one part:
+**Errors.** Every command returns `Result<T, AppError>`. `AppError` serialises as `{ "code": "<stable_code>", "message": "<sentence for the user>", "details"?: { … } }`. The page shows `message` and branches only on `code`; `details` carries structured facts a dialog needs (for example the other computer's name and last-seen time for a stale lock). An `internal` error may carry `details.cause`, the underlying library's own error text, for the log; the page never shows it. Codes are an enum in `owlbum-core`; adding one is a code change, never a string typed at the call site. Codes used by more than one part:
 
 | Code | Meaning |
 |---|---|

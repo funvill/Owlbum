@@ -14,13 +14,14 @@ for profile in debug release; do
     dir="$build/$crate"
     [ -d "$dir" ] || continue
     # Keep the 20 newest outputs.
-    (cd "$dir" && ls -t | tail -n +21 | xargs -r rm -rf)
+    (cd "$dir" 2>/dev/null && ls -t | tail -n +21 | xargs -r rm -rf) || true
   done
   # The incremental cache grows without bound across worktrees; clear it
   # when it passes 4 GB.
   inc="$target/$profile/incremental"
   if [ -d "$inc" ]; then
-    size_kb=$(du -sk "$inc" | cut -f1)
+    size_kb=$(du -sk "$inc" 2>/dev/null | cut -f1 || true)
+    size_kb=${size_kb:-0}
     if [ "$size_kb" -gt 4000000 ]; then
       echo "Clearing $inc ($((size_kb / 1024)) MB)"
       rm -rf "$inc"

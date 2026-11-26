@@ -3,8 +3,9 @@
 //! white, resized with Lanczos3 without enlarging, and encoded as an
 //! opaque 4:2:0 JPEG with no metadata.
 
-use image::RgbImage;
-use image::imageops::{self, FilterType};
+use fast_image_resize::images::{Image, ImageRef};
+use fast_image_resize::{FilterType, PixelType, ResizeAlg, ResizeOptions, Resizer};
+use image::{GrayImage, ImageBuffer, Pixel, RgbImage};
 use jpeg_encoder::{ColorType, Encoder, SamplingFactor};
 
 use crate::media::Pixels;
@@ -54,17 +55,61 @@ pub fn flatten(px: &Pixels) -> RgbImage {
     RgbImage::from_raw(px.width, px.height, out).unwrap_or_else(|| RgbImage::new(1, 1))
 }
 
+/// The alpha plane of `px`, when the picture has one.
+pub fn alpha(px: &Pixels) -> Option<GrayImage> {
+    if !px.has_alpha {
+        return None;
+    }
+    let plane = px.rgba.as_chunks::<4>().0.iter().map(|p| p[3]).collect();
+    GrayImage::from_raw(px.width, px.height, plane)
+}
+
 /// `img` resized with Lanczos3 to fit inside `side` × `side`, keeping its
 /// aspect ratio, each side at least 1 px. A picture that already fits is
 /// returned as it is: never enlarged.
-pub fn fit(img: RgbImage, side: u32) -> RgbImage {
+pub fn fit<P>(img: ImageBuffer<P, Vec<u8>>, side: u32) -> ImageBuffer<P, Vec<u8>>
+where
+    P: Pixel<Subpixel = u8> + 'static,
+{
     let (w, h) = img.dimensions();
     let (nw, nh) = fitted(w, h, side);
     if (nw, nh) == (w, h) {
         img
     } else {
-        imageops::resize(&img, nw, nh, FilterType::Lanczos3)
+        lanczos(&img, nw, nh)
     }
+}
+
+/// `img` resized to `w × h` with Lanczos3 by `fast_image_resize`, which
+/// works on 8-bit samples in fixed point (docs/03, "Image analysis": the
+/// analysis numbers depend on it, so changing it raises `SCAN_VERSION`).
+pub fn lanczos<P>(img: &ImageBuffer<P, Vec<u8>>, w: u32, h: u32) -> ImageBuffer<P, Vec<u8>>
+where
+    P: Pixel<Subpixel = u8> + 'static,
+{
+    let kind = match P::CHANNEL_COUNT {
+        1 => PixelType::U8,
+        2 => PixelType::U8x2,
+        3 => PixelType::U8x3,
+        _ => PixelType::U8x4,
+    };
+    let mut dst = Image::new(w, h, kind);
+    let options = ResizeOptions::new().resize_alg(ResizeAlg::Convolution(FilterType::Lanczos3));
+    let resized = ImageRef::new(img.width(), img.height(), img.as_raw(), kind)
+        .map_err(|_| ())
+        .and_then(|src| {
+            Resizer::new()
+                .resize(&src, &mut dst, &options)
+                .map_err(|_| ())
+        });
+    resized
+        .ok()
+        .and_then(|()| ImageBuffer::from_raw(w, h, dst.into_vec()))
+        // Neither can fail for a buffer of the stated size; the fallback
+        // keeps the scan going.
+        .unwrap_or_else(|| {
+            image::imageops::resize(img, w, h, image::imageops::FilterType::Lanczos3)
+        })
 }
 
 /// The size of a `w` × `h` picture fitted inside `side` × `side`.

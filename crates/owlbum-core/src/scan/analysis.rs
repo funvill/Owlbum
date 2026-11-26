@@ -6,7 +6,8 @@
 //!
 //! The input is the small thumbnail's pixels before encoding (upright,
 //! sRGB, flattened on white, at most 512 px) and, when the source has
-//! alpha, its alpha plane at the same size ([`super::pixels::Buffers`]).
+//! alpha, its alpha plane at the same size ([`crate::thumbs::make::Buffers`],
+//! [`super::pixels::small_alpha`]).
 
 use image::{GrayImage, ImageBuffer, Pixel, RgbImage};
 use serde::Serialize;
@@ -48,7 +49,7 @@ impl Analysis {
 /// Analyses the small thumbnail's pixels (`small`) and, when the source has
 /// alpha, its alpha plane (`alpha`, the same size).
 pub fn analyse(small: &RgbImage, alpha: Option<&GrayImage>) -> Analysis {
-    let (w, h) = super::pixels::fit(small.width(), small.height(), SIDE);
+    let (w, h) = crate::thumbs::make::fitted(small.width(), small.height(), SIDE);
     let colour = resized(small, w, h);
     let transparent = alpha.is_some_and(|a| transparent(&resized(a, w, h)));
     let grey = grey_of(&colour);
@@ -94,7 +95,7 @@ where
     if img.dimensions() == (w, h) {
         img.clone()
     } else {
-        super::pixels::lanczos(img, w, h)
+        crate::thumbs::make::lanczos(img, w, h)
     }
 }
 

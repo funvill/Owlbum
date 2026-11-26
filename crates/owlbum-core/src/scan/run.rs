@@ -830,16 +830,18 @@ impl Work<'_, '_> {
         );
         match decoded {
             Ok(px) => {
+                // One set of buffers feeds the thumbnails and the analysis.
+                let buffers = crate::thumbs::make::buffers(&px);
                 if let Some(thumbs) = &self.scan.env.thumbs {
                     let album_id = self.scan.album.db().album_id();
                     thumbs.write_from_scan(
                         &keys::thumb_key(album_id, &job.file_key, job.mtime_ms),
-                        &px,
+                        &buffers,
                     );
                 }
                 self.send(Op::Pixels {
                     rel_path: job.rel_path.clone(),
-                    analysis: pixels::analysis(&px),
+                    analysis: pixels::analysis_of(&buffers, pixels::small_alpha(&px).as_ref()),
                     size: pixels::corrected_size(job.header, &px),
                 });
                 self.scan.progress.done(1, 0);

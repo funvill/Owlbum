@@ -164,8 +164,9 @@ impl Thumbs {
     /// The scan's thumbnails for `key` from its one decode (docs/03,
     /// "Pixels pass" step 3): the small one always, the medium one while
     /// the cache is under 70% of its limit. A thumbnail already on disk is
-    /// not encoded again.
-    pub fn write_from_scan(&self, key: &str, px: &Pixels) {
+    /// not encoded again. `b` is the pixels pass's buffers, which the
+    /// analysis is made from too.
+    pub fn write_from_scan(&self, key: &str, b: &make::Buffers) {
         if !store::is_thumb_key(key) {
             return;
         }
@@ -176,7 +177,6 @@ impl Thumbs {
         if !want_small && !want_medium {
             return;
         }
-        let b = make::buffers(px);
         if want_small {
             self.put(
                 key,

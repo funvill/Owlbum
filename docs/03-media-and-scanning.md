@@ -599,7 +599,7 @@ grey = round(0.299·R + 0.587·G + 0.114·B)      on 8-bit sRGB values, 0..255
 
 Pinned details (#10), in `scan::pixels` and `scan::analysis`:
 
-- **Fitting.** Every "fit inside N" (1600, 512, 256) scales the longest side to N and the other side to `round(side · N / longest)`, half up, at least 1. A picture that already fits is not resampled. Lanczos3 is `fast_image_resize`'s convolution, which works on 8-bit samples in fixed point. It brings a 24-megapixel decode to both thumbnail buffers in about 110 ms on one thread, against 450 ms for `image`'s own resize.
+- **Fitting.** Every "fit inside N" (1600, 512, 256) scales the longest side to N and the other side to `round(side · N / longest)`, half up, at least 1. A picture that already fits is not resampled. Lanczos3 is `fast_image_resize`'s convolution, which works on 8-bit samples in fixed point. It brings a 24-megapixel decode to both thumbnail buffers in about 110 ms on one thread, against 450 ms for `image`'s own resize. One set of buffers (`thumbs::make::buffers`) is built per decode and feeds both the thumbnails and the analysis.
 - **Flattening.** Each colour becomes `(c·a + 255·(255 − a) + 127) / 255` in integers. The alpha plane goes through the same resizes as the colours (1600, then 512, then 256).
 - **Grey** is worked in integers: `(299·R + 587·G + 114·B + 500) / 1000`.
 - **Box filter.** An area average: each output pixel is the mean of the source area it covers, with partly covered source pixels weighted by the part covered. It is worked in integers (positions in fractions of `1/N` of a source pixel), so a flat area gives equal means exactly. dHash compares these means exactly, unrounded; `colour_grid` and `avg_colour` round them to the nearest level, half up.

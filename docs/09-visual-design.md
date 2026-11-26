@@ -76,6 +76,7 @@ These were fixed colours in the old program. They are tokens now. Surfaces that 
 | `--badge-text` | `#ffffff` | `#ffffff` | Text and icons on a badge. |
 | `--crop-line` | `rgba(255,255,255,0.9)` | `rgba(255,255,255,0.9)` | Crop frame, thirds lines and handles. |
 | `--crop-shade` | `rgba(0,0,0,0.55)` | `rgba(0,0,0,0.55)` | The dimmed area outside the crop. |
+| `--minimap-line` | `rgba(255,255,255,0.5)` | `rgba(255,255,255,0.5)` | The mini map's border in the preview and the viewer. |
 
 ### Edits, score and histogram
 

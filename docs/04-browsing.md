@@ -536,6 +536,8 @@ The picture is always laid out at its fitted size and placed with `transform: tr
 
 **Full-size swap.** When the picture is drawn larger than the medium picture has pixels (`fittedWidth × zoom × devicePixelRatio > mediumWidth`), the page loads `owlbum://full/<id>?v=<thumb_key>` and swaps it in when it is decoded. The view does not move. At most one full-size picture is held at a time, and it is let go when another photo is shown. A photo whose original is no larger than the medium picture never asks for it.
 
+**Where the sizes come from.** The picture's shape is the row's `aspect`, so the layout never follows the size of whichever picture has loaded and a swap cannot move the view. The original's size (for `MAX_ZOOM`, `mediumWidth` and the "no larger" rule) is `width` and `height` from `photo_detail`, which the review screen reads once for the details panel and the preview. Until that answer arrives `MAX_ZOOM` is 8 and no full-size picture is asked for.
+
 ### Mini map
 
 Shown while zoomed in, in the preview and in the viewer.

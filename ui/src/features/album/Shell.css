@@ -127,12 +127,21 @@
   display: flex;
 }
 
-/* The thumbnail column; the preview (#20) and the splitters come later. */
+/* The thumbnail column at its default width, shrinking to its minimum
+   before the preview goes under 300 px; the splitters and stored widths
+   come later. */
 .ow-review__photos {
-  flex: 1;
-  min-width: 0;
+  flex: 0 1 420px;
+  min-width: 200px;
   display: flex;
   flex-direction: column;
+}
+
+/* The preview takes the rest, never under 300 px. */
+.ow-review__preview {
+  flex: 1 1 0;
+  min-width: 300px;
+  min-height: 0;
 }
 
 .ow-review__photos > .ow-grid {

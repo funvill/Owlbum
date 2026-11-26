@@ -1,0 +1,87 @@
+/* docs/04-browsing.md, "Review screen" and "Preview pane". */
+
+.ow-preview {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  height: 100%;
+  background: var(--preview-bg);
+  color: var(--preview-text);
+}
+
+/* The picture is clipped to its pane. */
+.ow-preview__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ow-preview__hint {
+  margin: 0;
+  padding: var(--space-4);
+  color: var(--muted);
+  text-align: center;
+}
+
+.ow-preview__caption {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line);
+  font: var(--text-md);
+}
+
+.ow-preview__count {
+  flex: none;
+  color: var(--muted);
+}
+
+/* Cut with an ellipsis at the start: the right-to-left box puts the
+   ellipsis on the left, and the <bdi> inside keeps the path itself in order. */
+.ow-preview__path {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+  font-weight: var(--weight-heading);
+}
+
+.ow-preview__path bdi {
+  direction: ltr;
+  unicode-bidi: isolate;
+}
+
+.ow-preview__badge {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  height: var(--size-chip);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--panel-3);
+  color: var(--text);
+  font: var(--text-xs);
+}
+
+.ow-preview__badge--star {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.ow-preview__badge--edit-album {
+  background: var(--marker-edited);
+  color: var(--marker-ink);
+}
+
+.ow-preview__badge--edit-file {
+  background: var(--marker-unsaved);
+  color: var(--marker-ink);
+}

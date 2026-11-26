@@ -193,6 +193,14 @@ fn measure(n: usize) {
     let batch = started.elapsed();
     assert_eq!(index.len(), n + 200);
 
+    // The same 200 rows again, changed but not renamed: what a scan's
+    // pixels pass sends. No row moves in the name order.
+    conn.execute("UPDATE photos SET width = 2 WHERE id > ?1", [n as i64])
+        .unwrap();
+    let started = Instant::now();
+    index.refresh(&conn, &ids).unwrap();
+    let changed = started.elapsed();
+
     // One star, as `photo_set_info` will do it.
     conn.execute("UPDATE photos SET star = 1 WHERE id = 7", [])
         .unwrap();
@@ -209,6 +217,7 @@ fn measure(n: usize) {
     );
     println!("  filter + date sort pass:  {}", ms(query));
     println!("  refresh 200 new rows:     {}", ms(batch));
+    println!("  refresh 200 changed rows: {}", ms(changed));
     println!("  refresh 1 changed row:    {}", ms(one));
     assert!(per_photo <= 170.0, "{per_photo} bytes a photo");
 }

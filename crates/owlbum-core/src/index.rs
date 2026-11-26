@@ -419,10 +419,10 @@ impl State {
     }
 
     /// Renumbers every rank from the name order.
-    fn renumber(&mut self) {
-        for rank in 0..self.name_order.len() {
-            if let Ok(at) = self.position(self.name_order[rank]) {
-                self.photos[at].name_rank = u32::try_from(rank).unwrap_or(u32::MAX);
+    fn renumber(&mut self, at: &Positions) {
+        for (rank, &id) in self.name_order.iter().enumerate() {
+            if let Some(i) = at.get(id) {
+                self.photos[i].name_rank = u32::try_from(rank).unwrap_or(u32::MAX);
             }
         }
     }
@@ -512,17 +512,21 @@ impl State {
             let moved: HashSet<u32> = placed.iter().copied().collect();
             self.name_order
                 .retain(|id| !gone.contains(id) && !moved.contains(id));
+            // Lookups by id here are many and scattered; one pass builds a
+            // table instead of a binary search over the records each time.
+            let at = Positions::of(&self.photos);
             for id in placed {
-                let Some(photo) = self.get(id).copied() else {
+                let Some(photo) = at.get(id).map(|i| self.photos[i]) else {
                     continue;
                 };
-                let at = self.name_order.partition_point(|&other| {
-                    self.get(other)
-                        .is_some_and(|o| self.compare_names(o, &photo) == Ordering::Less)
+                let rank = self.name_order.partition_point(|&other| {
+                    at.get(other).is_some_and(|i| {
+                        self.compare_names(&self.photos[i], &photo) == Ordering::Less
+                    })
                 });
-                self.name_order.insert(at, id);
+                self.name_order.insert(rank, id);
             }
-            self.renumber();
+            self.renumber(&at);
         }
         self.compact_names();
     }
@@ -541,6 +545,45 @@ impl State {
         }
         self.names = names;
         self.dead_names = 0;
+    }
+}
+
+/// Record positions by photo id, built in one pass for a change that looks
+/// up many ids. A dense table when ids are dense (the usual case: SQLite
+/// hands out ids in order), a hash map when they are sparse.
+enum Positions {
+    Table(Vec<u32>),
+    Map(HashMap<u32, u32>),
+}
+
+impl Positions {
+    const NONE: u32 = u32::MAX;
+
+    fn of(photos: &[Photo]) -> Self {
+        let max = photos.last().map_or(0, |p| p.id as usize);
+        if max <= photos.len() * 4 + 1024 {
+            let mut table = vec![Self::NONE; max + 1];
+            for (i, p) in photos.iter().enumerate() {
+                table[p.id as usize] = u32::try_from(i).unwrap_or(Self::NONE);
+            }
+            Self::Table(table)
+        } else {
+            Self::Map(
+                photos
+                    .iter()
+                    .enumerate()
+                    .map(|(i, p)| (p.id, u32::try_from(i).unwrap_or(Self::NONE)))
+                    .collect(),
+            )
+        }
+    }
+
+    fn get(&self, id: u32) -> Option<usize> {
+        let at = match self {
+            Self::Table(table) => *table.get(id as usize)?,
+            Self::Map(map) => *map.get(&id)?,
+        };
+        (at != Self::NONE).then_some(at as usize)
     }
 }
 

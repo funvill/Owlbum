@@ -441,3 +441,19 @@ fn memory_is_about_150_bytes_a_photo() {
     let per_photo = index.heap_bytes() / index.len();
     assert!(per_photo <= 170, "{per_photo} bytes a photo");
 }
+
+#[test]
+fn sparse_ids_keep_the_name_order_too() {
+    let conn = db();
+    for n in 0..40 {
+        let i = add(&conn, "", &format!("p{n}.jpg"));
+        set(&conn, i, &format!("id = {}", 1 + n * 1_000_003));
+    }
+    let index = AlbumIndex::load(&conn, "").unwrap();
+    let a = add(&conn, "", "p5a.jpg");
+    let b = add(&conn, "", "a.jpg");
+    index.refresh(&conn, &[a, b]).unwrap();
+    let fresh = AlbumIndex::load(&conn, "").unwrap();
+    assert_eq!(names(&index), names(&fresh));
+    assert_ranks_consistent(&index);
+}

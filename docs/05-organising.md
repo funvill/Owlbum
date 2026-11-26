@@ -349,7 +349,7 @@ The Sort control has five options. Each order is total: no two photos ever compa
 2. then `rel_dir`, compared the same way;
 3. then `id`, ascending.
 
-**The natural comparison** works on the two strings after lower-casing (Unicode simple case folding; the code uses one-to-one lowercasing with the known differences from simple folding mapped by hand, and leaves a character whose lowercase is several characters as it is). It walks both strings together. A run of ASCII digits is compared as a number, whatever its length; if the numbers are equal, the run with fewer leading zeros comes first. Any other character is compared by its code point. A string that ends first comes first. So `IMG_9.jpg` sorts before `img_10.jpg`.
+**The natural comparison** is the string rules of the walker order, steps 2 to 5 of [Media and scanning](03-media-and-scanning.md#order) (`natural_cmp_text`; one function serves both). Each string is split into runs of ASCII digits and runs of everything else. Two digit runs compare as numbers, whatever their length; if the numbers are equal, the run with fewer leading zeros comes first. Two text runs compare by code point after simple lower-casing. A digit run sorts before a text run. A string that ends first comes first. So `IMG_9.jpg` sorts before `img_10.jpg`.
 
 Rust works out the name order once and stores each photo's position as `name_rank`, so no sort compares strings.
 

@@ -39,6 +39,14 @@ pub fn natural_cmp_name(a: &str, b: &str) -> Ordering {
     }
 }
 
+/// Steps 2 to 5 only, with no byte tie-break: the string rules the album
+/// index's name order applies to a file name and then to a folder
+/// (docs/05-organising.md, "Sorting"), before it compares ids. Names that
+/// differ only in case answer `Equal`.
+pub fn natural_cmp_text(a: &str, b: &str) -> Ordering {
+    runs_cmp(a, b)
+}
+
 /// Steps 2 to 5 only: names that differ only in case answer `Equal` here.
 fn runs_cmp(a: &str, b: &str) -> Ordering {
     let mut x = Runs::new(a);

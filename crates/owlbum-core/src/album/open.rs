@@ -142,7 +142,9 @@ pub struct Album {
 }
 
 impl Album {
-    /// Opens the album for `folder` as this process.
+    /// Opens the album for `folder` as this process. It also loads the
+    /// album index (up to about a second for 100,000 photos), so call it off
+    /// the thread that answers the page.
     ///
     /// Errors: `not_a_folder` and `folder_unreadable` from finding the root,
     /// `album_lock_stale` (`details: { host, last_seen }`, `last_seen` in ms
@@ -357,7 +359,9 @@ impl Album {
         self.safety().view_only.is_some()
     }
 
-    /// The album database.
+    /// The album database. A write that changes `photos` or `photo_people`
+    /// goes through [`Album::write_photos`] instead, so the album index
+    /// follows it.
     pub fn db(&self) -> &AlbumDb {
         &self.db
     }

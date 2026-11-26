@@ -457,3 +457,14 @@ fn sparse_ids_keep_the_name_order_too() {
     assert_eq!(names(&index), names(&fresh));
     assert_ranks_consistent(&index);
 }
+
+#[test]
+fn the_name_order_uses_the_walkers_string_rules() {
+    // docs/03, "Order": runs, not characters, so "a" (then digits) comes
+    // before the longer text run "a!.jpg", though '!' is below '1'.
+    let conn = db();
+    add(&conn, "", "a!.jpg");
+    add(&conn, "", "a1.jpg");
+    let index = AlbumIndex::load(&conn, "").unwrap();
+    assert_eq!(names(&index), ["/a1.jpg", "/a!.jpg"]);
+}

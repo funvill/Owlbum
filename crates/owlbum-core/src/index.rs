@@ -37,7 +37,6 @@
 //! one string, each folder once, and the name order (4 bytes a photo).
 //! [`AlbumIndex::heap_bytes`] counts it all.
 
-pub mod natural;
 pub mod record;
 
 use std::cmp::Ordering;
@@ -48,6 +47,7 @@ use rusqlite::{Connection, OptionalExtension, Row};
 
 use crate::album::sqlite_error;
 use crate::error::AppResult;
+use crate::scan::natural_cmp_text;
 use crate::text;
 
 pub use record::{
@@ -396,11 +396,13 @@ impl State {
         self.names.push_str(&name[..len]);
     }
 
-    /// The name order: file name, then folder, then id.
+    /// The name order: file name, then folder, by the walker's string
+    /// rules (docs/03-media-and-scanning.md, "Order", steps 2 to 5), then
+    /// id.
     fn compare_names(&self, a: &Photo, b: &Photo) -> Ordering {
-        natural::compare(self.name(a), self.name(b))
+        natural_cmp_text(self.name(a), self.name(b))
             .then_with(|| {
-                natural::compare(
+                natural_cmp_text(
                     &self.folders[a.folder as usize],
                     &self.folders[b.folder as usize],
                 )

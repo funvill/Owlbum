@@ -72,7 +72,7 @@ Owlbum/
 
 The rule for where code goes: if it could be tested with `cargo test` and a temp folder, it belongs in `owlbum-core`.
 
-**The album index.** An open album keeps a compact in-memory copy of the columns that filters, sorts, scores and stacks need (one small record per photo). It is built when the album opens, patched by the writer thread on every change, and replaced after a scan. Column filters, facets, sorting and stacking run over this index; full-text search and people and label lookups run in SQL. "Rust owns the data" means both. [Organising](05-organising.md) specifies the index.
+**The album index.** An open album keeps a compact in-memory copy of the columns that filters, sorts, scores and stacks need (one small record per photo). It is built when the album opens and patched by the writer thread on every change, including each batch a scan commits. Column filters, facets, sorting and stacking run over this index; full-text search and people and label lookups run in SQL. "Rust owns the data" means both. [Organising](05-organising.md) specifies the index.
 
 **Undo** also lives in Rust: each changing command records an undo step on the open album. The page only asks for `album_undo`.
 

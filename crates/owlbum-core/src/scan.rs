@@ -43,7 +43,7 @@ pub mod walk;
 #[cfg(test)]
 mod tests;
 
-pub use order::{natural_cmp, natural_cmp_name};
+pub use order::{natural_cmp, natural_cmp_name, natural_cmp_text};
 pub use progress::{ScanPhase, ScanProgress};
 pub use reader::{MediaReader, Reader};
 pub use run::{Request, Scan, ScanEnv, ScanSummary, run};

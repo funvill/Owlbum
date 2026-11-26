@@ -1,0 +1,39 @@
+[workspace]
+resolver = "3"
+members = ["crates/owlbum-core", "crates/owlbum-fixtures", "src-tauri"]
+default-members = ["crates/owlbum-core", "crates/owlbum-fixtures", "src-tauri"]
+
+[workspace.package]
+# The one source of the program's version (docs/08-desktop-and-release.md).
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+license = "MIT"
+repository = "https://github.com/funvill/Owlbum"
+authors = ["Owlbum contributors"]
+
+# Shared dependency versions. A crate names a dependency with
+# `name.workspace = true` so the version is chosen in one place.
+[workspace.dependencies]
+owlbum-core = { path = "crates/owlbum-core" }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+ts-rs = { version = "12", features = ["serde-json-impl", "no-serde-warnings"] }
+tauri = "2"
+tauri-build = "2"
+tempfile = "3"
+
+[workspace.lints.rust]
+unsafe_code = "deny"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+
+[profile.dev]
+# Smaller debug info keeps the shared target directory small.
+debug = "line-tables-only"
+
+[profile.dev.package."*"]
+debug = false

@@ -1,0 +1,22 @@
+# Rust
+/target/
+
+# Tauri
+/src-tauri/gen/
+
+# Page
+node_modules/
+/ui/dist/
+*.tsbuildinfo
+
+# Generated at release time, never committed
+/THIRD-PARTY-NOTICES.txt
+
+# Local files
+.env
+.env.*
+*.log
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/

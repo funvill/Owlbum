@@ -1,0 +1,5 @@
+[toolchain]
+# Pinned so rustfmt and clippy give the same answers on Windows and Linux.
+channel = "1.100.0"
+components = ["clippy", "rustfmt"]
+profile = "minimal"

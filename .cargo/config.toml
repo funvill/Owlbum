@@ -1,0 +1,9 @@
+# Cargo settings for every checkout of Owlbum.
+
+[build]
+# Build output goes to `target/` at the repository root. Worktrees that should
+# share one build directory set CARGO_TARGET_DIR instead (it overrides this);
+# scripts/check.sh does that by itself, pointing every worktree of a clone at
+# the main checkout's `target/`. A relative path here cannot do it, because
+# worktrees sit at different depths from the main checkout.
+target-dir = "target"

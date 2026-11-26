@@ -1,0 +1,35 @@
+[package]
+name = "owlbum"
+description = "Owlbum's desktop shell: the Tauri builder, commands, events, protocol and plugins."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+publish = false
+default-run = "owlbum"
+
+[lib]
+name = "owlbum_lib"
+
+[[bin]]
+name = "owlbum"
+path = "src/main.rs"
+
+[build-dependencies]
+tauri-build.workspace = true
+
+[dependencies]
+owlbum-core.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+tauri.workspace = true
+ts-rs.workspace = true
+
+[dev-dependencies]
+tauri = { workspace = true, features = ["test"] }
+tempfile.workspace = true
+
+[lints]
+workspace = true

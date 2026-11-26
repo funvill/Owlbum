@@ -26,12 +26,14 @@ tauri-build = "2"
 tempfile = "3"
 uuid = { version = "1", features = ["v4"] }
 windows-sys = "0.61"
-# Used by owlbum-fixtures to write its synthetic albums.
-image = { version = "0.25", default-features = false }
+# Media decoders and encoders: owlbum-core's handlers
+# (docs/03-media-and-scanning.md, "Media handlers") and owlbum-fixtures'
+# synthetic albums. Each crate turns on the image features it needs.
+image = { version = "0.25.10", default-features = false }
+jxl-oxide = { version = "0.12.6", default-features = false }
 png = "0.18"
 zune-core = "0.5"
 zune-jpegxl = "0.5"
-jxl-oxide = "0.12"
 nom-exif = "3.8"
 
 [workspace.lints.rust]

@@ -6,6 +6,7 @@ use std::collections::HashSet;
 
 use common::invoke;
 use owlbum_core::app::AppVersion;
+use owlbum_core::media::FormatInfo;
 use tauri::test::{MockRuntime, mock_builder};
 
 fn app_window() -> (tauri::App<MockRuntime>, tauri::WebviewWindow<MockRuntime>) {
@@ -18,6 +19,18 @@ fn app_version_answers_the_workspace_version() {
     let reply = invoke(&window, "app_version", serde_json::json!({})).expect("app_version answers");
     let version: AppVersion = reply.deserialize().unwrap();
     assert_eq!(version.version, env!("CARGO_PKG_VERSION"));
+}
+
+#[test]
+fn app_formats_answers_the_registry() {
+    let (_app, window) = app_window();
+    let reply = invoke(&window, "app_formats", serde_json::json!({})).expect("app_formats answers");
+    let formats: Vec<FormatInfo> = reply.deserialize().unwrap();
+    assert_eq!(formats, owlbum_core::media::formats());
+    let first = serde_json::to_value(&formats[0]).unwrap();
+    assert_eq!(first["id"], "jpeg");
+    assert_eq!(first["save_as"], "jpeg");
+    assert_eq!(first["kind"], "image");
 }
 
 #[test]

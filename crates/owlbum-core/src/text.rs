@@ -8,3 +8,4 @@
 
 pub mod album;
 pub mod errors;
+pub mod media;

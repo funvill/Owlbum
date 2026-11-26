@@ -6,7 +6,7 @@ Everything in this part lives in `owlbum-core`, except the `owlbum://` protocol 
 
 ## The media format registry
 
-One table in Rust (`owlbum_core::media::FORMATS`) is the only place that knows which files Owlbum handles. No other module holds an extension list, a MIME type or a "is this a RAW" test. A unit test searches the workspace sources (Rust and TypeScript) and fails if a media extension list or extension regex appears outside the registry module.
+One table in Rust (`owlbum_core::media::FORMATS`) is the only place that knows which files Owlbum handles. No other module holds an extension list, a MIME type or a "is this a RAW" test. A unit test searches the workspace sources (Rust and TypeScript) and fails if a media extension list or extension regex appears outside the registry module (`media/registry.rs`). It counts a file as holding a list when it has string literals naming two or more different known extensions (with or without the dot, any case), and as holding a regex when two known extensions are joined by `|`. Rust byte strings (`b"heic"`, a file signature) are not counted. The allowed exceptions are the handler tests, the fake backend's `app_formats` answer, and the generated bindings in `ui/src/api/bindings/`.
 
 ```rust
 pub enum MediaKind { Image, Raw, Video }
@@ -63,6 +63,8 @@ Notes on the capabilities:
 - **RAW** edits are saved as a JPEG copy only. There are no RAW development controls. The user-facing refusal is "<label> photos can only be saved as a copy."
 - **Video** has no editing at all. Its `save_as` value is never used.
 - `dng` stays in the table only if the RAW prototype confirms `rawler` reads it (see Open questions).
+- **RAW and video rows before their handlers exist.** Until the RAW handler (#49) and the video handler (#50) are built, their rows name placeholder handlers (`media::pending`). These sniff their container family, so the rules below already work, and answer every read with `unsupported` and the reason of the matching "not supported yet" row ("This camera's RAW format is not supported yet.", "This video format is not supported yet."). Such a file therefore gets an error row and is listed with the unreadable files rather than vanishing. The issue that builds the real handler replaces the placeholder.
+- **WebP and JPEG XL encoders, confirmed.** `image` 0.25.10 writes only lossless WebP, and `jxl-oxide` 0.12.6 only decodes, so the save-as values above stand (open question 9).
 
 ### Files recognised but not supported yet
 
@@ -101,6 +103,8 @@ Each handler has a `sniff` test on the first bytes of the file. The scanner alre
 | Nothing recognises them | The extension's handler tries anyway. Failure is a `decode` error. |
 
 RAW and video containers are sniffed by container family only (TIFF-based, ISO base media, RIFF, EBML). The extension picks the format id within a family.
+
+`identify(name, head)` in the registry applies this table. Each still format has its own handler instance, so "the extension's own handler" means that format's signature, not the whole still family. When bytes match several rows, the first row in table order wins, so a TIFF named `.cr2` stays RAW but a CR2 named `.jpg` reads as TIFF. An ISO base media file is told apart by its `ftyp` brands: HEIF (`heic`, `mif1` and kin) and AVIF (`avif`, `avis`) are unsupported stills, `crx ` is Canon RAW, anything else is video. A RIFF file is told apart by its form type (`WEBP` or `AVI `).
 
 ## Media handlers
 
@@ -148,20 +152,57 @@ Rules that hold for every handler:
 
 `MediaError` carries a code (`io`, `decode`, `unsupported`, `too_large`) and a sentence for the user.
 
+The other types the trait names:
+
+```rust
+pub struct Metadata {
+    pub width: u32,                // upright; 0 when the headers cannot tell
+    pub height: u32,
+    pub has_alpha: bool,
+    pub frames: Option<u32>,       // only when more than one: animated GIF, WebP and PNG
+    pub duration_ms: Option<u64>,  // loop length, animated GIF and WebP only (an animated PNG is a still)
+    pub exif: Option<Vec<u8>>,     // the raw EXIF block from the TIFF header on, for the metadata reader
+}
+
+pub enum Layout { Grey, GreyAlpha, Rgb, Rgba }
+pub enum Samples { U8(Vec<u8>), U16(Vec<u16>) }   // deeper or floating-point sources become 16 bits
+
+pub struct SourcePixels {      // upright, at the source's own depth
+    pub width: u32,
+    pub height: u32,
+    pub layout: Layout,
+    pub samples: Samples,      // width × height × channels, row-major
+    pub icc: Option<Vec<u8>>,  // the profile the samples are in, unconverted; None means sRGB
+}
+
+pub struct VideoInfo {
+    pub duration_ms: u64,
+    pub width: u32,            // displayed size, after rotation and pixel aspect ratio
+    pub height: u32,
+    pub rotation: u16,         // 0, 90, 180 or 270
+    pub video_codec: Option<String>,
+    pub audio_codec: Option<String>,
+}
+```
+
+Every `preview` and `working` result passes through one function, `media::colour::to_srgb(pixels, icc)`, which is where the colour profile conversion (#7) goes. Frame counts and loop lengths are read by walking the file's blocks (GIF blocks, WebP `ANMF` chunks, the PNG `acTL` chunk) without decompressing pixels.
+
 ### The still handler
 
-It covers JPEG, PNG, WebP, GIF, TIFF and BMP. JPEG is decoded with `zune-jpeg`; the others with the `image` crate.
+It covers JPEG, PNG, WebP, GIF, TIFF and BMP, all decoded with the `image` crate, whose JPEG decoder is `zune-jpeg`. A JPEG's size and EXIF block for `metadata` (and the size check before a decode) come from a walk of its markers, because `image` reads the whole JPEG into memory before it reports a size.
 
 | Format | Notes |
 |---|---|
-| JPEG | `preview` asks the decoder for a reduced-size decode when it offers one. CMYK and greyscale files are converted to RGB. Cost: cheap. |
+| JPEG | `zune-jpeg` 0.5 has no reduced-size decode, so `preview` is the full decode (open question 7). CMYK and greyscale files are converted to RGB. A truncated file yields the part that was read. Cost: cheap. |
 | PNG | Cost: cheap under 8 MB, else decode. |
 | WebP | Animated files: frame 1 is the picture. |
 | GIF | Frame 1 is the picture, composed on a transparent canvas. |
 | TIFF | The first page is the picture. Other pages are ignored. Cost: decode; heavy over 100 MB. |
 | BMP | Cost: decode. |
 
-`preview` and `working` are the same decode for these formats, apart from JPEG's reduced-size path.
+`preview` and `working` are the same decode for these formats. Cost for WebP and GIF: decode.
+
+Lenient decoding is as lenient as each decoder: a truncated JPEG still yields a picture (`zune-jpeg` fills what is missing); the other decoders refuse most truncated files.
 
 ### Animated pictures
 
@@ -175,7 +216,9 @@ GIF and WebP files may hold more than one frame. `metadata` reports the frame co
 
 ### The JPEG XL handler
 
-It decodes with `jxl-oxide`. Orientation and colour come from the codestream. EXIF is read from the container's `Exif` box when there is one. Cost: decode.
+It decodes with `jxl-oxide`. Orientation and colour come from the codestream; `jxl-oxide` applies the orientation when it hands out pixels. `metadata` reads only as far as the image header, so the container's `Exif` box, which may follow the codestream, is read by the metadata reader (#10). `source` keeps 16 bits when the codestream's bit depth is above 8, and its `icc` is the profile `jxl-oxide` rendered into. A CMYK JPEG XL needs a colour management system to render and is a `decode` error until #7. Cost: decode.
+
+No JPEG XL encoder exists in Rust, so the handler's tests use four tiny files (under 200 bytes each) in `crates/owlbum-core/testdata/media/`, made once with ImageMagick and committed. Every other test picture is generated by the test.
 
 ### The RAW handler
 
@@ -765,8 +808,8 @@ Only things a prototype or a measurement must settle. Each has an issue.
 4. **Tauri issue #3725.** Which of the three Linux playback steps works on current WebKitGTK, and does `<video>` over `owlbum://` with ranges behave on WebView2 for multi-gigabyte files?
 5. **Linux poster frames.** Is the GStreamer pipeline reliable across distributions with only the base plug-ins, and how is its absence detected cleanly at run time?
 6. **Windows poster frames.** Does the shell thumbnail give at least 1600 px, and does it block on cloud or network files? If so, use the Media Foundation path first.
-7. **Thumbnail encoding.** JPEG qualities for 512 px and 1600 px, `mozjpeg` against `image`'s encoder, and whether `zune-jpeg` offers a reduced-size decode worth using.
+7. **Thumbnail encoding.** JPEG qualities for 512 px and 1600 px, and `mozjpeg` against `image`'s encoder. (`zune-jpeg` 0.5.15 has no reduced-size decode; checked in #6.)
 8. **Colour conversion.** [Architecture](01-architecture.md#dependencies-chosen) names `moxcms` or `lcms2`. Which of the two converts embedded profiles to sRGB (the pure-Rust one is preferred), and what it costs per thumbnail, is settled by measurement in the thumbnail work. The edit renderer in [Editing and file actions](06-editing-and-file-actions.md#rendering) must use the same one.
-9. **Encoders and decoders assumed here.** Confirm against the pinned versions that `jxl-oxide` has no encoder and that `image` writes only lossless WebP. If either is wrong, the capability table changes.
+9. **Encoders and decoders assumed here.** Settled in #6: `jxl-oxide` 0.12.6 has no encoder and `image` 0.25.10 writes only lossless WebP, so the capability table stands.
 10. **Analysis numbers.** The score thresholds in Organising were tuned on the old program's resampler. They must be checked against the pipeline pinned here on the `trip` fixture before they are trusted.
 11. **`nom-exif` coverage.** Which of PNG, WebP, JPEG XL, AVI and each RAW maker it reads directly, and where the handler must extract the EXIF block itself.

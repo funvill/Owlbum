@@ -50,7 +50,7 @@ describe("ProgressBar", () => {
     render(<ProgressBar label="Looking for photos" />);
     const bar = screen.getByRole("progressbar", { name: "Looking for photos" });
     expect(bar).not.toHaveAttribute("aria-valuenow");
-    expect(bar).toHaveClass("ow-progress--unknown");
+    expect(bar.closest(".ow-progress")).toHaveClass("ow-progress--unknown");
   });
 
   it("shows a problem in the error colour with an alert icon", () => {
@@ -118,10 +118,10 @@ describe("MiddleEllipsis", () => {
     expect(splitForEllipsis("a.jpg")).toEqual(["", "a.jpg"]);
   });
 
-  it("gives the whole text to assistive technology", () => {
-    render(<MiddleEllipsis text="IMG_20240716_183011_holiday.jpg" />);
-    const el = screen.getByText((_, node) => node?.classList.contains("ow-middle-ellipsis") ?? false);
-    expect(el).toHaveAttribute("aria-label", "IMG_20240716_183011_holiday.jpg");
+  it("gives the whole text to assistive technology, and draws it in two parts", () => {
+    const { container } = render(<MiddleEllipsis text="IMG_20240716_183011_holiday.jpg" />);
+    expect(screen.getByText("IMG_20240716_183011_holiday.jpg")).toHaveClass("ow-visually-hidden");
+    expect(container.querySelector(".ow-middle-ellipsis__end")).toHaveTextContent("liday.jpg");
   });
 });
 
@@ -144,6 +144,7 @@ describe("display controls", () => {
         <Chip label="lake" onClick={() => {}} />
         <Chip label="star:yes" active onRemove={() => {}} />
         <EmptyState heading="No photos" mark />
+        <MiddleEllipsis text="IMG_0042.jpg" />
       </>,
     );
     expect(await seriousFindings()).toEqual([]);

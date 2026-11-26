@@ -1,0 +1,85 @@
+/* docs/09-visual-design.md, "Chips" and "Badges on tiles". */
+
+.ow-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  height: var(--size-chip);
+  padding: 0 var(--space-3);
+  border: 1px solid transparent;
+  border-radius: var(--radius-full);
+  font: var(--text-sm);
+  white-space: nowrap;
+}
+
+.ow-chip--plain {
+  background: var(--panel-3);
+  color: var(--text);
+}
+
+.ow-chip--plain:hover {
+  border-color: var(--line-strong);
+}
+
+/* A chip can sit in a dense row; its click target still reaches 24 px. */
+.ow-chip--button {
+  min-height: var(--size-target);
+  height: auto;
+  margin: 0;
+  background-clip: padding-box;
+}
+
+.ow-chip--active {
+  padding-right: var(--space-1);
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.ow-chip--active:hover {
+  background: var(--accent-strong);
+}
+
+.ow-chip__remove {
+  display: inline-grid;
+  place-items: center;
+  width: var(--size-target);
+  height: var(--size-chip);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  border-radius: var(--radius-full);
+  color: inherit;
+}
+
+.ow-pill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-1);
+  height: var(--size-badge);
+  min-width: var(--size-badge-min);
+  padding: 0 var(--space-2);
+  border-radius: var(--radius-full);
+  font: var(--text-xs);
+  white-space: nowrap;
+}
+
+.ow-pill--badge {
+  background: var(--badge-bg);
+  color: var(--badge-text);
+}
+
+.ow-pill--accent {
+  background: var(--accent);
+  color: var(--accent-ink);
+}
+
+.ow-pill--edited {
+  background: var(--marker-edited);
+  color: var(--marker-ink);
+}
+
+.ow-pill--unsaved {
+  background: var(--marker-unsaved);
+  color: var(--marker-ink);
+}

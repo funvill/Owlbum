@@ -149,7 +149,9 @@ Rules that follow from the numbers:
 
 ## Typography
 
-One typeface is bundled: Inter, as a variable font file inside the program. Nothing is fetched. No other font is bundled. The font stack is `'Inter', system-ui, sans-serif`, so that file names and notes in scripts Inter does not cover still appear, drawn by a system font.
+One typeface is bundled: Inter, as a variable font file inside the program. Nothing is fetched. No other font is bundled. The files come from the `@fontsource-variable/inter` package (SIL Open Font License 1.1), which splits the font by script and names it `Inter Variable`; the page loads only the parts a text needs. The font stack is `'Inter Variable', system-ui, sans-serif`, so that file names and notes in scripts Inter does not cover still appear, drawn by a system font.
+
+Each type token below is a `font` shorthand (weight, size, line height and the font stack), used as `font: var(--text-md)`.
 
 | Token | Size / line height | Weight | Use |
 |---|---|---|---|
@@ -160,7 +162,17 @@ One typeface is bundled: Inter, as a variable font file inside the program. Noth
 | `--text-xl` | 20 px / 26 px | 600 | The start screen heading, empty-state headings. |
 | `--text-num` | 22 px / 26 px | 700 | The photo score in the details panel. |
 
-- **Weights.** 400 for text, 500 for button labels and values, 600 for headings and file names, 700 for the score number. No other weight is used. Italic is not used.
+- **Weights.** 400 for text, 500 for button labels and values, 600 for headings and file names, 700 for the score number. No other weight is used. Italic is not used. The weights and letter-spacings are tokens too:
+
+| Token | Value | Use |
+|---|---|---|
+| `--weight-text` | `400` | Text. |
+| `--weight-medium` | `500` | Button labels and values. |
+| `--weight-heading` | `600` | Headings and file names. |
+| `--weight-number` | `700` | The score number. |
+| `--tracking-heading` | `-0.01em` | Headings. |
+| `--tracking-caps` | `0.06em` | Capital labels. |
+
 - **Headings.** Letter-spacing −0.01em. A section heading in the details panel is `--text-md` at weight 600.
 - **Capital labels.** Group labels in the Filters panel are `--text-xs`, capitals, letter-spacing 0.06em, `--muted`.
 - **Numbers.** Counts, scores, sizes, coordinates and version numbers use tabular figures.
@@ -208,7 +220,7 @@ A gap that is not on the scale is a defect. One-pixel borders and the sizes in t
 | Icon button | 28 × 28 px, icon 16 px. |
 | Text input, select | 30 px high, 8 px padding left and right. |
 | Checkbox, radio button | 16 × 16 px. |
-| Segmented control | 30 px high; each segment 26 px high. |
+| Segmented control | Each segment 26 px high, inside 2 px of padding and a 1 px border: 32 px in all. |
 | Slider | Track 4 px high, thumb 14 px. |
 | Chip | 22 px high, 8 px padding left and right. |
 | Badge on a tile | 18 px high, at least 24 px wide; 20 px high and 28 px wide for the stack count. Placed 4 px from the tile's edge. |
@@ -219,6 +231,39 @@ A gap that is not on the scale is a defect. One-pixel borders and the sizes in t
 | Dialog | 440 px wide (small) or 620 px (wide); never wider than the window less 24 px, never taller than the window less 48 px, with its body scrolling. |
 
 A control on the page is at least 24 × 24 px, which is the WCAG 2.2 target-size minimum. The star button on a tile is 24 × 24 px.
+
+The sizes above are tokens as well, so that no component writes a pixel size of its own. Paddings use the spacing steps.
+
+| Token | Value | Use |
+|---|---|---|
+| `--size-bar` | 48 px | Top bar and filter bar. |
+| `--size-bar-tall` | 64 px | Filter bar with the query-word hint row. |
+| `--size-control` | 30 px | Buttons, text inputs, selects, menu rows. |
+| `--size-control-sm` | 26 px | Small buttons, segments. |
+| `--size-icon-button` | 28 px | Icon buttons. |
+| `--size-target` | 24 px | The smallest control; the star button on a tile. |
+| `--size-icon` | 16 px | Icons. |
+| `--size-icon-sm` | 14 px | Icons in small buttons and badges. |
+| `--size-icon-lg` | 20 px | Icons in empty states and banners. |
+| `--size-check` | 16 px | Checkboxes and radio buttons. |
+| `--size-track` | 4 px | Slider track. |
+| `--size-thumb` | 14 px | Slider thumb. |
+| `--size-chip` | 22 px | Chips. |
+| `--size-badge` | 18 px | Badges on tiles. |
+| `--size-badge-min` | 24 px | The narrowest badge. |
+| `--size-badge-stack` | 20 px | The stack-count badge. |
+| `--size-badge-stack-min` | 28 px | The narrowest stack-count badge. |
+| `--size-edit-dot` | 8 px | The edit dot on a tile. |
+| `--size-menu-min` | 220 px | The narrowest menu. |
+| `--size-progress` | 6 px | Progress bar track. |
+| `--size-progress-max` | 420 px | The widest progress bar. |
+| `--size-splitter` | 6 px | Splitters. |
+| `--size-dialog` | 440 px | Small dialog. |
+| `--size-dialog-wide` | 620 px | Wide dialog. |
+| `--size-tooltip-max` | 280 px | The widest tooltip. |
+| `--size-toast-edge` | 3 px | The coloured left edge of a toast. |
+| `--size-focus` | 2 px | The focus ring, and the gap inside it. |
+| `--size-mark` | 64 px | The owl mark in empty states. |
 
 | Token | Value | Use |
 |---|---|---|
@@ -247,6 +292,12 @@ The old program used 7 px on buttons; that becomes 6 px. Its single `--radius` t
 | `--motion-base` | 160 ms | Menus, popovers, tooltips and toasts appearing; sections opening. |
 | `--motion-slow` | 240 ms | Dialogs and the viewer appearing; the score toast. |
 | `--ease` | `cubic-bezier(0.2, 0, 0, 1)` | Everything. |
+| `--motion-travel` | 4 px | How far menus, popovers and toasts travel as they appear. |
+| `--motion-press` | 1 px | How far a button moves down while pressed. |
+| `--progress-unknown-width` | `25%` | The travelling block of a progress bar with no known total. |
+| `--progress-unknown-stripes` | `none` | Its stripes: none, so the block is plain. |
+
+Under reduced motion `--progress-unknown-width` becomes `100%` and `--progress-unknown-stripes` a still stripe pattern, which is how the bar stands still without the component testing for the setting.
 
 - **What moves.** Things fade, and menus, popovers and toasts also travel 4 px. Nothing bounces. Nothing in the grid animates when rows load, so scrolling 100,000 photos stays steady.
 - **Leaving is quick.** Anything that closes does so in `--motion-fast`.
@@ -294,6 +345,8 @@ Popovers, the viewer, dialogs, menus, toasts and tooltips are drawn in one layer
 ## Icons
 
 Owlbum has one icon set, drawn as inline SVG inside the page. There is no icon font and nothing is fetched. The app icon is separate; see [Logo and app icon](#logo-and-app-icon).
+
+The drawings are taken from [Lucide](https://lucide.dev) (ISC License), copied into `ui/src/icons/paths.ts` by `ui/scripts/icons.cjs`, which joins each icon's shapes into one path. The licence is in `notices/lucide.txt`. Each name below is mapped to the Lucide drawing named in the comment beside it in that file; where Lucide has no drawing of the same name the nearest one is used (for example `flip-h` is `move-horizontal`, `straighten` is `ruler`, `tidy` is `brush-cleaning`, `path` is `link`).
 
 Drawing rules:
 
@@ -524,7 +577,7 @@ Every feature meets this baseline before it is called done.
 | Toasts | Info and success are announced in a `role="status"` region; errors in a `role="alert"` region. |
 | Banners | `role="status"`; `role="alert"` for the error banner. |
 | Progress bars | `role="progressbar"` with a label, `aria-valuenow` and `aria-valuemax`; no value when the total is unknown. |
-| Icon buttons | An `aria-label` that matches the tooltip. Toggles add `aria-pressed`. The SVG itself is `aria-hidden`. |
+| Icon buttons | An `aria-label` with the name the tooltip shows; the tooltip adds the shortcut ("Hide (H)"), which the button also gives in `aria-keyshortcuts`. Toggles add `aria-pressed`. The SVG itself is `aria-hidden`. |
 | Photos | The preview and viewer image has the file name as its text alternative, followed by the description when there is one. |
 
 **Seeing.**
@@ -556,6 +609,8 @@ An owl, face on, reduced to four shapes. The eyes are the idea: each is a camera
 | Aperture | A hexagon inside each disc. | `#333338`, the dark `--line`. |
 | Highlight | A small dot at the upper right of each eye. | `#ecebe7` |
 | Beak | A small diamond below and between the eyes. | `#ecebe7` |
+
+The one-colour mark is drawn from this draft in `OwlMark` (`ui/src/controls/`), and an empty state shows it only when asked (`mark`). Until the drawing is approved, no screen asks: empty states show no picture, as suggestion 6 says.
 
 The icon keeps its dark tile in both themes, as app icons do. It uses flat colours only: no gradients, no shadows, no text. The file is hand-written SVG with no outside references, and is the single source for every size.
 

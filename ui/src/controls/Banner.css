@@ -1,0 +1,53 @@
+/* docs/09-visual-design.md, "Banners". Text is --text, never --muted. */
+
+.ow-banner {
+  position: relative;
+  z-index: var(--z-bar);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-height: var(--size-bar);
+  padding: var(--space-2) var(--space-4);
+  color: var(--text);
+}
+
+.ow-banner__text {
+  flex: 1;
+}
+
+.ow-banner__actions {
+  display: flex;
+  gap: var(--space-3);
+}
+
+.ow-banner--info {
+  background: var(--info-soft);
+}
+
+.ow-banner--info .ow-banner__icon {
+  color: var(--select);
+}
+
+.ow-banner--ok {
+  background: var(--ok-soft);
+}
+
+.ow-banner--ok .ow-banner__icon {
+  color: var(--ok);
+}
+
+.ow-banner--warn {
+  background: var(--warn-soft);
+}
+
+.ow-banner--warn .ow-banner__icon {
+  color: var(--warn);
+}
+
+.ow-banner--error {
+  background: var(--error-soft);
+}
+
+.ow-banner--error .ow-banner__icon {
+  color: var(--error);
+}

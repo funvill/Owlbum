@@ -64,11 +64,24 @@ describe("Tooltip", () => {
     expect(screen.queryByRole("tooltip")).toBeNull();
   });
 
+  it("does not appear when focus is moved back to it after a mouse choice elsewhere", async () => {
+    render(
+      <>
+        <Subject />
+        <button type="button">Elsewhere</button>
+      </>,
+    );
+    await user().click(screen.getByRole("button", { name: "Elsewhere" }));
+    act(() => screen.getByRole("button", { name: "Path" }).focus());
+    expect(screen.queryByRole("tooltip")).toBeNull();
+  });
+
   it("goes when the pointer leaves before the delay", async () => {
     render(<Subject />);
     const button = screen.getByRole("button", { name: "Path" });
-    await user().hover(button);
-    await user().unhover(button);
+    const pointer = user();
+    await pointer.hover(button);
+    await pointer.unhover(button);
     act(() => vi.advanceTimersByTime(tooltipDelayMs));
     expect(screen.queryByRole("tooltip")).toBeNull();
   });

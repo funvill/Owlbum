@@ -5,6 +5,11 @@ zustand store (`store.ts`), its tests (`*.test.tsx`) and an `index.ts` that
 exports what other features may use. Features talk to Rust only through
 `api()` from `src/api`, and take their text from `src/text/<area>.ts`.
 
+Build screens from the base controls in `src/controls` and the icons in
+`src/icons`, and take every colour, size, duration and z-index from the tokens
+in `src/styles/tokens.css` (docs/09-visual-design.md). A page test fails on a
+colour, z-index or duration written anywhere else.
+
 Use these names, so parallel issues land in the same places:
 
 | Folder | What | Roadmap |

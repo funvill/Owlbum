@@ -1,0 +1,124 @@
+/* docs/09-visual-design.md, "Buttons" and "Sizes and radii". */
+
+.ow-icon {
+  flex: none;
+}
+
+.ow-button,
+.ow-icon-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  margin: 0;
+  border-radius: var(--radius-md);
+  white-space: nowrap;
+  cursor: default;
+  transition:
+    background-color var(--motion-fast) var(--ease),
+    color var(--motion-fast) var(--ease),
+    transform var(--motion-fast) var(--ease);
+}
+
+.ow-button {
+  height: var(--size-control);
+  padding: 0 var(--space-4);
+  font-weight: var(--weight-medium);
+  border: 1px solid transparent;
+}
+
+.ow-button--sm {
+  height: var(--size-control-sm);
+  padding: 0 var(--space-3);
+  font: var(--text-sm);
+  font-weight: var(--weight-medium);
+}
+
+.ow-button--default {
+  background: var(--panel-2);
+  border-color: var(--line);
+  color: var(--text);
+}
+
+.ow-button--default:hover {
+  background: var(--panel-3);
+}
+
+.ow-button--danger {
+  color: var(--error);
+}
+
+.ow-button--primary {
+  background: var(--accent);
+  color: var(--accent-ink);
+  font-weight: var(--weight-heading);
+}
+
+.ow-button--primary:hover {
+  background: var(--accent-strong);
+}
+
+.ow-button--primary:active {
+  background: var(--accent);
+}
+
+.ow-button--default:active {
+  background: var(--panel-3);
+}
+
+/* Pressed: moved down 1 px (0 under reduced motion, through the token). */
+.ow-button:active,
+.ow-icon-button:active {
+  transform: translateY(var(--motion-press));
+}
+
+.ow-button[aria-disabled="true"],
+.ow-button[aria-disabled="true"]:hover,
+.ow-button[aria-disabled="true"]:active {
+  background: var(--panel-2);
+  color: var(--disabled);
+  transform: none;
+}
+
+.ow-button[aria-busy="true"] {
+  pointer-events: none;
+}
+
+.ow-icon-button {
+  width: var(--size-icon-button);
+  height: var(--size-icon-button);
+  padding: 0;
+  background: transparent;
+  border: 0;
+  color: var(--muted);
+}
+
+.ow-icon-button:hover,
+.ow-icon-button:active {
+  background: var(--panel-3);
+  color: var(--text);
+}
+
+.ow-icon-button--on,
+.ow-icon-button--on:hover {
+  background: var(--panel-3);
+  color: var(--accent);
+}
+
+.ow-icon-button[aria-disabled="true"],
+.ow-icon-button[aria-disabled="true"]:hover {
+  background: transparent;
+  color: var(--disabled);
+  transform: none;
+}
+
+/* Under reduced motion the duration token is 0, so the ring stands still. */
+.ow-spinner {
+  animation: ow-spin calc(var(--motion-slow) * 4) linear infinite;
+}
+
+@keyframes ow-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

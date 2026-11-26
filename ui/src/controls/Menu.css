@@ -1,0 +1,72 @@
+/* docs/09-visual-design.md, "Menus". */
+
+.ow-menu {
+  position: fixed;
+  z-index: var(--z-menu);
+  min-width: var(--size-menu-min);
+  padding: var(--space-2);
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  animation: ow-menu-in var(--motion-base) var(--ease);
+}
+
+@keyframes ow-menu-in {
+  from {
+    opacity: 0;
+    transform: translateY(calc(-1 * var(--motion-travel)));
+  }
+}
+
+.ow-menu__row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  height: var(--size-control);
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  cursor: default;
+}
+
+.ow-menu__row:hover,
+.ow-menu__row:focus {
+  background: var(--panel-3);
+}
+
+/* Rows sit edge to edge, so the ring is drawn just inside the row. */
+.ow-menu__row:focus-visible {
+  outline-offset: calc(-1 * var(--size-focus));
+  box-shadow: none;
+}
+
+.ow-menu__row--danger {
+  color: var(--error);
+}
+
+.ow-menu__row[aria-disabled="true"] {
+  color: var(--disabled);
+}
+
+.ow-menu__icon {
+  display: inline-flex;
+  flex: none;
+  width: var(--size-icon);
+}
+
+.ow-menu__label {
+  flex: 1;
+  white-space: nowrap;
+}
+
+.ow-menu__shortcut {
+  color: var(--muted);
+  font: var(--text-sm);
+}
+
+.ow-menu__rule {
+  height: 1px;
+  margin: var(--space-2) 0;
+  background: var(--line-soft);
+}

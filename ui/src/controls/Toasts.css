@@ -1,0 +1,65 @@
+/* docs/09-visual-design.md, "Toasts". */
+
+.ow-toasts {
+  position: fixed;
+  left: 50%;
+  bottom: var(--space-5);
+  z-index: var(--z-toast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  transform: translateX(-50%);
+  pointer-events: none;
+}
+
+/* The two live regions take no box, so their toasts share one column. */
+.ow-toasts__region {
+  display: contents;
+}
+
+.ow-toast {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  max-width: var(--size-dialog-wide);
+  padding: var(--space-2) var(--space-2) var(--space-2) var(--space-4);
+  background: var(--panel-3);
+  border-left: var(--size-toast-edge) solid var(--select);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow);
+  color: var(--text);
+  pointer-events: auto;
+  animation: ow-toast-in var(--motion-base) var(--ease);
+}
+
+@keyframes ow-toast-in {
+  from {
+    opacity: 0;
+    transform: translateY(var(--motion-travel));
+  }
+}
+
+.ow-toast--info .ow-toast__icon {
+  color: var(--select);
+}
+
+.ow-toast--success {
+  border-left-color: var(--ok);
+}
+
+.ow-toast--success .ow-toast__icon {
+  color: var(--ok);
+}
+
+.ow-toast--error {
+  border-left-color: var(--error);
+}
+
+.ow-toast--error .ow-toast__icon {
+  color: var(--error);
+}
+
+.ow-toast__message {
+  flex: 1;
+}

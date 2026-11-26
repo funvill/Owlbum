@@ -98,9 +98,13 @@ describe("Dialog", () => {
     unmount();
 
     render(<Harness dirty />);
-    await openDialog();
+    const dialog = await openDialog();
     await userEvent.click(document.querySelector(".ow-dialog-backdrop")!);
     expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // Focus stays in the dialog, so Escape still reaches it.
+    expect(dialog.contains(document.activeElement)).toBe(true);
+    await userEvent.keyboard("{Escape}");
+    expect(screen.queryByRole("dialog")).toBeNull();
   });
 
   it("does not close when a click inside it ends on the backdrop", async () => {

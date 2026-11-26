@@ -37,7 +37,7 @@ export function sourceFiles(extensions: string[]): string[] {
   return found.map((path) => relative(srcDir, path).split(sep).join("/"));
 }
 
-/** The rows of every markdown table whose first cell is a backticked custom property. */
+/** The rows of every markdown table whose first cell is one backticked custom property. */
 export function tokenRows(markdown: string): string[][] {
   return markdown
     .split("\n")
@@ -47,7 +47,8 @@ export function tokenRows(markdown: string): string[][] {
         .slice(1, -1)
         .split(" | ")
         .map((cell) => cell.trim()),
-    );
+    )
+    .filter((row) => /^`--[a-z0-9-]+`$/.test(row[0]!));
 }
 
 /** The custom properties declared in a CSS block, in order: name to value. */

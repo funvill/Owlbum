@@ -67,12 +67,12 @@ describe("Button", () => {
     );
     const button = screen.getByRole("button", { name: "Save" });
     expect(button).toHaveAttribute("aria-disabled", "true");
-    await userEvent.click(button);
-    expect(onClick).not.toHaveBeenCalled();
     await userEvent.tab();
     expect(button).toHaveFocus();
     expect(screen.getByRole("tooltip")).toHaveTextContent("The album is view-only.");
     expect(button).toHaveAccessibleDescription("The album is view-only.");
+    await userEvent.click(button);
+    expect(onClick).not.toHaveBeenCalled();
   });
 });
 

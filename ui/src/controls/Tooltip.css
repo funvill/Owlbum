@@ -1,0 +1,26 @@
+/* docs/09-visual-design.md, "Tooltips". */
+
+.ow-tooltip {
+  position: fixed;
+  z-index: var(--z-tooltip);
+  max-width: var(--size-tooltip-max);
+  padding: var(--space-2) var(--space-3);
+  background: var(--panel-3);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  color: var(--text);
+  font: var(--text-sm);
+  pointer-events: none;
+  animation: ow-tooltip-in var(--motion-base) var(--ease);
+}
+
+@keyframes ow-tooltip-in {
+  from {
+    opacity: 0;
+  }
+}
+
+/* Carries the tooltip's handlers without taking part in the layout. */
+.ow-tooltip-anchor {
+  display: contents;
+}

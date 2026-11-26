@@ -1,0 +1,192 @@
+/*
+ * Design tokens: the one file that holds colours, type, spacing, sizes,
+ * radii, motion and layers. See docs/09-visual-design.md. Every other style
+ * refers to these by name; a page test fails if it writes a colour, a
+ * z-index or a duration of its own (src/styles/literals.test.ts), and
+ * another checks these values against the document (tokens.test.ts).
+ *
+ * Version 1 ships the dark theme only. A second theme is a second block of
+ * the same names under :root[data-theme="<name>"].
+ */
+
+:root,
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  /* Surfaces and lines */
+  --bg: #161618;
+  --stage: #111113;
+  --panel: #1d1d20;
+  --panel-2: #242428;
+  --panel-3: #2d2d32;
+  --line: #333338;
+  --line-soft: #2a2a2f;
+  --line-strong: #72727a;
+  --backdrop: rgba(0,0,0,0.55);
+  --shadow: 0 8px 28px rgba(0,0,0,0.5);
+
+  /* Text */
+  --text: #ecebe7;
+  --muted: #9b988f;
+  --disabled: #6f6d67;
+
+  /* Accent, state and selection */
+  --accent: #e7a65f;
+  --accent-strong: #f2b871;
+  --accent-ink: #1b1309;
+  --focus: #f2b871;
+  --focus-gap: #111113;
+  --select: #6aa7ff;
+  --ok: #6fc28d;
+  --warn: #e9c45f;
+  --error: #ef6e5e;
+  --info-soft: #293344;
+  --ok-soft: #2a3731;
+  --warn-soft: #3e382a;
+  --error-soft: #3f2a2a;
+
+  /* Photo surfaces */
+  --preview-bg: #111113;
+  --preview-text: #ffffff;
+  --edit-bar: #18181a;
+  --seg-bg: #222226;
+  --seg-line: #3a3a3e;
+  --viewer-bg: #000000;
+  --viewer-text: #ffffff;
+  --viewer-muted: #b8b5ad;
+  --viewer-panel: rgba(20,20,22,0.88);
+  --badge-bg: rgba(0,0,0,0.65);
+  --badge-text: #ffffff;
+  --crop-line: rgba(255,255,255,0.9);
+  --crop-shade: rgba(0,0,0,0.55);
+
+  /* Edits, score and histogram */
+  --marker-edited: #c2a37d;
+  --marker-unsaved: #d98b2b;
+  --marker-ink: #1b1309;
+  --mark-off: rgba(255,255,255,0.85);
+  --drag-placeholder: #2d2d32;
+  --score-up-bg: rgba(30,114,58,0.92);
+  --score-down-bg: rgba(201,58,46,0.92);
+  --score-toast-text: #ffffff;
+  --score-plus: #4caf6a;
+  --score-minus: #ef6e5e;
+  --hist-red: #e5483d;
+  --hist-green: #3aa655;
+  --hist-blue: #3b82f6;
+  --hist-luma: #888888;
+  --hist-fill: 0.45;
+  --hist-luma-fill: 0.35;
+
+  /* Typography: each is a `font` shorthand. */
+  --font: 'Inter Variable', system-ui, sans-serif;
+  --text-xs: 600 11px/16px var(--font);
+  --text-sm: 400 12px/16px var(--font);
+  --text-md: 400 13px/19px var(--font);
+  --text-lg: 600 15px/20px var(--font);
+  --text-xl: 600 20px/26px var(--font);
+  --text-num: 700 22px/26px var(--font);
+  --weight-text: 400;
+  --weight-medium: 500;
+  --weight-heading: 600;
+  --weight-number: 700;
+  --tracking-heading: -0.01em;
+  --tracking-caps: 0.06em;
+
+  /* Spacing */
+  --space-1: 2px;
+  --space-2: 4px;
+  --space-3: 8px;
+  --space-4: 12px;
+  --space-5: 16px;
+  --space-6: 24px;
+  --space-7: 32px;
+  --space-8: 48px;
+
+  /* Sizes */
+  --size-bar: 48px;
+  --size-bar-tall: 64px;
+  --size-control: 30px;
+  --size-control-sm: 26px;
+  --size-icon-button: 28px;
+  --size-target: 24px;
+  --size-icon: 16px;
+  --size-icon-sm: 14px;
+  --size-icon-lg: 20px;
+  --size-check: 16px;
+  --size-track: 4px;
+  --size-thumb: 14px;
+  --size-chip: 22px;
+  --size-badge: 18px;
+  --size-badge-min: 24px;
+  --size-badge-stack: 20px;
+  --size-badge-stack-min: 28px;
+  --size-edit-dot: 8px;
+  --size-menu-min: 220px;
+  --size-progress: 6px;
+  --size-progress-max: 420px;
+  --size-splitter: 6px;
+  --size-dialog: 440px;
+  --size-dialog-wide: 620px;
+  --size-tooltip-max: 280px;
+  --size-toast-edge: 3px;
+  --size-focus: 2px;
+  --size-mark: 64px;
+
+  /* Radii */
+  --radius-sm: 4px;
+  --radius-md: 6px;
+  --radius-lg: 8px;
+  --radius-xl: 12px;
+  --radius-full: 999px;
+
+  /* Motion */
+  --motion-fast: 100ms;
+  --motion-base: 160ms;
+  --motion-slow: 240ms;
+  --ease: cubic-bezier(0.2, 0, 0, 1);
+  --motion-travel: 4px;
+  --motion-press: 1px;
+  --progress-unknown-width: 25%;
+  --progress-unknown-stripes: none;
+
+  /* Layers, lowest first */
+  --z-base: 0;
+  --z-raised: 10;
+  --z-bar: 100;
+  --z-popover: 200;
+  --z-viewer: 300;
+  --z-dialog: 400;
+  --z-menu: 500;
+  --z-toast: 600;
+  --z-tooltip: 700;
+}
+
+/* Reduced motion is handled here, once: components never test for it. */
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --motion-fast: 0ms;
+    --motion-base: 0ms;
+    --motion-slow: 0ms;
+    --motion-travel: 0px;
+    --motion-press: 0px;
+    /* A progress bar with no known total stands still, striped. */
+    --progress-unknown-width: 100%;
+    --progress-unknown-stripes: repeating-linear-gradient(-45deg, var(--accent) 0 4px, var(--panel-3) 4px 8px);
+  }
+}
+
+/* Windows contrast themes: lines and the focus ring take system colours. */
+@media (forced-colors: active) {
+  :root {
+    --focus: Highlight;
+    --focus-gap: Canvas;
+    --line: CanvasText;
+    --line-soft: CanvasText;
+    --line-strong: CanvasText;
+    --accent: Highlight;
+    --accent-strong: Highlight;
+    --accent-ink: HighlightText;
+    --disabled: GrayText;
+  }
+}

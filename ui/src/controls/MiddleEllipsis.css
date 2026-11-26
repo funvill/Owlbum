@@ -1,0 +1,16 @@
+.ow-middle-ellipsis {
+  display: inline-flex;
+  min-width: 0;
+  max-width: 100%;
+  white-space: nowrap;
+}
+
+.ow-middle-ellipsis__start {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.ow-middle-ellipsis__end {
+  flex: none;
+}

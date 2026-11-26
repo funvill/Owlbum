@@ -1,0 +1,52 @@
+/* docs/09-visual-design.md, "Progress bars". */
+
+.ow-progress {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ow-progress__track {
+  position: relative;
+  flex: 1;
+  max-width: var(--size-progress-max);
+  height: var(--size-progress);
+  overflow: hidden;
+  background: var(--panel-3);
+  border-radius: var(--radius-full);
+}
+
+.ow-progress__fill {
+  height: 100%;
+  background: var(--accent);
+  border-radius: var(--radius-full);
+  transition: width var(--motion-base) var(--ease);
+}
+
+/*
+ * No known total: a short block travels along the track. Under reduced
+ * motion the tokens make it a still, striped, full-width bar instead.
+ */
+.ow-progress--unknown .ow-progress__fill {
+  width: var(--progress-unknown-width);
+  background-image: var(--progress-unknown-stripes);
+  animation: ow-progress-travel calc(var(--motion-slow) * 6) var(--ease) infinite alternate;
+}
+
+@keyframes ow-progress-travel {
+  to {
+    transform: translateX(300%);
+  }
+}
+
+.ow-progress__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+
+.ow-progress--failed .ow-progress__label {
+  color: var(--error);
+}

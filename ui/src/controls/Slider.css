@@ -1,0 +1,52 @@
+/* docs/09-visual-design.md, "Slider". */
+
+.ow-slider {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ow-slider__label {
+  color: var(--muted);
+}
+
+.ow-slider__input {
+  flex: 1;
+  min-width: 0;
+  height: var(--size-target);
+  margin: 0;
+  appearance: none;
+  background: transparent;
+}
+
+/* The track: --panel-3, filled with the accent between --_from and --_to. */
+.ow-slider__input::-webkit-slider-runnable-track {
+  height: var(--size-track);
+  border-radius: var(--radius-full);
+  background: linear-gradient(
+    to right,
+    var(--panel-3) var(--_from),
+    var(--accent) var(--_from),
+    var(--accent) var(--_to),
+    var(--panel-3) var(--_to)
+  );
+}
+
+.ow-slider__input::-webkit-slider-thumb {
+  width: var(--size-thumb);
+  height: var(--size-thumb);
+  margin-top: calc((var(--size-track) - var(--size-thumb)) / 2);
+  appearance: none;
+  border: 0;
+  border-radius: var(--radius-full);
+  background: var(--accent);
+}
+
+.ow-slider__input:disabled::-webkit-slider-thumb {
+  background: var(--disabled);
+}
+
+.ow-slider__value {
+  min-width: var(--size-control);
+  text-align: right;
+}

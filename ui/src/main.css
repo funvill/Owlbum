@@ -1,15 +1,5 @@
-/* Placeholder until the design tokens land (roadmap issue 15). */
-:root {
-  color-scheme: dark;
-  font-family: system-ui, sans-serif;
-  background: #16181c;
-  color: #e6e8eb;
-}
-
-body {
-  margin: 0;
-}
+/* The page's own layout. Colours and sizes come from styles/tokens.css. */
 
 main {
-  padding: 24px;
+  padding: var(--space-6);
 }

@@ -2,7 +2,7 @@ import { describe, expect, it, vi } from "vitest";
 import { useState } from "react";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { SearchBox, SelectField, TextArea, TextField } from "./fields";
+import { rowsFor, SearchBox, SelectField, TextArea, TextField } from "./fields";
 import { seriousFindings } from "../test/axe";
 
 describe("TextField", () => {
@@ -94,6 +94,15 @@ describe("TextArea", () => {
     expect(area).toHaveAttribute("rows", "5");
     await userEvent.type(area, "{Enter}6{Enter}7{Enter}8{Enter}9{Enter}10{Enter}11{Enter}12{Enter}13{Enter}14");
     expect(area).toHaveAttribute("rows", "12");
+  });
+});
+
+describe("rowsFor", () => {
+  it("counts wrapped lines as well as line breaks, from 3 to 12", () => {
+    expect(rowsFor("", 1)).toBe(3);
+    expect(rowsFor("one line", 5)).toBe(5);
+    expect(rowsFor("1\n2\n3\n4", 2)).toBe(4);
+    expect(rowsFor("long", 40)).toBe(12);
   });
 });
 

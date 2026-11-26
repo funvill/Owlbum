@@ -1,0 +1,23 @@
+/* docs/09-visual-design.md, "Empty states". */
+
+.ow-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  padding: var(--space-7);
+  text-align: center;
+}
+
+.ow-owl-mark {
+  color: var(--muted);
+}
+
+.ow-empty__heading {
+  font: var(--text-xl);
+  letter-spacing: var(--tracking-heading);
+}
+
+.ow-empty__text {
+  color: var(--muted);
+}

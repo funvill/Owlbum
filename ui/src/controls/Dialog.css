@@ -1,0 +1,67 @@
+/* docs/09-visual-design.md, "Dialogs". */
+
+.ow-dialog-layer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-dialog);
+  display: grid;
+  place-items: center;
+}
+
+.ow-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  background: var(--backdrop);
+  animation: ow-fade-in var(--motion-slow) var(--ease);
+}
+
+.ow-dialog {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  width: min(var(--size-dialog), 100vw - var(--space-6));
+  max-height: calc(100vh - var(--space-8));
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow);
+  animation: ow-fade-in var(--motion-slow) var(--ease);
+}
+
+.ow-dialog--wide {
+  width: min(var(--size-dialog-wide), 100vw - var(--space-6));
+}
+
+.ow-dialog__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-4) 0 var(--space-5);
+}
+
+.ow-dialog__title {
+  font: var(--text-lg);
+  letter-spacing: var(--tracking-heading);
+}
+
+.ow-dialog__body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+  padding: var(--space-5);
+  overflow-y: auto;
+}
+
+.ow-dialog__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: 0 var(--space-5) var(--space-5);
+}
+
+@keyframes ow-fade-in {
+  from {
+    opacity: 0;
+  }
+}

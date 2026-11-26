@@ -49,12 +49,16 @@ Owlbum/
     src/api/fake/         the in-memory backend used by page tests, one file per command prefix
     src/features/         one folder per feature area, each with its own zustand store
     src/text/             every interface string shown by the page, one file per area
+    src/styles/           tokens.css (every colour, size, duration and layer) and base.css
+    src/controls/         the base controls: buttons, inputs, menus, dialogs, toasts, tooltips
+    src/icons/            the icon set, inline SVG
     src/keys/keymap.json  the one table of keyboard shortcuts
   e2e/                    the thin WebdriverIO smoke test, run by hand before a release
   scripts/                check.sh (the gate, on Windows under Git Bash and on Linux), bindings.sh, and the notices generator
   site/                   the marketing page (static HTML), deployed to GitHub Pages by a workflow
   docs/                   these documents; docs/archive holds the old program's
   .github/workflows/      release.yml (installers on a tag), pages.yml (site)
+  notices/                hand-written third-party notices for things that are not packages
   LICENSE                 MIT
 ```
 

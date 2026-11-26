@@ -26,10 +26,12 @@ impl Emitter for Quiet {
 }
 
 /// Decodes with the handlers, counting each decode, each taking at least
-/// `delay`.
+/// `delay`. `previews` counts every thumbnail decode, `smalls` the fast
+/// ones among them.
 #[derive(Default)]
 struct Counting {
     previews: AtomicUsize,
+    smalls: AtomicUsize,
     workings: AtomicUsize,
     delay: Mutex<Duration>,
 }
@@ -39,6 +41,13 @@ impl Source for Counting {
         self.previews.fetch_add(1, Ordering::SeqCst);
         std::thread::sleep(*self.delay.lock().unwrap());
         Handlers.preview(format, path)
+    }
+
+    fn small(&self, format: &'static MediaFormat, path: &Path) -> Result<Pixels, MediaError> {
+        self.previews.fetch_add(1, Ordering::SeqCst);
+        self.smalls.fetch_add(1, Ordering::SeqCst);
+        std::thread::sleep(*self.delay.lock().unwrap());
+        Handlers.small(format, path)
     }
 
     fn working(&self, format: &'static MediaFormat, path: &Path) -> Result<Pixels, MediaError> {
@@ -285,7 +294,7 @@ fn a_thumbnail_url_serves_the_jpeg_with_immutable_caching() {
 }
 
 #[test]
-fn a_missing_thumbnail_is_made_on_demand_and_concurrent_requests_decode_once() {
+fn a_missing_thumbnail_is_made_on_demand_and_concurrent_requests_share_decodes() {
     let fx = Fx::new();
     fx.thumbs.cache().clear();
     fx.previews();
@@ -305,11 +314,32 @@ fn a_missing_thumbnail_is_made_on_demand_and_concurrent_requests_decode_once() {
         handles.into_iter().map(|h| h.join().unwrap()).collect()
     });
     assert!(replies.iter().all(|r| r.status == 200));
-    assert_eq!(fx.previews(), 1, "one decode for every request");
+    // The small size has its own fast decode; a request for it that comes
+    // while the medium job runs takes the small one from that job.
+    assert!(fx.previews() <= 2, "one decode per size at most");
     assert_eq!(size_of(&replies[0].body), (512, 256));
     assert_eq!(size_of(&replies[1].body), (1600, 800));
     assert!(fx.file("big.jpg", Kind::Small).is_file());
     assert!(fx.file("big.jpg", Kind::Medium).is_file());
+}
+
+#[test]
+fn concurrent_requests_for_a_missing_small_thumbnail_decode_once() {
+    let fx = Fx::new();
+    fx.thumbs.cache().clear();
+    fx.previews();
+    *fx.source.delay.lock().unwrap() = Duration::from_millis(300);
+    let key = fx.row("big.jpg").1;
+    let url = format!("owlbum://thumb/{key}/s");
+    let replies: Vec<Reply> = std::thread::scope(|s| {
+        let handles: Vec<_> = (0..8).map(|_| s.spawn(|| fx.get(&url))).collect();
+        handles.into_iter().map(|h| h.join().unwrap()).collect()
+    });
+    assert!(replies.iter().all(|r| r.status == 200));
+    assert!(replies.iter().all(|r| size_of(&r.body) == (512, 256)));
+    assert_eq!(fx.previews(), 1, "one decode for every request");
+    assert_eq!(fx.source.smalls.load(Ordering::SeqCst), 1, "the fast one");
+    assert!(!fx.file("big.jpg", Kind::Medium).exists(), "small alone");
 }
 
 #[test]
@@ -738,7 +768,7 @@ impl Drop for Live {
 }
 
 #[test]
-fn a_page_request_makes_a_waiting_photos_pass_and_the_scan_does_not_decode_it_again() {
+fn a_page_request_for_a_small_thumbnail_decodes_small_and_the_scan_keeps_the_file() {
     let live = Live::start(None);
     // The scan's only thread is held in its first decode.
     let held = live.gate.until_holding();
@@ -750,6 +780,58 @@ fn a_page_request_makes_a_waiting_photos_pass_and_the_scan_does_not_decode_it_ag
     let (key, analysis) = until(|| live.row(target));
     assert_eq!(analysis, None, "still waiting for its pixels pass");
     let reply = live.get(&format!("owlbum://thumb/{key}/s"));
+    assert_eq!(reply.status, 200, "made at once, ahead of the scan");
+    let size = if target == "big.jpg" {
+        (512, 256)
+    } else {
+        (200, 300)
+    };
+    assert_eq!(size_of(&reply.body), size, "upright, at the small size");
+    assert_eq!(
+        live.source.smalls.load(Ordering::SeqCst),
+        1,
+        "the fast decode"
+    );
+    assert_eq!(
+        live.source.previews.load(Ordering::SeqCst),
+        1,
+        "and no other"
+    );
+    let dir = live.thumbs.dir().to_path_buf();
+    assert!(
+        !store::path(&dir, &key, Kind::Medium).exists(),
+        "small alone"
+    );
+    assert!(live.thumbs.inner.stash.lock().unwrap().is_empty());
+    live.gate.release();
+    live.scanner.wait();
+    // The scan made the rest of the pass from its own decode.
+    let decoded = live.gate.decodes.lock().unwrap().clone();
+    assert!(decoded.iter().any(|n| n == target), "{decoded:?}");
+    let (key_after, analysis) = live.row(target).unwrap();
+    assert_eq!(key_after, key, "the same key");
+    assert!(analysis.is_some_and(|a| a.starts_with('{')));
+    assert!(store::path(&dir, &key, Kind::Medium).is_file());
+    assert_eq!(
+        std::fs::read(store::path(&dir, &key, Kind::Small)).unwrap(),
+        reply.body,
+        "the tile's file is left as the page got it"
+    );
+}
+
+#[test]
+fn a_page_request_for_a_medium_thumbnail_makes_a_waiting_photos_pass_once() {
+    let live = Live::start(None);
+    // The scan's only thread is held in its first decode.
+    let held = live.gate.until_holding();
+    let target = if held == "turned.jpg" {
+        "big.jpg"
+    } else {
+        "turned.jpg"
+    };
+    let (key, analysis) = until(|| live.row(target));
+    assert_eq!(analysis, None, "still waiting for its pixels pass");
+    let reply = live.get(&format!("owlbum://thumb/{key}/m"));
     assert_eq!(reply.status, 200, "made at once, ahead of the scan");
     assert_eq!(live.source.previews.load(Ordering::SeqCst), 1);
     live.gate.release();

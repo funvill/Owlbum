@@ -202,7 +202,7 @@ It covers JPEG, PNG, WebP, GIF, TIFF and BMP, all decoded with the `image` crate
 
 | Format | Notes |
 |---|---|
-| JPEG | `zune-jpeg` 0.5 has no reduced-size decode, so `preview(min_side)` is decoded by `jpeg-decoder` 0.3 (no rayon), scaled in the DCT to 1/2, 1/4 or 1/8: the smallest of these whose longest side is still at least `min_side` (a 5504 × 4128 photo is decoded at 2752 × 2064 for `preview(1600)`), then turned upright from its EXIF orientation and converted with its embedded profile, with `full_width`/`full_height` the full upright size (#114). When no scale below full size fits (a 2048 × 1536 photo for 1600), or the file is CMYK, 16-bit or lossless, or `jpeg-decoder` cannot read it, `preview` is the full `zune-jpeg` decode. `working` and `source` are always the full `zune-jpeg` decode. CMYK and greyscale files are converted to RGB; a CMYK file's profile is not applied (#82). A truncated file yields the part that was read. Cost: cheap. |
+| JPEG | `zune-jpeg` 0.5 has no reduced-size decode, so `preview(min_side)` is decoded by `jpeg-decoder` 0.3 (no rayon), scaled in the DCT to 1/2, 1/4 or 1/8: the smallest of these whose longest side is still at least `min_side` (a 5504 × 4128 photo is decoded at 2752 × 2064 for `preview(1600)`, and at 688 × 516 for the page's `preview(512)`; a 2048 × 1536 photo at 512 × 384 for `preview(512)`), then turned upright from its EXIF orientation and converted with its embedded profile, with `full_width`/`full_height` the full upright size (#114). When no scale below full size fits (a 2048 × 1536 photo for 1600), or the file is CMYK, 16-bit or lossless, or `jpeg-decoder` cannot read it, `preview` is the full `zune-jpeg` decode. `working` and `source` are always the full `zune-jpeg` decode. CMYK and greyscale files are converted to RGB; a CMYK file's profile is not applied (#82). A truncated file yields the part that was read. Cost: cheap. |
 | PNG | Cost: cheap under 8 MB, else decode. |
 | WebP | Animated files: frame 1 is the picture. |
 | GIF | Frame 1 is the picture, composed on a transparent canvas. |
@@ -463,7 +463,7 @@ Rows still gone after move matching are set `missing = 1`. This is done **only**
 - rows whose file was listed as online-only;
 - any row, when the walk's root could not be read (an unplugged drive must not mark an album missing).
 
-After the last write the scanner emits the final `scan_progress` and starts the **warm pass**: at lowest priority it makes the small thumbnail (only the small one) for any row in scope that has none in the cache (after the cache was pruned or app data deleted). It finds them from `cache_entries` in one query, not by testing files. The warm pass is not part of the progress count and stops on cancel and when another scan is asked for.
+After the last write the scanner emits the final `scan_progress` and starts the **warm pass**: at lowest priority it makes the small thumbnail (only the small one, through the same fast path as the page, see On demand) for any row in scope that has none in the cache (after the cache was pruned or app data deleted). It finds them from `cache_entries` in one query, not by testing files. The warm pass is not part of the progress count and stops on cancel and when another scan is asked for.
 
 ### `scan_version`
 
@@ -669,7 +669,7 @@ The pipeline, in this order:
 3. Resize to fit inside N × N with Lanczos3, keeping the aspect ratio. A picture smaller than N is never enlarged.
 4. Encode as JPEG, 4:2:0 chroma, no metadata, no embedded profile.
 
-The medium thumbnail is made first. The small one is resized from the medium one's pixels, not decoded again. Thumbnails are always opaque JPEG.
+The medium thumbnail is made first. The small one is resized from the medium one's pixels, not decoded again. The one exception is the page's fast path (On demand, below): a small thumbnail asked for before anything made it is decoded with `preview(512)` and resized straight to 512 px. Its pixels can differ a little from the scan's; the scan never replaces it, and the analysis is always made from the 1600 → 512 chain. Thumbnails are always opaque JPEG.
 
 Making the medium size for every photo of a very large album would fill the cache and push out the small ones, so the scan stops making it at 70% of `cache.limit_gb`. From then on medium thumbnails are made when asked for.
 
@@ -688,7 +688,9 @@ Making the medium size for every photo of a very large album would fill the cach
 
 1. Find the photo. `thumb_key` is a stored column of `photos` with its own index (`photos_thumb_key`, see [Data](02-data.md#schema)), so this is one indexed read on a pooled read-only connection. A key that belongs to no row of the open album that is in scope and not missing answers 404, even if a file for it sits in the shared cache.
 2. If the file exists and passes the end-marker check, serve it. Nothing is written to any database.
-3. Otherwise make the thumbnail and serve it. Requests for the same key share one job, whichever size they ask for, and share the scan's job when the scan is decoding that photo: the job decodes once with `preview(1600)`, writes the small thumbnail and the one asked for, and the medium one too while the cache is under 70% of its limit. For a photo still waiting for its pixels pass the job makes the analysis too, for the scan to write (see "Order of work"). Requests are answered on the blocking pool; their decodes take the decode slots ahead of the scan's, newest request first.
+3. Otherwise make the thumbnail and serve it. Requests for the same key share one job, and share the scan's job when the scan is decoding that photo. Requests are answered on the blocking pool; their decodes take the decode slots ahead of the scan's, newest request first.
+   - **Small (the fast path, #120).** The job decodes with `preview(512)` (for a large JPEG, the DCT-scaled decode at 1/4 or 1/8), resizes straight to 512 px, writes the small thumbnail and answers. Nothing else is made: for a photo still waiting, the scan's pixels pass later decodes it with `preview(1600)` as usual, writes the medium thumbnail and the analysis, and finds the small file whole and leaves it, so the tile never changes under its key. This costs a second decode of each photo the page asks for before the scan reaches it, in exchange for the first screen of a new album coming within about 2 s.
+   - **Medium.** The job decodes once with `preview(1600)` and writes the medium thumbnail, and the small one when it is not on disk. For a photo still waiting for its pixels pass the job makes the analysis too, for the scan to write without decoding again (see "Order of work").
 4. If the photo cannot be decoded, answer 404. A video with no poster answers 404 and the page shows its placeholder tile.
 
 `query_window` reads each row's `thumb_key` from the same stored column, so no hashing happens per request. The scanner writes the column whenever it writes `file_key` or `mtime_ms`. In a view-only album the keys of rows held only in memory are kept with those rows.

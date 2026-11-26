@@ -42,6 +42,13 @@ pub fn buffers(px: &Pixels) -> Buffers {
     Buffers { medium, small }
 }
 
+/// The small thumbnail's pixels alone, flattened on white and resized
+/// straight from `px` (the page's fast path, #120). The scan's small
+/// thumbnail and the analysis come from [`buffers`] instead.
+pub fn small(px: &Pixels) -> RgbImage {
+    fit(flatten(px), SMALL_SIDE)
+}
+
 /// The picture with its transparency laid over white (`#ffffff`).
 pub fn flatten(px: &Pixels) -> RgbImage {
     let mut out = Vec::with_capacity(px.width as usize * px.height as usize * 3);

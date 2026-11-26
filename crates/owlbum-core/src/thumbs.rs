@@ -89,6 +89,12 @@ pub trait Source: Send + Sync {
         format.handler.preview(path, make::MEDIUM_SIDE)
     }
 
+    /// The page's fast decode for a small thumbnail alone: the handler's
+    /// `preview(512)`, which a large JPEG gives at 1/4 or 1/8 scale (#120).
+    fn small(&self, format: &'static MediaFormat, path: &Path) -> Result<Pixels, MediaError> {
+        format.handler.preview(path, make::SMALL_SIDE)
+    }
+
     /// The zoom copy's decode: the handler's `working`.
     fn working(&self, format: &'static MediaFormat, path: &Path) -> Result<Pixels, MediaError> {
         format.handler.working(path)
@@ -317,21 +323,17 @@ impl Thumbs {
     /// made on demand when it is not on disk (docs/03, "On demand"). None
     /// when the photo cannot be decoded, or for [`Kind::Full`].
     /// A request from the page goes before the scan's decodes, newest
-    /// first; for a photo still waiting for its pixels pass the job makes
-    /// the whole pass, which the scan then writes without decoding again.
+    /// first. The small size is made alone from a decode at about its own
+    /// size (#120); the scan writes the rest later under the same key. For
+    /// the medium size of a photo still waiting for its pixels pass the job
+    /// makes the whole pass, which the scan then writes without decoding
+    /// again.
     pub fn thumbnail(&self, photo: &Photo, kind: Kind) -> Option<Vec<u8>> {
-        self.thumbnail_with(photo, kind, true, Priority::Page)
+        self.thumbnail_with(photo, kind, Priority::Page)
     }
 
-    /// [`Thumbs::thumbnail`]; `extra_medium` lets a job for the small size
-    /// make the medium one too while the cache has room for it.
-    fn thumbnail_with(
-        &self,
-        photo: &Photo,
-        kind: Kind,
-        extra_medium: bool,
-        priority: Priority,
-    ) -> Option<Vec<u8>> {
+    /// [`Thumbs::thumbnail`] with its decode at `priority`.
+    fn thumbnail_with(&self, photo: &Photo, kind: Kind, priority: Priority) -> Option<Vec<u8>> {
         if kind == Kind::Full || !store::is_thumb_key(&photo.thumb_key) {
             return None;
         }
@@ -341,9 +343,10 @@ impl Thumbs {
                 self.inner.cache.touch(key, kind);
                 return Some(bytes);
             }
-            let made = self.inner.thumbs.share(key, || {
-                self.make_on_demand(photo, kind, extra_medium, priority)
-            })?;
+            let made = self
+                .inner
+                .thumbs
+                .share(key, || self.make_on_demand(photo, kind, priority))?;
             let bytes = match kind {
                 Kind::Small => made.small,
                 _ => made.medium,
@@ -356,17 +359,11 @@ impl Thumbs {
         }
     }
 
-    /// One on-demand decode: the requested size, the small one, and, when
-    /// `extra_medium`, the medium one too while the cache has room for it.
-    /// For a photo still waiting, the rest of its pixels pass too, kept for
-    /// the scan.
-    fn make_on_demand(
-        &self,
-        photo: &Photo,
-        kind: Kind,
-        extra_medium: bool,
-        priority: Priority,
-    ) -> Option<Made> {
+    /// One on-demand decode. For the small size, that size alone from the
+    /// fast decode. For the medium size, both sizes from `preview(1600)`,
+    /// and for a photo still waiting the rest of its pixels pass too, kept
+    /// for the scan.
+    fn make_on_demand(&self, photo: &Photo, kind: Kind, priority: Priority) -> Option<Made> {
         // A job that finished between the caller's read and this one
         // starting has made it already.
         if let Some(bytes) = store::read(&store::path(self.dir(), &photo.thumb_key, kind)) {
@@ -386,32 +383,55 @@ impl Thumbs {
         // The whole job runs in the slot, so no more full-size pictures are
         // held at once than there are slots.
         self.inner.slots.run(priority, || {
-            let px = self
-                .inner
-                .source
-                .preview(format, &photo.path)
+            let source = &self.inner.source;
+            let decoded = match kind {
+                Kind::Small => source.small(format, &photo.path),
+                _ => source.preview(format, &photo.path),
+            };
+            let px = decoded
                 .map_err(|e| {
                     tracing::debug!(target: "thumbs", "no thumbnail for photo {}: {}", photo.id, e.code.as_str());
                 })
                 .ok()?;
-            Some(self.make_from(photo, &px, kind, extra_medium))
+            Some(match kind {
+                Kind::Small => self.make_small(&photo.thumb_key, &px),
+                _ => self.make_from(photo, &px),
+            })
         })
     }
 
-    /// The thumbnails of an on-demand job from its decode, and the rest of
-    /// the pixels pass for a photo still waiting.
-    fn make_from(&self, photo: &Photo, px: &Pixels, kind: Kind, extra_medium: bool) -> Made {
+    /// The page's fast path (#120): the small thumbnail alone, resized
+    /// straight from the fast decode. Nothing else is made, so a photo
+    /// still waiting gets its medium thumbnail and analysis from the scan,
+    /// which finds this file whole and leaves it as it is: the tile never
+    /// changes under the same key.
+    fn make_small(&self, key: &str, px: &Pixels) -> Made {
+        let small = make::encode(&make::small(px), make::SMALL_QUALITY);
+        self.put(key, Kind::Small, &small);
+        Made {
+            small: Some(Arc::new(small)),
+            ..Made::default()
+        }
+    }
+
+    /// The thumbnails of an on-demand job for the medium size from its
+    /// decode: the medium one, the small one when it is not on disk (one
+    /// the fast path made stays as it is), and the rest of the pixels pass
+    /// for a photo still waiting.
+    fn make_from(&self, photo: &Photo, px: &Pixels) -> Made {
         let b = make::buffers(px);
         let key = &photo.thumb_key;
-        let small = make::encode(&b.small, make::SMALL_QUALITY);
-        self.put(key, Kind::Small, &small);
-        let medium = (kind == Kind::Medium
-            || (extra_medium && self.inner.cache.has_room_for_medium()))
-        .then(|| {
+        let small =
+            (!store::is_whole_file(&store::path(self.dir(), key, Kind::Small))).then(|| {
+                let bytes = make::encode(&b.small, make::SMALL_QUALITY);
+                self.put(key, Kind::Small, &bytes);
+                Arc::new(bytes)
+            });
+        let medium = {
             let bytes = make::encode(&b.medium, make::MEDIUM_QUALITY);
             self.put(key, Kind::Medium, &bytes);
-            Arc::new(bytes)
-        });
+            Some(Arc::new(bytes))
+        };
         let pixels = photo.waiting.then(|| {
             let done = Arc::new(PixelsDone::of(px, &b));
             let mut stash = self.inner.stash.lock().unwrap_or_else(|p| p.into_inner());
@@ -421,7 +441,7 @@ impl Thumbs {
             done
         });
         Made {
-            small: Some(Arc::new(small)),
+            small,
             medium,
             pixels,
         }
@@ -487,7 +507,7 @@ impl Thumbs {
                 continue;
             }
             if self
-                .thumbnail_with(photo, Kind::Small, false, Priority::Background)
+                .thumbnail_with(photo, Kind::Small, Priority::Background)
                 .is_some()
             {
                 made += 1;

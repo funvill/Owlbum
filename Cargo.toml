@@ -81,6 +81,24 @@ opt-level = 3
 [profile.dev.package.image]
 opt-level = 3
 
+# The JPEG decoder, the resizer, the thumbnail encoder and the EXIF reader
+# do most of a scan's work. Unoptimised they made a debug build take many
+# seconds to show the first thumbnails of an album of real camera photos.
+[profile.dev.package.zune-jpeg]
+opt-level = 3
+
+[profile.dev.package.zune-core]
+opt-level = 3
+
+[profile.dev.package.fast_image_resize]
+opt-level = 3
+
+[profile.dev.package.jpeg-encoder]
+opt-level = 3
+
+[profile.dev.package.nom-exif]
+opt-level = 3
+
 [profile.dev.package.png]
 opt-level = 3
 

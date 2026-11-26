@@ -16,6 +16,30 @@ else
   echo "up to date"
 fi
 
+step "Wait for other gate runs that share this target directory"
+# Worktrees share one target directory. Two gates at once would rebuild and
+# replace each other's test programs while they run, so only one gate uses a
+# target directory at a time. The lock is a directory (mkdir is atomic on
+# every system); a lock older than 45 minutes is from a run that died.
+if [ -n "${CARGO_TARGET_DIR:-}" ]; then
+  mkdir -p "$CARGO_TARGET_DIR"
+  gate_lock="$CARGO_TARGET_DIR/.gate-lock"
+  waited=0
+  until mkdir "$gate_lock" 2>/dev/null; do
+    if [ -n "$(find "$gate_lock" -maxdepth 0 -mmin +45 2>/dev/null)" ]; then
+      echo "Removing a stale gate lock"
+      rm -rf "$gate_lock"
+      continue
+    fi
+    [ "$waited" -eq 0 ] && echo "Another gate is running ($(cat "$gate_lock/owner" 2>/dev/null)); waiting"
+    waited=$((waited + 5))
+    sleep 5
+  done
+  echo "$PWD (pid $$)" > "$gate_lock/owner"
+  trap 'rm -rf "$gate_lock"' EXIT
+  echo "lock taken${waited:+ after ${waited}s}"
+fi
+
 step "Prune the shared target directory"
 bash scripts/prune-target.sh
 
@@ -46,7 +70,7 @@ step "Rust tests"
 # instead of quietly filling the drive. Only this run's folder is removed.
 cargo test --workspace --no-run
 test_tmp=$(mktemp -d)
-trap 'rm -rf "$test_tmp"' EXIT
+trap 'rm -rf "$test_tmp"; [ -n "${gate_lock:-}" ] && rm -rf "$gate_lock"' EXIT
 test_tmp_native=$test_tmp
 if command -v cygpath >/dev/null 2>&1; then
   test_tmp_native=$(cygpath -w "$test_tmp")

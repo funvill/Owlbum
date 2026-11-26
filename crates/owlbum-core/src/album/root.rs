@@ -72,17 +72,17 @@ pub fn locate(folder: &Path) -> AppResult<AlbumLocation> {
                 text::album::not_a_folder(shown),
             ));
         }
-        Err(_) => {
+        Err(e) => {
             return Err(AppError::new(
                 ErrorCode::FolderUnreadable,
-                text::album::folder_unreadable(shown),
+                text::album::folder_unreadable(shown, e),
             ));
         }
     }
-    if std::fs::read_dir(folder).is_err() {
+    if let Err(e) = std::fs::read_dir(folder) {
         return Err(AppError::new(
             ErrorCode::FolderUnreadable,
-            text::album::folder_unreadable(shown),
+            text::album::folder_unreadable(shown, e),
         ));
     }
 
@@ -107,10 +107,10 @@ pub fn locate(folder: &Path) -> AppResult<AlbumLocation> {
 /// the disk, so the result is the path the user would recognise (no `\\?\`
 /// prefix and no resolved links).
 fn normalise(path: &Path) -> AppResult<PathBuf> {
-    let absolute = std::path::absolute(path).map_err(|_| {
+    let absolute = std::path::absolute(path).map_err(|e| {
         AppError::new(
             ErrorCode::FolderUnreadable,
-            text::album::folder_unreadable(path.display()),
+            text::album::folder_unreadable(path.display(), e),
         )
     })?;
     let mut out = PathBuf::new();

@@ -13,6 +13,7 @@
 //!    write, and a small pool of read-only connections ([`read::Readers`]).
 
 pub mod backup;
+pub mod changed;
 pub mod check;
 pub mod db;
 pub mod lock;
@@ -20,8 +21,10 @@ pub mod open;
 pub mod read;
 pub mod root;
 pub mod schema;
+pub mod search;
 pub mod writer;
 
+pub use changed::{AlbumChanged, ChangeReason};
 pub use db::{AlbumDb, Opened};
 pub use open::{Album, OpenOptions, Safety, ViewOnly};
 pub use root::{AlbumLocation, locate};

@@ -27,6 +27,7 @@
 use std::io;
 use std::path::Path;
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use chrono::{DateTime, Local, TimeZone};
@@ -133,6 +134,8 @@ pub struct Album {
     // before the lock file is removed.
     db: AlbumDb,
     lock: Option<AlbumLock>,
+    /// Raised on every change the page should hear of (`album_changed`).
+    revision: AtomicU64,
 }
 
 impl Album {
@@ -268,6 +271,7 @@ impl Album {
                     },
                     db,
                     lock: None,
+                    revision: AtomicU64::new(0),
                 });
             }
         };
@@ -277,6 +281,7 @@ impl Album {
             safety,
             db,
             lock: Some(lock),
+            revision: AtomicU64::new(0),
         })
     }
 
@@ -313,6 +318,7 @@ impl Album {
             },
             db,
             lock: None,
+            revision: AtomicU64::new(0),
         })
     }
 
@@ -348,6 +354,17 @@ impl Album {
     /// The album database.
     pub fn db(&self) -> &AlbumDb {
         &self.db
+    }
+
+    /// The album's revision: 0 when opened, raised by every change the
+    /// page is told of with `album_changed`.
+    pub fn revision(&self) -> u64 {
+        self.revision.load(Ordering::SeqCst)
+    }
+
+    /// Raises the revision and answers the new one.
+    pub fn next_revision(&self) -> u64 {
+        self.revision.fetch_add(1, Ordering::SeqCst) + 1
     }
 }
 

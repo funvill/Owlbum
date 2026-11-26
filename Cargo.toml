@@ -21,6 +21,7 @@ owlbum-fixtures = { path = "crates/owlbum-fixtures" }
 rusqlite = { version = "0.43", features = ["bundled", "backup"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
+sha1 = "0.10"
 thiserror = "2"
 tracing = { version = "0.1", default-features = false, features = ["std"] }
 ts-rs = { version = "12", features = ["serde-json-impl", "no-serde-warnings"] }

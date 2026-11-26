@@ -1,14 +1,15 @@
 //! Messages for the album area: opening a folder and its database.
 
-/// `not_a_folder`: the path given to open is not a folder (or does not
-/// exist).
+/// `not_a_folder`: the path given to open, or the folder a scan starts
+/// from, is not a folder (or does not exist).
 pub fn not_a_folder(path: impl std::fmt::Display) -> String {
-    format!("{path} is not a folder.")
+    format!("Not a readable folder: {path}")
 }
 
-/// `folder_unreadable`: the folder exists but cannot be read.
-pub fn folder_unreadable(path: impl std::fmt::Display) -> String {
-    format!("Owlbum can't read the folder {path}.")
+/// `folder_unreadable`: the folder exists but cannot be read. `err` is the
+/// system's message.
+pub fn folder_unreadable(path: impl std::fmt::Display, err: impl std::fmt::Display) -> String {
+    format!("Can't read the folder {path}: {err}")
 }
 
 /// What was being done, for an `internal` error while opening the album

@@ -127,6 +127,12 @@ interface Session {
   lastRerun: number;
   rerunTimer: ReturnType<typeof setTimeout> | undefined;
   frame: number | undefined;
+  /**
+   * Whether the first photo is still to become current when rows arrive: an
+   * album opens with its first photo current (#119), unless a photo is
+   * current already (kept, or picked before the rows came).
+   */
+  pickFirst: boolean;
 }
 
 let session: Session | null = null;
@@ -217,6 +223,13 @@ export const useGridStore = create<GridState>()((set, get) => {
         ? { from: from.index, to: to.index, seq: (get().follow?.seq ?? 0) + 1 }
         : get().follow;
     set({ result, error: null, ...selected, scroll, follow, pending: null });
+    if (s.pickFirst) {
+      if (current !== null) s.pickFirst = false;
+      else if (result.count > 0) {
+        set({ pending: { index: 0, first: 0, last: 0, add: false, wait: "row" } });
+        settleStep();
+      }
+    }
   };
 
   const run = async (s: Session, cause: Cause) => {
@@ -262,6 +275,7 @@ export const useGridStore = create<GridState>()((set, get) => {
     const row = blocks.row(p.index);
     if (row === undefined) return;
     const at = { id: row.id, index: p.index };
+    if (session !== null) session.pickFirst = false;
     set({ current: at, anchor: at, selection: [row.id], pending: null });
   };
 
@@ -301,6 +315,7 @@ export const useGridStore = create<GridState>()((set, get) => {
         lastRerun: Number.NEGATIVE_INFINITY,
         rerunTimer: undefined,
         frame: undefined,
+        pickFirst: true,
       };
       session = s;
       s.ready = (async () => {
@@ -357,6 +372,7 @@ export const useGridStore = create<GridState>()((set, get) => {
     },
 
     setSelection(selected) {
+      if (session !== null) session.pickFirst = false;
       const before = get().current;
       const moved =
         selected.current !== null &&
@@ -365,6 +381,7 @@ export const useGridStore = create<GridState>()((set, get) => {
     },
 
     setPending(pending) {
+      if (session !== null) session.pickFirst = false;
       set({ pending, scroll: nextScroll("current") });
       settleStep();
     },

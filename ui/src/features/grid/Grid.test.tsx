@@ -327,6 +327,7 @@ describe("the grid", () => {
     render(<Grid />);
     const grid = await screen.findByRole("grid");
     await waitFor(() => expect(grid).toHaveAttribute("aria-colcount", "5"));
+    act(() => useGridStore.getState().setSelection({ current: null, anchor: null, selection: [] }));
     const before = gridLayout(1000, 1000, 160);
     await scrollTo(40 * before.stride + 5); // photo 200 at the top-left
     act(() => useGridStore.getState().setThumbSize(320));

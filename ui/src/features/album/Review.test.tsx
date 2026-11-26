@@ -33,6 +33,7 @@ describe("Review", () => {
   it("shows the grid's current photo in the details panel", async () => {
     render(<Review busy={() => false} />);
     await waitFor(() => expect(grid().result?.count).toBe(5));
+    act(() => grid().setSelection({ current: null, anchor: null, selection: [] }));
     expect(screen.getByRole("complementary", { name: "Details" })).toHaveTextContent("No photo selected");
 
     act(() => grid().setSelection({ current: { id: 3, index: 2 }, anchor: { id: 3, index: 2 }, selection: [3] }));

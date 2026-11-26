@@ -481,6 +481,8 @@ Selecting another photo while a photo is being edited ends edit mode first, as i
 
 ### Keys that change the selection
 
+When an album opens with no current photo, the first photo of the result becomes current (and the anchor and selection) as soon as its row arrives, so the preview and the details panel show it and the arrow keys work at once (#119). A photo already current, kept from before or picked while the rows were arriving, is left alone, and once any photo has been current the rule does not apply again until the album is opened again.
+
 Ctrl+A selects every photo shown in the result (one `query_ids` call) and leaves the current photo where it is, or makes the first photo current when there was none. "Shown" means the tiles: photos folded inside a closed stack are not included, as [Organising](05-organising.md#stacks) says. Ctrl+D selects nothing: the selection is emptied, there is no current photo and no anchor, the preview shows its hint and the details panel is empty. It does the same as the details panel's close button. Esc, when more than one photo is selected, reduces the selection to the current photo, which also becomes the anchor.
 
 ### What acts on what

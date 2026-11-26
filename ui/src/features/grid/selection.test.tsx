@@ -178,6 +178,7 @@ describe("clicking", () => {
 
   it("Shift with no anchor is a plain click", async () => {
     await setup();
+    act(() => grid().setSelection({ current: null, anchor: null, selection: [] }));
     click(3, { shiftKey: true });
     expect(grid().selection).toEqual([4]);
     expect(grid().anchor).toEqual(at(3));
@@ -309,6 +310,7 @@ describe("keys", () => {
   it("Enter and Space open the viewer on the current photo, not with none and not on a control", async () => {
     const onOpen = vi.fn();
     const { container } = await setup(10, { onOpen });
+    act(() => grid().setSelection({ current: null, anchor: null, selection: [] }));
     key("Enter");
     expect(onOpen).not.toHaveBeenCalled();
     click(2);

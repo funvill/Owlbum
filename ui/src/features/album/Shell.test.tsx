@@ -254,7 +254,7 @@ describe("the grid in the window", () => {
     const region = await screen.findByRole("region", { name: albumText.photosRegion });
     const grid = await within(region).findByRole("grid", { name: gridText.label });
     await waitFor(() => expect(within(grid).getAllByRole("gridcell")).toHaveLength(2));
-    expect(within(screen.getByRole("banner")).getByRole("slider", { name: gridText.thumbSize })).toBeInTheDocument();
+    expect(within(document.querySelector<HTMLElement>(".ow-topbar")!).getByRole("slider", { name: gridText.thumbSize })).toBeInTheDocument();
 
     await userEvent.click(screen.getByRole("button", { name: albumText.closeFolder }));
     await waitFor(() => expect(useGridStore.getState().result).toBeNull());

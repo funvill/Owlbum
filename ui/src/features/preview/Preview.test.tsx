@@ -119,6 +119,7 @@ describe("Preview", () => {
   it("shows the hint with no current photo, and no caption", async () => {
     render(<Review busy={() => false} />);
     await waitFor(() => expect(grid().result?.count).toBe(5));
+    act(() => grid().setSelection({ current: null, anchor: null, selection: [] }));
     expect(preview()).toHaveTextContent("Select a photo to see it here.");
     expect(preview().querySelector(".ow-preview__caption")).toBeNull();
   });

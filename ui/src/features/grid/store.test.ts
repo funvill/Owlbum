@@ -58,6 +58,25 @@ describe("grid store", () => {
     expect(grid().query.sort).toBe("name");
   });
 
+  it("makes the first photo current when the album opens and its row arrives", async () => {
+    await grid().start();
+    expect(grid().pending).toMatchObject({ index: 0, wait: "row" });
+    gridBlocks().want({ first: 0, last: 9, span: 10, direction: 1, current: null, anchor: null });
+    await vi.waitFor(() => expect(grid().current).toEqual({ id: 1, index: 0 }));
+    expect(grid().selection).toEqual([1]);
+    expect(grid().pending).toBeNull();
+  });
+
+  it("keeps a photo picked before the rows arrived instead of the first", async () => {
+    await grid().start();
+    grid().setSelection({ current: { id: 4, index: 3 }, anchor: { id: 4, index: 3 }, selection: [4] });
+    gridBlocks().want({ first: 0, last: 9, span: 10, direction: 1, current: null, anchor: null });
+    grid().setQuery({ ...defaultQuery(), sort: "name" });
+    await vi.waitFor(() => expect(runs()).toHaveLength(2));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(grid().current?.id).toBe(4);
+  });
+
   it("goes to the top after a change the user made with no current photo", async () => {
     await grid().start();
     const seq = grid().scroll?.seq ?? 0;

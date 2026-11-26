@@ -30,6 +30,7 @@ tracing.workspace = true
 ts-rs.workspace = true
 
 [dev-dependencies]
+image.workspace = true
 muda.workspace = true
 owlbum-fixtures.workspace = true
 tauri = { workspace = true, features = ["test"] }

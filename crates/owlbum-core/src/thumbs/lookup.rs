@@ -52,7 +52,7 @@ impl Photo {
 }
 
 /// True for a row a URL may serve.
-fn servable(album: &Album, rel_path: &str, missing: bool, facts: &Facts) -> bool {
+pub(crate) fn servable(album: &Album, rel_path: &str, missing: bool, facts: &Facts) -> bool {
     !missing && facts.scan_error.is_none() && walk::is_under(rel_path, &album.location().scope)
 }
 

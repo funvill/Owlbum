@@ -549,6 +549,11 @@ mod tests {
         // The fixture generator writes one test file per format and names
         // them by format; it is test data, not a rule Owlbum applies.
         "crates/owlbum-fixtures/",
+        // Details panel tests: a photo's format id is test data there, and
+        // the page writes it in capitals ("JPEG", "MP4").
+        "crates/owlbum-core/src/info/detail/tests.rs",
+        "ui/src/features/details/DetailsPanel.test.tsx",
+        "ui/src/features/details/facts.test.ts",
     ];
 
     fn known_extensions() -> HashSet<String> {

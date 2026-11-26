@@ -5,15 +5,20 @@
 //! Nothing is written to the album database. Each row the scanner would
 //! have written is held here instead: rows of files the database does not
 //! know get ids above the database's largest, and rows it would have
-//! marked missing are hidden. The album index (#12) reads these over the
-//! database's rows.
+//! marked missing are hidden. Each row an op changes goes into the album
+//! index straight away ([`MemoryRow::index_facts`], then
+//! [`crate::index::AlbumIndex::upsert`] or `remove`), over the database's
+//! rows the index loaded on open.
 
 use std::collections::HashMap;
 
-use rusqlite::Connection;
+use rusqlite::{Connection, OptionalExtension};
 
-use super::rows::{By, Facts, Known, Op, file_name, load_row, max_id};
+use super::rows::{By, Facts, Known, Op, file_name, kind_text, load_row, max_id, rel_dir};
+use crate::album::sqlite_error;
 use crate::error::AppResult;
+use crate::index::PhotoFacts;
+use crate::text;
 
 /// One row as the scanner left it in memory.
 #[derive(Debug, Clone, PartialEq)]
@@ -48,6 +53,71 @@ impl MemoryRow {
     pub fn file_name(&self) -> &str {
         file_name(&self.rel_path)
     }
+
+    /// The row as the album index takes it: the scan facts from memory and
+    /// the typed info (star, hidden, date, place, edit, people) from the
+    /// database row with the same id, when there is one. None when the row
+    /// is not in the index (missing, or a scan error).
+    pub fn index_facts(&self, conn: &Connection) -> AppResult<Option<PhotoFacts>> {
+        if self.missing || self.facts.scan_error.is_some() {
+            return Ok(None);
+        }
+        let f = &self.facts;
+        let mut facts = PhotoFacts {
+            id: self.id,
+            rel_dir: rel_dir(&self.rel_path).to_owned(),
+            file_name: self.file_name().to_owned(),
+            kind: kind_text(f.kind).to_owned(),
+            captured_at: f.captured_at.clone(),
+            width: i64::from(f.width),
+            height: i64::from(f.height),
+            gps: f.gps_lat.zip(f.gps_lon),
+            analysis: f.analysis.clone(),
+            ..PhotoFacts::default()
+        };
+        let typed = conn
+            .query_row(
+                "SELECT star, hidden, score_adjust, date_override, loc_lat, loc_lon,
+                        edit IS NOT NULL,
+                        (SELECT count(*) FROM photo_people WHERE photo_id = ?1)
+                   FROM photos WHERE id = ?1",
+                [self.id],
+                |r| {
+                    Ok(TypedInfo {
+                        star: r.get::<_, i64>(0)? != 0,
+                        hidden: r.get::<_, i64>(1)? != 0,
+                        score_adjust: r.get(2)?,
+                        date_override: r.get(3)?,
+                        loc: r.get::<_, Option<f64>>(4)?.zip(r.get::<_, Option<f64>>(5)?),
+                        has_edit: r.get::<_, i64>(6)? != 0,
+                        people: r.get(7)?,
+                    })
+                },
+            )
+            .optional()
+            .map_err(sqlite_error(text::album::READING_DATABASE))?;
+        if let Some(t) = typed {
+            facts.star = t.star;
+            facts.hidden = t.hidden;
+            facts.score_adjust = t.score_adjust;
+            facts.date_override = t.date_override;
+            facts.loc = t.loc;
+            facts.has_edit = t.has_edit;
+            facts.people = u32::try_from(t.people).unwrap_or(0);
+        }
+        Ok(Some(facts))
+    }
+}
+
+/// The typed info of a database row, for a row memory holds over it.
+struct TypedInfo {
+    star: bool,
+    hidden: bool,
+    score_adjust: i64,
+    date_override: Option<String>,
+    loc: Option<(f64, f64)>,
+    has_edit: bool,
+    people: i64,
 }
 
 /// The in-memory rows of one open view-only album, for the session.
@@ -74,36 +144,33 @@ impl Overlay {
         self.rows.is_empty()
     }
 
-    /// Applies one op. `conn` reads the database row an op changes the
-    /// first time memory needs it.
-    pub fn apply(&mut self, conn: &Connection, op: &Op) -> AppResult<()> {
-        match op {
-            Op::Unmiss { id } => {
-                if let Some(row) = self.row(conn, By::Id(*id))? {
-                    row.missing = false;
-                }
-            }
-            Op::Missing { id } => {
-                if let Some(row) = self.row(conn, By::Id(*id))? {
-                    row.missing = true;
-                }
-            }
-            Op::Move { id, rel_path } => {
-                if let Some(row) = self.row(conn, By::Id(*id))? {
-                    row.rel_path.clone_from(rel_path);
-                    row.missing = false;
-                }
-            }
+    /// Applies one op and answers the id of the row it changed (None when
+    /// the op's row was not found). `conn` reads the database row an op
+    /// changes the first time memory needs it.
+    pub fn apply(&mut self, conn: &Connection, op: &Op) -> AppResult<Option<i64>> {
+        let changed = match op {
+            Op::Unmiss { id } => self.row(conn, By::Id(*id))?.map(|row| {
+                row.missing = false;
+                row.id
+            }),
+            Op::Missing { id } => self.row(conn, By::Id(*id))?.map(|row| {
+                row.missing = true;
+                row.id
+            }),
+            Op::Move { id, rel_path } => self.row(conn, By::Id(*id))?.map(|row| {
+                row.rel_path.clone_from(rel_path);
+                row.missing = false;
+                row.id
+            }),
             Op::Facts {
                 id: Some(id),
                 facts,
                 ..
-            } => {
-                if let Some(row) = self.row(conn, By::Id(*id))? {
-                    row.facts = (**facts).clone();
-                    row.missing = false;
-                }
-            }
+            } => self.row(conn, By::Id(*id))?.map(|row| {
+                row.facts = (**facts).clone();
+                row.missing = false;
+                row.id
+            }),
             Op::Facts {
                 id: None,
                 rel_path,
@@ -113,6 +180,7 @@ impl Overlay {
                 if let Some(row) = self.row(conn, By::Path(rel_path))? {
                     row.facts = (**facts).clone();
                     row.missing = false;
+                    Some(row.id)
                 } else {
                     let id = self.new_id(conn)?;
                     self.rows.insert(
@@ -124,28 +192,27 @@ impl Overlay {
                             facts: (**facts).clone(),
                         },
                     );
+                    Some(id)
                 }
             }
             Op::Pixels {
                 rel_path,
                 analysis,
                 size,
-            } => {
-                if let Some(row) = self.row(conn, By::Path(rel_path))? {
-                    row.facts.analysis = Some(analysis.clone());
-                    if let Some((w, h)) = size {
-                        row.facts.width = *w;
-                        row.facts.height = *h;
-                    }
+            } => self.row(conn, By::Path(rel_path))?.map(|row| {
+                row.facts.analysis = Some(analysis.clone());
+                if let Some((w, h)) = size {
+                    row.facts.width = *w;
+                    row.facts.height = *h;
                 }
-            }
-            Op::Failed { rel_path, facts } => {
-                if let Some(row) = self.row(conn, By::Path(rel_path))? {
-                    row.facts = (**facts).clone();
-                }
-            }
-        }
-        Ok(())
+                row.id
+            }),
+            Op::Failed { rel_path, facts } => self.row(conn, By::Path(rel_path))?.map(|row| {
+                row.facts = (**facts).clone();
+                row.id
+            }),
+        };
+        Ok(changed)
     }
 
     /// The row memory holds, loading it from the database the first time.

@@ -110,6 +110,9 @@ pub enum Op {
 pub struct Applied {
     /// The photo whose file content changed.
     pub rekeyed: Option<i64>,
+    /// The photo whose row the op changed, for the album index; None when
+    /// the op's row was not found.
+    pub photo: Option<i64>,
 }
 
 const KNOWN_COLUMNS: &str = "id, rel_path, size, mtime_ms, file_key, scan_version, scan_error, \
@@ -242,10 +245,12 @@ pub fn apply(tx: &Transaction<'_>, op: &Op) -> AppResult<Applied> {
         Op::Unmiss { id } => {
             tx.execute("UPDATE photos SET missing = 0 WHERE id = ?1", [id])
                 .map_err(&failed)?;
+            applied.photo = Some(*id);
         }
         Op::Missing { id } => {
             tx.execute("UPDATE photos SET missing = 1 WHERE id = ?1", [id])
                 .map_err(&failed)?;
+            applied.photo = Some(*id);
         }
         Op::Move { id, rel_path } => {
             tx.execute(
@@ -255,6 +260,7 @@ pub fn apply(tx: &Transaction<'_>, op: &Op) -> AppResult<Applied> {
             )
             .map_err(&failed)?;
             search::reindex(tx, *id)?;
+            applied.photo = Some(*id);
         }
         Op::Facts {
             id,
@@ -277,6 +283,7 @@ pub fn apply(tx: &Transaction<'_>, op: &Op) -> AppResult<Applied> {
                 applied.rekeyed = Some(id);
             }
             search::reindex(tx, id)?;
+            applied.photo = Some(id);
         }
         Op::Pixels {
             rel_path,
@@ -291,12 +298,25 @@ pub fn apply(tx: &Transaction<'_>, op: &Op) -> AppResult<Applied> {
                 params![rel_path, analysis, w, h],
             )
             .map_err(&failed)?;
+            applied.photo = id_at(tx, rel_path)?;
         }
         Op::Failed { rel_path, facts } => {
             write_facts(tx, "rel_path = ?1", &rel_path.clone().into(), facts)?;
+            applied.photo = id_at(tx, rel_path)?;
         }
     }
     Ok(applied)
+}
+
+/// The id of the row at `rel_path`.
+fn id_at(tx: &Transaction<'_>, rel_path: &str) -> AppResult<Option<i64>> {
+    tx.query_row(
+        "SELECT id FROM photos WHERE rel_path = ?1",
+        [rel_path],
+        |r| r.get(0),
+    )
+    .optional()
+    .map_err(sqlite_error(text::album::WRITING_DATABASE))
 }
 
 fn write_facts(

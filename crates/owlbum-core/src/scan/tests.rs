@@ -1653,3 +1653,112 @@ fn scan_timings() {
         );
     }
 }
+
+// ---- The album index follows the scan (#12) ----
+
+/// What the album index holds, in a form that does not depend on where
+/// names sit in memory.
+fn index_rows(index: &crate::index::AlbumIndex) -> Vec<String> {
+    index.read(|v| {
+        v.photos()
+            .iter()
+            .map(|p| {
+                format!(
+                    "{} {}/{} rank={} date={:?} star={} {}x{} analysed={}",
+                    p.id,
+                    v.folder(p.folder),
+                    v.file_name(p),
+                    p.name_rank,
+                    p.date(),
+                    p.star(),
+                    p.width,
+                    p.height,
+                    p.analysis().is_some()
+                )
+            })
+            .collect()
+    })
+}
+
+#[test]
+fn the_album_index_follows_a_scan() {
+    let fx = Fx::empty();
+    picture(&fx.path("b.png"), 1);
+    picture(&fx.path("sub/a.png"), 2);
+    std::fs::write(fx.path("broken.jpg"), b"not a picture").unwrap();
+    fx.scan();
+    let fresh = || {
+        let scope = fx.album().location().scope.clone();
+        fx.album()
+            .db()
+            .read(|c| crate::index::AlbumIndex::load(c, &scope))
+            .unwrap()
+    };
+    let live = index_rows(fx.album().index());
+    assert_eq!(
+        live.len(),
+        2,
+        "the scan error row is not indexed: {live:#?}"
+    );
+    assert_eq!(live, index_rows(&fresh()));
+    // The analysis is `{}` until #10 measures it, so nothing is analysed
+    // yet; the rows still follow.
+
+    std::fs::remove_file(fx.path("b.png")).unwrap();
+    picture(&fx.path("c.png"), 3);
+    fx.scan();
+    let live = index_rows(fx.album().index());
+    assert_eq!(live, index_rows(&fresh()));
+    assert!(live.iter().all(|r| !r.contains("/b.png")), "{live:#?}");
+    assert!(live.iter().any(|r| r.contains(" /c.png")), "{live:#?}");
+}
+
+#[test]
+fn the_album_index_follows_a_view_only_scan_in_memory() {
+    let mut fx = Fx::empty();
+    picture(&fx.path("a.png"), 1);
+    picture(&fx.path("b.png"), 2);
+    fx.scan();
+    let a = fx.photo("a.png").unwrap();
+    let b = fx.photo("b.png").unwrap();
+    fx.star(a.id);
+    picture(&fx.path("c.png"), 3);
+    std::fs::remove_file(fx.path("b.png")).unwrap();
+    rename(&fx, "a.png", "moved/a.png");
+    let root = fx.root.clone();
+    fx.reopen(
+        &root,
+        &OpenOptions {
+            view_only: true,
+            ..OpenOptions::default()
+        },
+    );
+    fx.scan();
+    let c = fx
+        .overlay
+        .lock()
+        .unwrap()
+        .rows()
+        .find(|r| r.rel_path == "c.png")
+        .unwrap()
+        .id;
+    let live = index_rows(fx.album().index());
+    assert_eq!(live.len(), 2, "{live:#?}");
+    let a_row = live
+        .iter()
+        .find(|r| r.starts_with(&format!("{} ", a.id)))
+        .unwrap();
+    assert!(a_row.contains(" moved/a.png "), "{a_row}");
+    assert!(
+        a_row.contains("star=true"),
+        "typed info comes from the database: {a_row}"
+    );
+    assert!(
+        live.iter().all(|r| !r.starts_with(&format!("{} ", b.id))),
+        "b is missing"
+    );
+    assert!(
+        live.iter().any(|r| r.starts_with(&format!("{c} /c.png"))),
+        "{live:#?}"
+    );
+}

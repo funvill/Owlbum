@@ -279,10 +279,15 @@ fn commit(scan: &Scan<'_>, ops: Vec<Op>, changes: &Changes<'_>, stats: &Stats) {
         return;
     }
     let n = u32::try_from(ops.len()).unwrap_or(u32::MAX);
-    let result = scan.album.db().write(move |tx| {
+    // Through write_photos, so the album index reads the changed rows again
+    // before the next batch (docs/05-organising.md, "Loading and keeping in
+    // step").
+    let result = scan.album.write_photos(move |tx, touched| {
         let mut rekeyed = Vec::new();
         for op in &ops {
-            rekeyed.extend(rows::apply(tx, op)?.rekeyed);
+            let applied = rows::apply(tx, op)?;
+            rekeyed.extend(applied.rekeyed);
+            touched.photos(applied.photo);
         }
         Ok(rekeyed)
     });
@@ -388,10 +393,27 @@ impl Work<'_, '_> {
                     _ => None,
                 };
                 let mut overlay = self.scan.overlay.lock().unwrap_or_else(|p| p.into_inner());
-                let applied = self.scan.album.db().read(|conn| overlay.apply(conn, &op));
+                let applied = self.scan.album.db().read(|conn| {
+                    let Some(id) = overlay.apply(conn, &op)? else {
+                        return Ok(None);
+                    };
+                    match overlay.get(id) {
+                        Some(row) => Ok(Some((id, row.index_facts(conn)?))),
+                        None => Ok(None),
+                    }
+                });
                 drop(overlay);
                 match applied {
-                    Ok(()) => self.changes.changed(rekeyed),
+                    Ok(row) => {
+                        // The album index follows memory as it follows the
+                        // database.
+                        match row {
+                            Some((_, Some(facts))) => self.scan.album.index().upsert(&[facts]),
+                            Some((id, None)) => self.scan.album.index().remove(&[id]),
+                            None => {}
+                        }
+                        self.changes.changed(rekeyed);
+                    }
                     Err(e) => {
                         let mut s = self.stats.0.lock().unwrap_or_else(|p| p.into_inner());
                         s.error.get_or_insert(e);

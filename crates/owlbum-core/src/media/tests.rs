@@ -907,9 +907,11 @@ fn jpeg_xl_converts_its_profile_for_display_only() {
 
 #[test]
 fn an_srgb_jpeg_xl_is_not_converted() {
-    // Every JPEG XL carries a profile; an sRGB one is left alone.
+    // Every JPEG XL carries a profile, made by `jxl-oxide` when the file
+    // has none; an sRGB one is read, recognised and left alone.
     let path = testdata("quadrants.jxl");
     let src = handler_for(&path).handler.source(&path).unwrap();
-    assert!(src.icc.is_some());
-    assert!(colour::is_srgb(src.icc.as_deref()));
+    let icc = src.icc.expect("a rendered profile");
+    assert!(moxcms::ColorProfile::new_from_slice(&icc).is_ok());
+    assert!(colour::is_srgb(Some(&icc)));
 }

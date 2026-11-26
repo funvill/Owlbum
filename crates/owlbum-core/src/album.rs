@@ -23,6 +23,7 @@ pub mod root;
 pub mod schema;
 pub mod search;
 pub mod state;
+pub mod undo;
 pub mod writer;
 
 pub use changed::{AlbumChanged, ChangeReason};

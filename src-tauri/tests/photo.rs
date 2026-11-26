@@ -265,3 +265,54 @@ fn photo_set_info_stars_and_hides_and_tells_the_page() {
     // Already hidden: nothing changes.
     assert_eq!(set(json!({ "hidden": true }))["changed"], json!([]));
 }
+
+#[test]
+fn album_undo_takes_back_typed_info_and_tells_the_page() {
+    let f = fixture();
+    let err = invoke(&f.window, "album_undo", json!({})).unwrap_err();
+    assert_eq!(err["code"], "no_album");
+
+    let fixture = owlbum_fixtures::trip(&f.tmp.path().join("trip")).unwrap();
+    f.open(&fixture.root);
+    let id = f.id_of("day1/lake.jpg");
+    let undo = || -> serde_json::Value {
+        invoke(&f.window, "album_undo", json!({}))
+            .unwrap()
+            .deserialize()
+            .unwrap()
+    };
+    let r = undo();
+    assert_eq!(r["outcome"], "nothing");
+    assert_eq!(r["label"], serde_json::Value::Null);
+
+    invoke(
+        &f.window,
+        "photo_set_info",
+        json!({ "ids": [id], "patch": { "description": "Calm" } }),
+    )
+    .unwrap();
+    invoke(&f.window, "photo_nudge", json!({ "ids": [id], "delta": 1 })).unwrap();
+    let (send, heard) = mpsc::channel::<serde_json::Value>();
+    f.app.listen_any("album_changed", move |event| {
+        let _ = send.send(serde_json::from_str(event.payload()).unwrap());
+    });
+
+    let r = undo();
+    assert_eq!(r["outcome"], "done");
+    assert_eq!(r["label"], "score");
+    assert_eq!(r["ids"], json!([id]));
+    let event = loop {
+        let e = heard
+            .recv_timeout(Duration::from_secs(10))
+            .expect("album_changed is sent");
+        if e["reason"] == "info" {
+            break e;
+        }
+    };
+    assert_eq!(event["revision"], r["revision"]);
+
+    let r = undo();
+    assert_eq!(r["label"], "description");
+    assert_eq!(f.detail(id).unwrap().description, None);
+    assert_eq!(undo()["outcome"], "nothing");
+}

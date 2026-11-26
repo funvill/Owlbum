@@ -16,6 +16,7 @@ use rusqlite::{OptionalExtension, Transaction, params};
 use serde::{Deserialize, Deserializer, Serialize};
 use ts_rs::TS;
 
+use crate::album::undo::Step;
 use crate::album::{Album, search, sqlite_error};
 use crate::appdata::clock::now_ms;
 use crate::error::{AppError, AppResult, ErrorCode};
@@ -124,7 +125,37 @@ pub struct PriorInfo {
 #[derive(Debug, Clone, PartialEq)]
 pub struct UndoStep {
     pub label: &'static str,
+    /// The fields the call set: undo writes back only these.
+    pub fields: InfoFields,
     pub before: Vec<PriorInfo>,
+}
+
+/// Which typed fields a `photo_set_info` call set.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct InfoFields {
+    pub description: bool,
+    pub notes: bool,
+    pub people: bool,
+    pub date: bool,
+    /// Coordinates and name together.
+    pub place: bool,
+    pub star: bool,
+    pub hidden: bool,
+}
+
+impl InfoFields {
+    /// The fields `patch` sets.
+    pub fn of(patch: &InfoPatch) -> Self {
+        Self {
+            description: patch.description.is_some(),
+            notes: patch.notes.is_some(),
+            people: patch.people.is_some(),
+            date: patch.date_override.is_some(),
+            place: patch.location.is_some(),
+            star: patch.star.is_some(),
+            hidden: patch.hidden.is_some(),
+        }
+    }
 }
 
 /// One name of `album_people`, with the number of photos it is on.
@@ -457,8 +488,10 @@ fn spelled(known: &HashMap<String, (i64, String)>, names: &[String]) -> Vec<Stri
 /// keeps the revision; otherwise the revision is raised and the caller
 /// sends `album_changed` with reason `info`.
 pub fn set_info(album: &Album, ids: Vec<i64>, patch: InfoPatch) -> AppResult<InfoChanged> {
-    let (changed, _step) = set_info_step(album, ids, patch)?;
-    // Undo (#33) records `_step` on the open album's undo list here.
+    let (changed, step) = set_info_step(album, ids, patch)?;
+    if let Some(step) = step {
+        album.undo().push(Step::Info(step));
+    }
     Ok(changed)
 }
 
@@ -473,6 +506,7 @@ pub fn set_info_step(
         return Err(AppError::new(ErrorCode::ViewOnly, text::photo::VIEW_ONLY));
     }
     let label = undo_label(&patch);
+    let fields = InfoFields::of(&patch);
     let checked = check(patch)?;
     // Whether each id is a photo the album shows, read before the write so
     // `servable` can be given the album.
@@ -597,8 +631,92 @@ pub fn set_info_step(
         return Ok((InfoChanged { changed, revision }, None));
     }
     let revision = album.next_revision();
-    let step = UndoStep { label, before };
+    let step = UndoStep {
+        label,
+        fields,
+        before,
+    };
     Ok((InfoChanged { changed, revision }, Some(step)))
+}
+
+/// Writes back the values `step` holds, for the fields it set, in one
+/// transaction, and answers the photos written. A photo whose row no
+/// longer exists or is missing is left out. Records no undo step and does
+/// not raise the revision; the caller does.
+pub fn restore_info(album: &Album, step: &UndoStep) -> AppResult<Vec<i64>> {
+    let fields = step.fields;
+    let before = step.before.clone();
+    album.write_photos(move |tx, touched| {
+        let mut done = Vec::new();
+        for prior in before {
+            let id = prior.id;
+            let missing: Option<bool> = tx
+                .query_row("SELECT missing FROM photos WHERE id = ?1", [id], |r| {
+                    Ok(r.get::<_, i64>(0)? != 0)
+                })
+                .optional()
+                .map_err(failed())?;
+            if missing != Some(false) {
+                continue;
+            }
+            let Some(mut now) = stored(tx, id)? else {
+                continue;
+            };
+            if fields.description {
+                now.description = prior.description;
+            }
+            if fields.notes {
+                now.notes = prior.notes;
+            }
+            if fields.date {
+                now.date_override = prior.date_override;
+            }
+            if fields.place {
+                (now.loc, now.loc_name) = (prior.loc, prior.loc_name);
+            }
+            if fields.star {
+                now.star = prior.star;
+            }
+            if fields.hidden {
+                now.hidden = prior.hidden;
+            }
+            tx.execute(
+                "UPDATE photos SET description = ?2, notes = ?3, date_override = ?4,
+                        loc_lat = ?5, loc_lon = ?6, loc_name = ?7, info_updated_at = ?8,
+                        star = ?9, hidden = ?10
+                  WHERE id = ?1",
+                params![
+                    id,
+                    now.description,
+                    now.notes,
+                    now.date_override,
+                    now.loc.map(|l| l.0),
+                    now.loc.map(|l| l.1),
+                    now.loc_name,
+                    now_ms(),
+                    now.star,
+                    now.hidden,
+                ],
+            )
+            .map_err(failed())?;
+            if fields.people {
+                write_people(tx, id, &prior.people)?;
+            }
+            if fields.description || fields.notes || fields.people || fields.place {
+                search::reindex(tx, id)?;
+            }
+            touched.photo(id);
+            done.push(id);
+        }
+        if fields.people && !done.is_empty() {
+            tx.execute(
+                "DELETE FROM people WHERE id NOT IN (SELECT person_id FROM photo_people)",
+                [],
+            )
+            .map_err(failed())?;
+        }
+        Ok(done)
+    })
 }
 
 /// `album_people()`: every name on at least one photo that is not

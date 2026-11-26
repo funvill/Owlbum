@@ -62,13 +62,14 @@ export function fakeStatus(folder: string, overrides: Partial<AlbumStatus> = {})
  * test pushes `scan_progress` events itself with `emit`, and serves its own
  * report or lists with `handle` (and `pageOf`). `album_open` opens any
  * path as a new album (`fakeStatus`); `album_status` answers null, as
- * when no album is open.
+ * when no album is open; `album_undo` has nothing to undo.
  */
 export const albumHandlers: AreaHandlers<AlbumCommands> = {
   album_people: () => [],
   album_open: ({ path }) => ({ status: fakeStatus(path), session: null }),
   album_close: () => null,
   album_status: () => null,
+  album_undo: () => ({ outcome: "nothing", label: null, ids: [], revision: 0 }),
   album_rescan: () => null,
   album_scan_cancel: () => null,
   album_scan_report: () => structuredClone(emptyScanReport),

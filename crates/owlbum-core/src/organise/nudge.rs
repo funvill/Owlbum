@@ -5,6 +5,7 @@ use rusqlite::{OptionalExtension, params};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use crate::album::undo::Step;
 use crate::album::{Album, sqlite_error};
 use crate::appdata::clock::now_ms;
 use crate::error::{AppError, AppResult, ErrorCode};
@@ -28,10 +29,10 @@ pub struct Nudged {
 }
 
 /// The undo step one nudge makes: each changed photo's `score_adjust`
-/// before (docs/05-organising.md, "Undo"; recorded by #33).
+/// before (docs/05-organising.md, "Undo").
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct NudgeStep {
-    /// `"nudge"`.
+    /// `"score"`.
     pub label: &'static str,
     /// `(id, score_adjust before)` for each changed photo.
     pub before: Vec<(i64, i64)>,
@@ -48,7 +49,37 @@ fn not_found() -> AppError {
 /// answers. `view_only` in a view-only album; `photo_not_found` when an id
 /// is not a photo the album shows; each writes nothing.
 pub fn nudge(album: &Album, ids: Vec<i64>, delta: i64) -> AppResult<Nudged> {
-    Ok(nudge_step(album, ids, delta)?.0)
+    let (nudged, step) = nudge_step(album, ids, delta)?;
+    if let Some(step) = step {
+        album.undo().push(Step::Score(step));
+    }
+    Ok(nudged)
+}
+
+/// Writes back the `score_adjust` values `step` holds, in one transaction,
+/// and answers the photos written. A photo whose row no longer exists or is
+/// missing is left out. Records no undo step and does not raise the
+/// revision; the caller does.
+pub fn restore(album: &Album, step: &NudgeStep) -> AppResult<Vec<i64>> {
+    let before = step.before.clone();
+    album.write_photos(move |tx, touched| {
+        let failed = sqlite_error(text::album::WRITING_DATABASE);
+        let mut done = Vec::new();
+        for (id, old) in before {
+            let n = tx
+                .execute(
+                    "UPDATE photos SET score_adjust = ?2, info_updated_at = ?3
+                      WHERE id = ?1 AND missing = 0",
+                    params![id, old, now_ms()],
+                )
+                .map_err(&failed)?;
+            if n > 0 {
+                touched.photo(id);
+                done.push(id);
+            }
+        }
+        Ok(done)
+    })
 }
 
 /// [`nudge`], also answering the undo step: None when nothing changed.
@@ -128,7 +159,7 @@ pub fn nudge_step(
             revision,
         },
         Some(NudgeStep {
-            label: "nudge",
+            label: "score",
             before,
         }),
     ))

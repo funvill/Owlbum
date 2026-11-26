@@ -91,7 +91,19 @@ async function send(flag: Flag, ids: number[], value: boolean): Promise<void> {
   }
 }
 
-function queue(job: () => Promise<void> | void): Promise<void> {
+/**
+ * Forgets what was sent for `ids`, after something else (undo) changed
+ * their flags: the next press reads the row again.
+ */
+export function forgetSent(ids: readonly number[]): void {
+  for (const id of ids) {
+    sent.delete(`star:${id}`);
+    sent.delete(`hidden:${id}`);
+  }
+}
+
+/** Runs `job` after every press already made, as the presses themselves are run. */
+export function queue(job: () => Promise<void> | void): Promise<void> {
   const next = chain.then(job, job);
   chain = next.catch(() => {});
   return next;

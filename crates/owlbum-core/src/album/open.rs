@@ -45,6 +45,7 @@ use crate::album::lock::{self, AlbumLock, Owner, Verdict};
 use crate::album::root::AlbumLocation;
 use crate::album::schema::{CURRENT_VERSION, SchemaState};
 use crate::album::state::{AlbumState, StatusListener};
+use crate::album::undo::UndoList;
 use crate::album::{backup, locate};
 use crate::error::AppResult;
 use crate::index::{AlbumIndex, Touched};
@@ -148,6 +149,9 @@ pub struct Album {
     state: Arc<AlbumState>,
     /// The day's backup, while it is being made after the open answered.
     backup: Mutex<Option<JoinHandle<()>>>,
+    /// The undo list (docs/05-organising.md, "Undo"): in memory, cleared
+    /// when the album closes.
+    undo: UndoList,
 }
 
 impl Drop for Album {
@@ -324,6 +328,7 @@ impl Album {
                     lock: None,
                     state: Arc::default(),
                     backup: Mutex::default(),
+                    undo: UndoList::default(),
                 });
             }
         };
@@ -360,6 +365,7 @@ impl Album {
             lock: Some(lock),
             state,
             backup: Mutex::new(backup),
+            undo: UndoList::default(),
         })
     }
 
@@ -399,6 +405,7 @@ impl Album {
             lock: None,
             state: Arc::default(),
             backup: Mutex::default(),
+            undo: UndoList::default(),
         })
     }
 
@@ -480,6 +487,11 @@ impl Album {
     /// stacks read (docs/05-organising.md, "The album index").
     pub fn index(&self) -> &Arc<AlbumIndex> {
         &self.index
+    }
+
+    /// The album's undo list (docs/05-organising.md, "Undo").
+    pub fn undo(&self) -> &UndoList {
+        &self.undo
     }
 
     /// Runs `job` in a transaction on the writer thread, like

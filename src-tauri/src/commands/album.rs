@@ -5,7 +5,8 @@ use std::path::Path;
 use crate::commands::off_main;
 use crate::session::{Session, open_album};
 use crate::{area, command};
-use owlbum_core::album::{Album, AlbumChanged, OpenOptions};
+use owlbum_core::album::undo::{self, Undone};
+use owlbum_core::album::{Album, AlbumChanged, ChangeReason, OpenOptions};
 use owlbum_core::appdata::AppData;
 use owlbum_core::info::typed::{self, PersonCount};
 use owlbum_core::scan::report::{ScanErrors, ScanReport, UnsupportedFiles};
@@ -24,6 +25,7 @@ area! {
         album_scan_errors,
         album_scan_report,
         album_status,
+        album_undo,
         album_unsupported,
     ],
     events: [AlbumChanged, ScanProgress],
@@ -181,5 +183,28 @@ command! {
     pub async fn album_people(; session: State<'_, Session>) -> Vec<PersonCount> {
         let scanner = session.queries()?.0;
         off_main(text::photo::READING_DETAIL, move || typed::album_people(scanner.album())).await
+    }
+}
+
+command! {
+    /// Takes back the newest change to typed info (docs/05-organising.md,
+    /// "What `album_undo` does"). Answers the outcome (`nothing`, `done`,
+    /// `partial`, `gone`), the step's label and the photos put back, and
+    /// sends `album_changed` with reason `info` when any were. Records no
+    /// new step. `no_album` when no album is open.
+    pub async fn album_undo<R: Runtime>(; app: AppHandle<R>) -> Undone {
+        let scanner = app.state::<Session>().queries()?.0;
+        let undone = off_main(text::album::WRITING_DATABASE, move || undo::undo(scanner.album())).await?;
+        if !undone.ids.is_empty() {
+            let _ = crate::events::emit(
+                &app,
+                &AlbumChanged {
+                    revision: undone.revision,
+                    reason: ChangeReason::Info,
+                    rekeyed: Vec::new(),
+                },
+            );
+        }
+        Ok(undone)
     }
 }

@@ -1,6 +1,6 @@
 // The review keys of organising (docs/05-organising.md, "Keys and
-// controls" and "Nudges"): F or S stars, H hides, Up and Down nudge the
-// score, in the grid and the preview (`browse.*`) and in the full-screen
+// controls", "Nudges" and "Undo"): F or S stars, H hides, Up and Down
+// nudge the score, Ctrl+Z undoes, in the grid and the preview (`browse.*`) and in the full-screen
 // viewer (`viewer.*`). Matching (typing, dialogs, held keys)
 // is the key table's business (`ui/src/keys`).
 
@@ -8,6 +8,7 @@ import { useEffect } from "react";
 import { matchKey, type KeyId } from "../../keys";
 import { toggleFlag } from "./flags";
 import { nudge } from "./nudge";
+import { undo } from "./undo";
 
 /** The rows of the key table this part handles. */
 export const FLAG_KEY_IDS = [
@@ -19,6 +20,8 @@ export const FLAG_KEY_IDS = [
   "viewer.hide",
   "viewer.score_up",
   "viewer.score_down",
+  "browse.undo",
+  "viewer.undo",
 ] as const satisfies readonly KeyId[];
 
 export type FlagKeyId = (typeof FLAG_KEY_IDS)[number];
@@ -34,6 +37,8 @@ export function flagKeyHandlers(): Record<FlagKeyId, () => void> {
     "browse.score_down": () => void nudge(-1, "selection"),
     "viewer.score_up": () => void nudge(1, "viewer"),
     "viewer.score_down": () => void nudge(-1, "viewer"),
+    "browse.undo": () => void undo(),
+    "viewer.undo": () => void undo(),
   };
 }
 
@@ -45,7 +50,7 @@ function dialogOpen(): boolean {
 }
 
 /**
- * Listens for F, S, H, Up and Down on the review screen while mounted. The viewer
+ * Listens for F, S, H, Up, Down and Ctrl+Z on the review screen while mounted. The viewer
  * takes every key while it is open and calls `flagKeyHandlers` itself.
  */
 export function useFlagKeys(): void {

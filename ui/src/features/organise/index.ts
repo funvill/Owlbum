@@ -1,5 +1,5 @@
-// Organising: star and hide (#27), score and nudges (#28), sorting (#29).
-// Stacks, undo and tidy join this folder in their own issues.
+// Organising: star and hide (#27), score and nudges (#28), sorting (#29),
+// undo (#33). Stacks and tidy join this folder in their own issues.
 export {
   canChange,
   endMark,
@@ -18,3 +18,4 @@ export { FLAG_KEY_IDS, flagKeyHandlers, isFlagKey, useFlagKeys, type FlagKeyId }
 export { nudge, resetNudges, toastText, useScoreToastStore, type NudgeDelta } from "./nudge";
 export { ScoreToast } from "./ScoreToast";
 export { ScoreCard } from "./ScoreCard";
+export { undo, undoToast } from "./undo";

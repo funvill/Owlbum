@@ -15,6 +15,9 @@ import { resetImageCache, type Load } from "../preview";
 import { resetViewer } from "../viewer/store";
 import { resetFlags } from "./flags";
 import { resetNudges, toastText } from "./nudge";
+import { undoToast } from "./undo";
+import { useToasts } from "../../controls/toastQueue";
+import type { Undone } from "../../api/bindings/Undone";
 import { FLAG_KEY_IDS, flagKeyHandlers } from "./keys";
 
 // jsdom has no layout: every zoom stage measures 800 × 600 and everything
@@ -325,5 +328,83 @@ describe("Nudge keys", () => {
     press("ArrowUp");
     await waitFor(() => expect(toast()).not.toBeNull());
     await waitFor(() => expect(toast()).toBeNull(), { timeout: 2500 });
+  });
+});
+
+describe("Undo key", () => {
+  const undos = () => fake.calls.filter((c) => c.command === "album_undo");
+  const toasts = () => useToasts.getState().toasts.map((t) => ({ kind: t.kind, message: t.message }));
+
+  beforeEach(() => useToasts.setState({ toasts: [] }));
+
+  /** `album_undo` answers `undone`, after putting photo 2 back on show as Rust would. */
+  function answer(undone: Undone, unhide = false) {
+    fake.handle("album_undo", () => {
+      if (unhide) {
+        revision = album.change((all) => all.map((p) => (p.id === 2 ? { ...p, hidden: false } : p)));
+        const now = revision;
+        setTimeout(() => fake.emit("album_changed", { revision: now, reason: "info", rekeyed: [] }), 0);
+      }
+      return undone;
+    });
+  }
+
+  it("writes the toast for each outcome", () => {
+    const u = (outcome: Undone["outcome"], label: string | null): Undone => ({ outcome, label, ids: [], revision: 1 });
+    expect(undoToast(u("nothing", null))).toEqual({ kind: "info", message: "Nothing to undo" });
+    expect(undoToast(u("done", "star"))).toEqual({ kind: "info", message: "Undid: star" });
+    expect(undoToast(u("partial", "hide"))).toEqual({ kind: "error", message: "Couldn't undo all of: hide" });
+    expect(undoToast(u("gone", "notes"))).toEqual({
+      kind: "error",
+      message: "Couldn't undo notes: the photo is no longer in the album",
+    });
+  });
+
+  it("Ctrl+Z calls album_undo and says when there is nothing to undo", async () => {
+    await show(2);
+    press("z", { ctrlKey: true });
+    await waitFor(() => expect(undos()).toHaveLength(1));
+    await waitFor(() => expect(toasts()).toEqual([{ kind: "info", message: "Nothing to undo" }]));
+  });
+
+  it("selects the one photo put back, even one that was hidden", async () => {
+    setup(photos(5, (p) => (p.id === 2 ? { ...p, hidden: true } : p)));
+    answer({ outcome: "done", label: "hide", ids: [2], revision: 9 }, true);
+    await show(3);
+    press("Z", { ctrlKey: true });
+    await waitFor(() => expect(toasts()).toEqual([{ kind: "info", message: "Undid: hide" }]));
+    await waitFor(() => expect(grid().current).toEqual({ id: 2, index: 1 }));
+    expect(grid().selection).toEqual([2]);
+  });
+
+  it("keeps the selection when several photos were put back", async () => {
+    answer({ outcome: "partial", label: "star", ids: [1, 4], revision: 9 });
+    await show(3);
+    press("z", { ctrlKey: true });
+    await waitFor(() => expect(toasts()).toEqual([{ kind: "error", message: "Couldn't undo all of: star" }]));
+    expect(grid().current).toEqual({ id: 3, index: 2 });
+  });
+
+  it("works in the viewer", async () => {
+    await show(2);
+    press("Enter");
+    await screen.findByRole("dialog");
+    press("z", { ctrlKey: true });
+    await waitFor(() => expect(undos()).toHaveLength(1));
+  });
+
+  it("is left to a text field, and does nothing with Shift or in a view-only album", async () => {
+    await show(2);
+    const field = document.createElement("input");
+    document.body.appendChild(field);
+    field.focus();
+    fireEvent.keyDown(field, { key: "z", ctrlKey: true });
+    field.remove();
+    press("z", { ctrlKey: true, shiftKey: true });
+    useAlbumStore.setState({ status: fakeStatus("D:/Photos", { view_only: "read_only" }) });
+    press("z", { ctrlKey: true });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(undos()).toEqual([]);
+    expect(toasts()).toEqual([]);
   });
 });

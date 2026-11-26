@@ -1,5 +1,5 @@
 // Text shown by the organise feature (src/features/organise).
-// docs/05-organising.md, "Star and hide", "Sorting" and "The filter bar".
+// docs/05-organising.md, "Star and hide", "Sorting", "The filter bar" and "Undo".
 
 export const organiseText = {
   /** The filter bar (docs/05-organising.md, "The filter bar"). */
@@ -26,6 +26,13 @@ export const organiseText = {
   nudgeLimit: "Can't nudge any further",
   /** "4 photos" in the score toast. */
   photos: (n: number) => (n === 1 ? "1 photo" : `${n} photos`),
+  /** The undo toasts (docs/05-organising.md, "What `album_undo` does"). */
+  undo: {
+    nothing: "Nothing to undo",
+    done: (label: string) => `Undid: ${label}`,
+    partial: (label: string) => `Couldn't undo all of: ${label}`,
+    gone: (label: string) => `Couldn't undo ${label}: the photo is no longer in the album`,
+  },
   /** The score card (docs/05-organising.md, "The score card"). */
   card: {
     title: "Photo score",

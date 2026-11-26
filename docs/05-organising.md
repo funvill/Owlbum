@@ -840,7 +840,9 @@ A step holds, for each photo, the values of the changed columns as they were bef
 1. Takes the newest step. If there is none, it replies `nothing`.
 2. Leaves out photos in the step whose rows no longer exist or are missing.
 3. Writes the earlier values back in one transaction, without recording a new step, and updates the album index.
-4. Emits `album_changed` and replies `{ outcome, label, ids }`.
+4. Emits `album_changed` (reason `info`) when it wrote anything, and replies `{ outcome, label, ids, revision }`. A step whose photos are all gone is still taken off the list.
+
+Undo writes back only the columns the step changed (for `photo_set_info`, the fields its patch set), so a later change to another field of the same photo is kept.
 
 The page then re-runs its query. If exactly one photo was involved, it is selected, and its stack is opened if it was folded away. Otherwise the selection is settled with `keep`. A photo that was hidden comes back where it sorts.
 
@@ -941,7 +943,7 @@ Commands this document adds or defines. All follow the rules in [Architecture](0
 | `photo_set_info` | `ids, patch` | `{ changed: number[], revision: number }` | Defined in [Browsing](04-browsing.md#commands-and-events), which owns the typed fields. This document uses `{ star }` and `{ hidden }`. |
 | `photo_nudge` | `ids, delta` | `{ changed: number[], total: number \| null, revision: number }` | `delta` is `1` or `-1`; the current photo goes first and `total` is its new score. |
 | `photo_score` | `id` | `{ total, analysed, lines: { label, why, points }[] }` | The score card's breakdown. |
-| `album_undo` | none | `{ outcome, label, ids }` | |
+| `album_undo` | none | `{ outcome, label, ids, revision }` | `label` is null for `nothing`; `revision` is the album's revision after the undo. |
 | `album_people` | none | `{ name, count }[]` | |
 | `album_tidy_list` | none | `{ folder, gone, files: { id, file_name, keeps: string[] }[] }[]` | `gone`: the folder does not exist on disk. `keeps`: what the row would lose. |
 | `album_tidy_remove` | `ids` | `{ removed: number, kept: number }` | |

@@ -153,7 +153,8 @@ mod tests {
 
     #[test]
     fn every_menu_accelerator_parses_as_the_menu_builder_parses_it() {
-        // Tauri's menu builder hands the string to muda, which is strict.
+        // Tauri's menu builder parses the string with muda and silently drops
+        // an accelerator that does not parse (`.parse().ok()`), so check here.
         assert!(muda::accelerator::Accelerator::from_str("Ctrl+Nonsense").is_err());
         for r in menu_rows(true) {
             let text = r.accelerator().unwrap();

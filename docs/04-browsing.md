@@ -974,7 +974,7 @@ Rules for the 04 rows:
 
 - **With no current photo**, Left, Right and Home select the first photo of the result, and End the last.
 - **Stepping needs a row.** The page moves the current photo's index at once. If the row at that index has not been fetched, it asks for its block and shows a placeholder in the preview until the row arrives. A held key keeps moving the index; only the block for where it ends up is still wanted when the key is let go.
-- **The photo menu** closes on any key in the table, and the key then acts.
+- **The photo menu** closes on any key in the table, and the key then acts. While focus is in the menu, its own keys (arrows, Home, End, Enter, Space, Esc, Tab) move and choose inside it instead (see [Desktop, release and tests](08-desktop-and-release.md#the-key-table)).
 - **In the viewer** every key in the table has its default action blocked, as have Tab, PageUp and PageDown, and no key reaches the page behind.
 - **Letters** act the same in either case.
 

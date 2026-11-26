@@ -97,11 +97,6 @@ const CONTROL_ROLES = [
   "radio",
   "switch",
   "tab",
-  "option",
-  "menuitem",
-  "menuitemcheckbox",
-  "menuitemradio",
-  "treeitem",
 ];
 
 const CONTROL_SELECTOR = [
@@ -208,8 +203,10 @@ function sameKey(event: KeyLike, key: string): boolean {
   if (!isLetter(key)) return pressed === key;
   if (pressed.toUpperCase() === key) return true;
   // Letters match in either case. On a layout of another alphabet, where
-  // the key gives no Latin letter, the physical key is used instead.
-  if ([...pressed].length === 1 && !/[A-Za-z]/.test(pressed)) {
+  // the key gives a letter that is not Latin, the physical key is used
+  // instead. Punctuation and AltGr symbols (Dvorak's `.`, AltGr+E's `€`)
+  // never fall back.
+  if (/^\p{L}$/u.test(pressed) && !/\p{Script=Latin}/u.test(pressed)) {
     return event.code === `Key${key}`;
   }
   return false;

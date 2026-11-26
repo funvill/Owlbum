@@ -244,12 +244,12 @@ Matching rules, the same for every row:
 |---|---|
 | Menu rows | The page never binds a `menu` row; the native accelerator does the work. |
 | Typing | A row that is not `menu` is ignored while focus is in a text field, a select, an editable element, a dialog or the Filters panel, unless it is marked `typing` (F6 and Shift+F6, so focus can leave the search box). Rows marked `typing` are still ignored in a dialog and the Filters panel. Edit mode's sliders do not count as typing. The Filters panel is marked `data-keys="dialog"`; a full-page layer that has its own rows, such as the viewer, is marked `data-keys="surface"` so it is not taken for a dialog. While a dialog is open the page ignores the rows wherever focus is. |
-| Controls | While a button, link, checkbox or similar control has focus, Enter and Space are left to it. Other rows still act. |
+| Controls | While a button, link, checkbox, radio button, switch or tab has focus, Enter and Space are left to it. Other rows still act. A grid tile is not such a control. |
 | Menus | While focus is in a menu, its own keys (arrows, Home, End, Enter, Space, Esc, Tab) are left to it. Any other row closes the menu and then acts. |
 | Handled keys | A key that a control already handled (a slider's or a splitter's arrows) or that is part of composing text is ignored. |
 | Modifiers | A key pressed with a modifier the row does not name is ignored. Meta (the Windows or Super key) never matches. `Ctrl+` is the Ctrl key: version 1 runs on Windows and Linux only. |
 | Symbols | Every key that is a single character other than a letter (`?`, `[`, `]`, `\`, `+`, `=`, `-`, `0`) matches on the character produced, so it works on keyboards where it needs Shift or AltGr. Windows reports AltGr as Ctrl+Alt. |
-| Letters | On a layout of another alphabet, where a key gives no Latin letter, a letter row matches the physical key (`KeyboardEvent.code`). |
+| Letters | On a layout of another alphabet, where a key gives a letter that is not Latin (Cyrillic, Greek), a letter row matches the physical key (`KeyboardEvent.code`). Punctuation and symbols never do, so Dvorak's `.` is not E and AltGr+E's `€` is not E. |
 | Repeat | An auto-repeated press acts only on a `repeat` row. A `hold` row starts on the first press and ends when its key is released, whatever the modifiers or focus are by then. |
 | Place | `browse` rows apply in the grid, the timeline, the map and the preview. While the viewer or edit mode is open, only its own rows and the `everywhere` rows apply. |
 | Dialogs and menus | Esc closes the topmost dialog, menu or overlay first. Nothing else reaches the rows beneath. |

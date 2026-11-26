@@ -93,6 +93,16 @@ describe("letters", () => {
     expect(id(key("h", { code: "KeyJ" }))).toBe("browse.hide");
     expect(id(key("q", { code: "KeyA", ctrlKey: true }))).toBeNull();
   });
+
+  it("never fall back for punctuation or symbols", () => {
+    // Dvorak: the key where QWERTY has E types a full stop.
+    expect(id(key(".", { code: "KeyE" }))).toBeNull();
+    expect(id(key(";", { code: "KeyZ", ctrlKey: true }))).toBeNull();
+    // Linux AltGr+E gives the euro sign with no Ctrl or Alt.
+    expect(id(key("€", { code: "KeyE" }))).toBeNull();
+    // Accented Latin letters are Latin: no fallback either.
+    expect(id(key("é", { code: "KeyE" }))).toBeNull();
+  });
 });
 
 describe("modifiers", () => {
@@ -203,6 +213,7 @@ describe("focus", () => {
     ["a checkbox", '<input id="t" type="checkbox">', "#t", "control"],
     ["a button", '<button id="t">x</button>', "#t", "control"],
     ["a link", '<a id="t" href="#">x</a>', "#t", "control"],
+    ["a grid tile", '<div role="grid"><div id="t" role="gridcell" tabindex="0"></div></div>', "#t", "none"],
     ["a menu item", '<div role="menu"><div id="t" role="menuitem">x</div></div>', "#t", "menu"],
     ["a dialog", '<div role="dialog"><button id="t">x</button></div>', "#t", "dialog"],
     ["a dialog element", '<dialog open><span id="t">x</span></dialog>', "#t", "dialog"],

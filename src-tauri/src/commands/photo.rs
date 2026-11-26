@@ -7,13 +7,15 @@ use owlbum_core::album::{AlbumChanged, ChangeReason};
 use owlbum_core::info::detail::{self, PhotoDetail};
 use owlbum_core::info::histogram::{self, Histogram};
 use owlbum_core::info::typed::{self, InfoChanged, InfoPatch};
+use owlbum_core::organise::nudge::{self, Nudged};
+use owlbum_core::organise::score::{self, ScoreBreakdown};
 use owlbum_core::thumbs::{Thumbs, lookup};
 use owlbum_core::{AppError, ErrorCode, text};
 use tauri::{AppHandle, Manager, Runtime, State};
 
 area! {
     prefix: "photo",
-    commands: [photo_detail, photo_histogram, photo_set_info],
+    commands: [photo_detail, photo_histogram, photo_set_info, photo_nudge, photo_score],
     events: [],
 }
 
@@ -78,5 +80,44 @@ command! {
             );
         }
         Ok(changed)
+    }
+}
+
+command! {
+    /// Adds `delta` (1 or -1) to the score nudge of the photos `ids`
+    /// (docs/05-organising.md, "Nudges (Up and Down)"). The current photo
+    /// goes first: `total` is its new score. A photo at the limit is left
+    /// unchanged. Sends `album_changed` with reason `info` when any changed.
+    /// Errors: `view_only`, `photo_not_found`.
+    pub async fn photo_nudge<R: Runtime>(ids: Vec<i64>, delta: i64; app: AppHandle<R>) -> Nudged {
+        let scanner = app.state::<Session>().queries()?.0;
+        let nudged = off_main(text::album::WRITING_DATABASE, move || {
+            nudge::nudge(scanner.album(), ids, delta)
+        })
+        .await?;
+        if !nudged.changed.is_empty() {
+            let _ = crate::events::emit(
+                &app,
+                &AlbumChanged {
+                    revision: nudged.revision,
+                    reason: ChangeReason::Info,
+                    rekeyed: Vec::new(),
+                },
+            );
+        }
+        Ok(nudged)
+    }
+}
+
+command! {
+    /// The breakdown of one photo's score for the score card
+    /// (docs/05-organising.md, "The score card"). `photo_not_found` when
+    /// the id is not a photo the album shows.
+    pub async fn photo_score(id: i64; session: State<'_, Session>) -> ScoreBreakdown {
+        let (scanner, _) = session.queries()?;
+        off_main(text::photo::READING_DETAIL, move || {
+            score::photo_score(scanner.album(), id)
+        })
+        .await
     }
 }

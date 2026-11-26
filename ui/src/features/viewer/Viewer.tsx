@@ -18,7 +18,7 @@ import { viewerText as t } from "../../text/viewer";
 import { useSettingsStore } from "../app";
 import { formatLength, formatSize, formatTaken } from "../details";
 import { step, stepToEnd, useGridStore } from "../grid";
-import { FlagMark, flagKeyHandlers, isFlagKey } from "../organise";
+import { FlagMark, ScoreToast, flagKeyHandlers, isFlagKey } from "../organise";
 import { CachedZoomStage, usePreload, useShownRow, zoomKeyHandlers, type ZoomHandle } from "../preview";
 import { closeViewer, toggleDetails, useViewerStore } from "./store";
 import "./Viewer.css";
@@ -126,7 +126,8 @@ function OpenViewer({ detail }: ViewerProps) {
       if (match !== null || BLOCKED.has(e.key)) e.preventDefault();
       e.stopPropagation();
       if (match !== null && match.act && isViewerKey(match.id)) viewerKeyHandlers(zoom.current)[match.id]();
-      // F, S and H star or hide the shown photo only (docs/05-organising.md).
+      // F, S and H star or hide, Up and Down nudge, the shown photo only
+      // (docs/05-organising.md).
       if (match !== null && match.act && isFlagKey(match.id)) flagKeyHandlers()[match.id]();
     };
     window.addEventListener("keydown", onKeyDown, true);
@@ -165,6 +166,7 @@ function OpenViewer({ detail }: ViewerProps) {
           />
         )}
         <FlagMark place="viewer" />
+        <ScoreToast place="viewer" />
       </div>
       <div className={`ow-viewer__bar${bar ? "" : " ow-viewer__bar--away"}`}>
         {row !== undefined && (

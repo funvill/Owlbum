@@ -16,3 +16,6 @@ export const viewerBarMs = 3000;
 
 /** How long the star or hide mark stays over the photo (docs/05-organising.md, "The mark"). */
 export const markMs = 800;
+
+/** How long the score toast stays after a nudge (docs/05-organising.md, "The score toast"). */
+export const scoreToastMs = 1100;

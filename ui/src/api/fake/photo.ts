@@ -1,6 +1,7 @@
 import type { Histogram } from "../bindings/Histogram";
 import type { PhotoCommands } from "../bindings/photo";
 import type { PhotoDetail } from "../bindings/PhotoDetail";
+import type { ScoreBreakdown } from "../bindings/ScoreBreakdown";
 import type { AreaHandlers } from "./types";
 
 /** Counts per histogram channel, as in Rust. */
@@ -65,9 +66,37 @@ export function fakeHistogram(): Histogram {
   return { l: hill, r: [...hill], g: [...hill], b: [...hill] };
 }
 
+/** A score breakdown for page tests: the spec's example card, 105 in all. */
+export function fakeScore(changes: Partial<ScoreBreakdown> = {}): ScoreBreakdown {
+  return {
+    total: 105,
+    analysed: true,
+    lines: [
+      { label: "Focus", why: "sharper than 80 % of this album", points: 28 },
+      { label: "Exposure", why: "well exposed", points: 19 },
+      {
+        label: "Colour variety",
+        why: "some colour across the frame",
+        points: 6,
+      },
+      { label: "Size", why: "12 megapixels", points: 10 },
+      {
+        label: "Burst",
+        why: "a similar shot in this burst is better",
+        points: -10,
+      },
+      { label: "Star", why: "starred", points: 50 },
+      { label: "Your nudges", why: "Up pressed 2 times more", points: 2 },
+    ],
+    ...changes,
+  };
+}
+
 /** The fake backend's `photo_` commands. */
 export const photoHandlers: AreaHandlers<PhotoCommands> = {
   photo_detail: ({ id }) => fakeDetail(id),
   photo_histogram: () => fakeHistogram(),
   photo_set_info: ({ ids }) => ({ changed: ids, revision: 2 }),
+  photo_nudge: ({ ids }) => ({ changed: ids, total: 55, revision: 2 }),
+  photo_score: () => fakeScore(),
 };

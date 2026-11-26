@@ -162,7 +162,7 @@ The details panel shows a card reading "Photo score" with the total. For a photo
 | Targets | The whole selection when it has more than one photo; else the current photo. In the viewer, the shown photo only. |
 | Repeat | A held key does not repeat. Each tap is one write and one undo step. |
 | Limits | `score_adjust` stays within −100,000 and +100,000. A nudge that would pass the limit leaves that photo unchanged. If no target changed, the toast reads "Can't nudge any further". |
-| Command | `photo_nudge(ids, delta)` with `delta` of `+1` or `−1`. It replies `{ changed, total }`, where `total` is the current photo's new score. |
+| Command | `photo_nudge(ids, delta)` with `delta` of `+1` or `−1`, the current photo first in `ids`. It replies `{ changed, total, revision }`, where `total` is the current photo's new score, or null while it is not analysed (the one-photo toast then shows the change alone, "+1"). |
 | Not available | While typing, in a dialog, in edit mode, in a view-only album. |
 
 **The score toast** sits over the middle of the preview, centred 50% across and 45% down. Its fill is `--score-up-bg` for +1 and `--score-down-bg` for −1, with `--score-toast-text`, and it fades over 1100 ms (no fade with reduced motion; it is simply removed after 1100 ms). Each press restarts it. It reads:
@@ -206,8 +206,8 @@ It holds every row inside the open scope with `missing = 0` and no `scan_error`,
 - **On open** one `SELECT` reads the columns above for every row, on a worker thread. The grid can show its first window as soon as this finishes. Target: under 2 seconds for 100,000 photos on a local SSD.
 - **On every write** the writer thread applies the same change to the index in the same step as the database commit. A write that changes `photos` or `photo_people` goes through `Album::write_photos`: the job reports the photo ids it touched, and after the commit, on the writer thread and before the write answers, the index reads those rows again by id with the same `SELECT` the load uses. A row that is gone, `missing`, has a `scan_error` or is outside the scope leaves the index. A job that fails is rolled back and the index is not touched; if reading the rows again fails after a commit, the write still succeeds and the index is loaded again whole. The index is never read from a half-applied state: readers hold a lock for the length of one query.
 - **In a view-only album** there is no writer. The rows the scan keeps only in memory go into the index directly, built by the same rule as a database row, with the same scope test.
-- **Derived values** are rebuilt as a new snapshot on a worker thread and swapped in whole. Queries keep using the old snapshot until the swap. The snapshot is keyed by photo id: a photo added after the rebuild started has no entry and reads as unscored, and an entry for a photo that has left is ignored. A changed photo keeps its derived values until the next rebuild. After a swap Rust emits `album_changed` with reason `facts`.
-- **While a scan runs** the whole-album rebuild runs at most once every 2000 ms, and once more when the scan finishes. Photos found since the last rebuild are shown at once, unanalysed, with "–" for a score.
+- **Derived values** are rebuilt as a new snapshot on a worker thread and swapped in whole. Queries keep using the old snapshot until the swap. The snapshot is keyed by photo id: a photo added after the rebuild started has no entry and reads as unscored, and an entry for a photo that has left is ignored. A changed photo keeps its derived values until the next rebuild, except its score: the index works the score out again as soon as it reads the changed row, against the sharpness list it kept from the last rescore, so a star, hide, nudge or people change is in the next `query_run`. Installing a rebuild's values works every score out again too, because the Burst line reads the new burst and keeper. After a swap Rust emits `album_changed` with reason `facts`.
+- **While a scan runs** the whole-album rebuild runs at most once every 2000 ms, and once more when the scan finishes. The scores (the sharpness list, then every photo's score) are worked out again just before each `album_changed` the scan sends (at most once a second, and once at the end), and once on every open, after the index is loaded. Photos found since the last rebuild are shown at once, unanalysed, with "–" for a score.
 - **Scope.** Derived values cover the rows in the index. When the album is open scoped to a subfolder, that is the scope only: rows outside it are not scored and are in no burst.
 
 Target for the whole-album rebuild: under 500 ms for 100,000 photos.
@@ -937,7 +937,7 @@ Commands this document adds or defines. All follow the rules in [Architecture](0
 | `query_facets` | `token` | `Facets` | For the query the token was made from. |
 | `query_parse` | `text, final` | `ParsedBox` | Needs an open album, for folder and people names. |
 | `photo_set_info` | `ids, patch` | `{ changed: number[], revision: number }` | Defined in [Browsing](04-browsing.md#commands-and-events), which owns the typed fields. This document uses `{ star }` and `{ hidden }`. |
-| `photo_nudge` | `ids, delta` | `{ changed: number[], total: number \| null }` | `delta` is `1` or `-1`. |
+| `photo_nudge` | `ids, delta` | `{ changed: number[], total: number \| null, revision: number }` | `delta` is `1` or `-1`; the current photo goes first and `total` is its new score. |
 | `photo_score` | `id` | `{ total, analysed, lines: { label, why, points }[] }` | The score card's breakdown. |
 | `album_undo` | none | `{ outcome, label, ids }` | |
 | `album_people` | none | `{ name, count }[]` | |

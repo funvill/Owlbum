@@ -14,6 +14,7 @@ import { resetGrid, useGridStore } from "../grid";
 import { resetImageCache, type Load } from "../preview";
 import { resetViewer } from "../viewer/store";
 import { resetFlags } from "./flags";
+import { resetNudges, toastText } from "./nudge";
 import { FLAG_KEY_IDS, flagKeyHandlers } from "./keys";
 
 // jsdom has no layout: every zoom stage measures 800 × 600 and everything
@@ -96,6 +97,7 @@ beforeEach(() => {
   resetGrid();
   resetViewer();
   resetFlags();
+  resetNudges();
   resetImageCache(noLoad);
   useAlbumStore.setState(initialAlbum, true);
   useSettingsStore.setState({ settings: null, error: null });
@@ -232,5 +234,96 @@ describe("Star and hide keys", () => {
     press("f");
     await waitFor(() => expect(mark()).not.toBeNull());
     await waitFor(() => expect(mark()).toBeNull(), { timeout: 2000 });
+  });
+});
+
+describe("Nudge keys", () => {
+  /** The `photo_nudge` calls made so far. */
+  const nudges = () =>
+    fake.calls.filter((c) => c.command === "photo_nudge").map((c) => c.args as { ids: number[]; delta: number });
+  const toast = () => screen.queryByTestId("score-toast");
+
+  it("writes the toast texts", () => {
+    expect(toastText(1, 1, 1, 74)).toBe("+1 · 74");
+    expect(toastText(-1, 1, 1, 72)).toBe("−1 · 72");
+    expect(toastText(1, 4, 4, 80)).toBe("+1 · 4 photos");
+    expect(toastText(1, 1, 0, 74)).toBe("Can't nudge any further");
+    expect(toastText(-1, 1, 1, -3)).toBe("−1 · −3");
+    expect(toastText(1, 1, 1, null)).toBe("+1");
+  });
+
+  it("Up nudges the current photo and shows the toast over the preview, without moving the selection", async () => {
+    fake.handle("photo_nudge", ({ ids }) => ({
+      changed: ids,
+      total: 74,
+      revision: 9,
+    }));
+    await show(2);
+    press("ArrowUp");
+    await waitFor(() => expect(nudges()).toEqual([{ ids: [2], delta: 1 }]));
+    const t = await within(region("Preview")).findByTestId("score-toast");
+    expect(t).toHaveTextContent("+1 · 74");
+    expect(t).toHaveClass("ow-score-toast--up");
+    expect(grid().current).toEqual({ id: 2, index: 1 });
+  });
+
+  it("Down nudges the whole selection, current photo first", async () => {
+    await show(2, [3, 4]);
+    press("ArrowDown");
+    await waitFor(() => expect(nudges()).toHaveLength(1));
+    expect(nudges()[0]).toEqual({ ids: [2, 3, 4], delta: -1 });
+    await waitFor(() => expect(toast()).toHaveTextContent("−1 · 3 photos"));
+    expect(toast()).toHaveClass("ow-score-toast--down");
+  });
+
+  it("says when no photo can be nudged further", async () => {
+    fake.handle("photo_nudge", () => ({
+      changed: [],
+      total: 100060,
+      revision: 1,
+    }));
+    await show(2);
+    press("ArrowUp");
+    await waitFor(() => expect(toast()).toHaveTextContent("Can't nudge any further"));
+  });
+
+  it("in the viewer nudges the shown photo only", async () => {
+    await show(2, [3]);
+    press("Enter");
+    const viewer = await screen.findByRole("dialog");
+    act(() =>
+      grid().setSelection({
+        current: { id: 2, index: 1 },
+        anchor: { id: 2, index: 1 },
+        selection: [2, 3],
+      }),
+    );
+    press("ArrowUp");
+    await waitFor(() => expect(nudges()).toEqual([{ ids: [2], delta: 1 }]));
+    expect(await within(viewer).findByTestId("score-toast")).toHaveTextContent("+1 · 55");
+  });
+
+  it("does nothing while typing, for a held key, or in a view-only album", async () => {
+    await show(2);
+    const field = document.createElement("input");
+    document.body.appendChild(field);
+    field.focus();
+    fireEvent.keyDown(field, { key: "ArrowUp" });
+    field.remove();
+    press("ArrowUp", { repeat: true });
+    useAlbumStore.setState({
+      status: fakeStatus("D:/Photos", { view_only: "read_only" }),
+    });
+    press("ArrowDown");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(nudges()).toEqual([]);
+    expect(toast()).toBeNull();
+  });
+
+  it("removes the toast after 1100 ms", async () => {
+    await show(2);
+    press("ArrowUp");
+    await waitFor(() => expect(toast()).not.toBeNull());
+    await waitFor(() => expect(toast()).toBeNull(), { timeout: 2500 });
   });
 });

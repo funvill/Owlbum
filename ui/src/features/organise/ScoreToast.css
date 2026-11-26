@@ -1,0 +1,34 @@
+/* docs/05-organising.md, "The score toast": centred 50% across and 45% down, fading over 1100 ms. */
+.ow-score-toast {
+  position: absolute;
+  top: 45%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  padding: var(--space-3) var(--space-5);
+  border-radius: var(--radius-full);
+  color: var(--score-toast-text);
+  font: var(--text-num);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: var(--z-raised);
+  animation: ow-score-toast var(--motion-score-toast) var(--ease) forwards;
+}
+
+.ow-score-toast--up {
+  background: var(--score-up-bg);
+}
+
+.ow-score-toast--down {
+  background: var(--score-down-bg);
+}
+
+/* With reduced motion --mark-fade is 1, so the toast stays solid until removed. */
+@keyframes ow-score-toast {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: var(--mark-fade);
+  }
+}

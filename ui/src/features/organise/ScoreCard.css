@@ -1,0 +1,90 @@
+/* docs/05-organising.md, "The score card". */
+.ow-score-card {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--space-3);
+  margin: 0 0 var(--space-4);
+  padding: var(--space-3) var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel-2);
+}
+
+.ow-score-card__title {
+  font: var(--text-lg);
+}
+
+.ow-score-card__total {
+  margin-left: auto;
+  font: var(--text-num);
+  font-variant-numeric: tabular-nums;
+}
+
+.ow-score-card__reading {
+  flex-basis: 100%;
+  order: 3;
+  color: var(--muted);
+  font: var(--text-sm);
+}
+
+.ow-score-card__popup {
+  position: absolute;
+  top: calc(100% + var(--space-2));
+  left: 0;
+  right: 0;
+  padding: var(--space-4);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--panel-3);
+  box-shadow: var(--shadow);
+  font: var(--text-sm);
+  z-index: var(--z-popover);
+}
+
+.ow-score-card__heading {
+  margin-bottom: var(--space-3);
+  font: var(--text-lg);
+}
+
+.ow-score-card__lines {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.ow-score-card__lines th {
+  padding: var(--space-1) var(--space-3) var(--space-1) 0;
+  text-align: left;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.ow-score-card__why {
+  color: var(--muted);
+}
+
+.ow-score-card__points {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.ow-score-card__points--plus {
+  color: var(--score-plus);
+}
+
+.ow-score-card__points--minus {
+  color: var(--score-minus);
+}
+
+.ow-score-card__sum th,
+.ow-score-card__sum td {
+  padding-top: var(--space-2);
+  border-top: 1px solid var(--line);
+}
+
+.ow-score-card__footer {
+  margin-top: var(--space-3);
+  color: var(--muted);
+}

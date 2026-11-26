@@ -151,6 +151,7 @@
   --motion-travel: 4px;
   --motion-press: 1px;
   --motion-mark: 800ms;
+  --motion-score-toast: 1100ms;
   --mark-grow: 1.08;
   --mark-fade: 0;
   --progress-unknown-width: 25%;

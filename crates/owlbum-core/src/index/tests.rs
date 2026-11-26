@@ -105,7 +105,17 @@ fn the_load_reads_every_column_the_index_keeps() {
         assert_eq!(p.date(), parse_date("2024-06-01T10:00:00"));
         assert_eq!(p.people, 2);
         assert_eq!(p.analysis().unwrap().dhash(), Some(0xff));
-        assert_eq!(p.derived, Derived::default());
+        assert!(
+            p.derived.score.is_some(),
+            "an analysed photo is scored on load"
+        );
+        assert_eq!(
+            p.derived,
+            Derived {
+                score: p.derived.score,
+                ..Derived::default()
+            }
+        );
 
         let q = v.get(id(b)).unwrap();
         assert_eq!(v.folder(q.folder), "");
@@ -347,13 +357,14 @@ fn derived_values_are_installed_whole_and_keyed_by_id() {
         .unwrap();
     index.refresh(&conn, &[b, c]).unwrap();
     // ...and the rebuild's values go in.
+    let quality = |id: u32| 0.5 + id as f32 / 100.0;
     let values = inputs
         .iter()
         .map(|p| {
             (
                 p.id,
                 Derived {
-                    score: Some(50 + p.id as i32),
+                    quality: quality(p.id),
                     ..Derived::default()
                 },
             )
@@ -361,20 +372,20 @@ fn derived_values_are_installed_whole_and_keyed_by_id() {
         .collect();
     index.install_derived(values);
     index.read(|v| {
-        assert_eq!(v.get(id(a)).unwrap().derived.score, Some(50 + id(a) as i32));
-        assert_eq!(v.get(id(c)).unwrap().derived.score, None, "not scored yet");
+        assert_eq!(v.get(id(a)).unwrap().derived.quality, quality(id(a)));
+        assert_eq!(v.get(id(c)).unwrap().derived.quality, 0.0, "not covered");
         assert_eq!(v.get(id(b)), None);
     });
     // A changed row keeps its values until the next rebuild.
     set(&conn, a, "star = 1");
     index.refresh(&conn, &[a]).unwrap();
     assert_eq!(
-        index.read(|v| v.get(id(a)).unwrap().derived.score),
-        Some(50 + id(a) as i32)
+        index.read(|v| v.get(id(a)).unwrap().derived.quality),
+        quality(id(a))
     );
     // A rebuild that does not mention a row clears it.
     index.install_derived(Vec::new());
-    assert_eq!(index.read(|v| v.get(id(a)).unwrap().derived.score), None);
+    assert_eq!(index.read(|v| v.get(id(a)).unwrap().derived.quality), 0.0);
 }
 
 #[test]
@@ -467,4 +478,85 @@ fn the_name_order_uses_the_walkers_string_rules() {
     add(&conn, "", "a1.jpg");
     let index = AlbumIndex::load(&conn, "").unwrap();
     assert_eq!(names(&index), ["/a1.jpg", "/a!.jpg"]);
+}
+
+/// An analysed photo with sharpness `sharp`.
+fn analysed(conn: &Connection, name: &str, sharp: u32) -> i64 {
+    let id = add(conn, "", name);
+    set(
+        conn,
+        id,
+        &format!(
+            r#"analysis = '{{"sharpness":{sharp},"mean_luma":0.4,"clipped_shadows":0.05,"clipped_highlights":0.02,"saliency_x":0.3,"saliency_y":0.4,"colour_grid":[200,10,10,10,200,10,10,10,200,200,10,10,10,200,10,10,10,200,200,10,10,10,200,10,10,10,200]}}'"#
+        ),
+    );
+    id
+}
+
+fn scores(index: &AlbumIndex) -> Vec<(u32, Option<i32>)> {
+    index.read(|v| v.photos().iter().map(|p| (p.id, p.derived.score)).collect())
+}
+
+#[test]
+fn scores_follow_star_hide_nudge_and_people_as_a_fresh_load_would() {
+    let conn = db();
+    let a = analysed(&conn, "a.jpg", 10);
+    let b = analysed(&conn, "b.jpg", 20);
+    let c = analysed(&conn, "c.jpg", 30);
+    let plain = add(&conn, "", "plain.jpg");
+    let index = AlbumIndex::load(&conn, "").unwrap();
+    assert_eq!(index.read(|v| v.sharpness().to_vec()), [10.0, 20.0, 30.0]);
+    assert_eq!(
+        index.read(|v| v.get(id(plain)).unwrap().derived.score),
+        None
+    );
+
+    for (photo, change) in [
+        (a, "star = 1"),
+        (b, "hidden = 1"),
+        (c, "score_adjust = 7"),
+        (a, "star = 0, score_adjust = -2"),
+    ] {
+        let before = index.read(|v| v.get(id(photo)).unwrap().derived.score);
+        set(&conn, photo, change);
+        index.refresh(&conn, &[photo]).unwrap();
+        let after = index.read(|v| v.get(id(photo)).unwrap().derived.score);
+        assert_ne!(before, after, "{change}");
+        assert_eq!(
+            scores(&index),
+            scores(&AlbumIndex::load(&conn, "").unwrap()),
+            "{change}"
+        );
+    }
+    conn.execute_batch(
+        "INSERT INTO people (id, name) VALUES (1, 'Ann');
+         INSERT INTO photo_people VALUES (2, 1);",
+    )
+    .unwrap();
+    index.refresh(&conn, &[b]).unwrap();
+    assert_eq!(
+        scores(&index),
+        scores(&AlbumIndex::load(&conn, "").unwrap())
+    );
+}
+
+#[test]
+fn a_new_photo_is_unscored_until_the_next_rescore() {
+    let conn = db();
+    analysed(&conn, "a.jpg", 10);
+    let index = AlbumIndex::load(&conn, "").unwrap();
+    let b = analysed(&conn, "b.jpg", 20);
+    index.refresh(&conn, &[b]).unwrap();
+    assert_eq!(index.read(|v| v.get(id(b)).unwrap().derived.score), None);
+    index.rescore();
+    assert_eq!(index.read(|v| v.sharpness().len()), 2);
+    assert_eq!(
+        scores(&index),
+        scores(&AlbumIndex::load(&conn, "").unwrap())
+    );
+    assert!(
+        index
+            .read(|v| v.get(id(b)).unwrap().derived.score)
+            .is_some()
+    );
 }

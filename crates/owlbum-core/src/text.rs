@@ -13,3 +13,4 @@ pub mod media;
 pub mod photo;
 pub mod query;
 pub mod scan;
+pub mod score;

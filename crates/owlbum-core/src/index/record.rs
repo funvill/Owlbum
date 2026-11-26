@@ -328,7 +328,7 @@ pub fn parse_date(text: &str) -> Option<i64> {
 
 /// Builds the record for `facts`, with its name not yet placed and the
 /// default derived values. None when the id does not fit in 32 bits.
-pub(super) fn build(facts: &PhotoFacts, folder: u32) -> Option<Photo> {
+pub(crate) fn build(facts: &PhotoFacts, folder: u32) -> Option<Photo> {
     let id = u32::try_from(facts.id).ok()?;
     let analysis = facts.analysis.as_deref().and_then(Analysis::parse);
     let date = facts

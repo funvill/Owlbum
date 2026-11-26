@@ -12,6 +12,7 @@ import { IconButton, Pill, Tooltip } from "../../controls";
 import { Icon } from "../../icons";
 import { detailsText as t, type SectionId } from "../../text/details";
 import { useAlbumStore, viewOnlyReason } from "../album";
+import { ScoreCard } from "../organise/ScoreCard";
 import { cameraRows, factRows, formatCoordinates, type FactRow } from "./facts";
 import { HistogramSection } from "./HistogramChart";
 import { SECTION_IDS, sectionShown, useSections } from "./sections";
@@ -180,7 +181,7 @@ function Body({ detail, sections }: { detail: PhotoDetail; sections: ReturnType<
   const saver = useInfoSaver(detail.id);
   return (
     <div className="ow-details__body">
-      {/* The score card (#28) goes first. */}
+      <ScoreCard id={detail.id} revision={detail.revision} />
       {disabledReason !== null && <p className="ow-details__note">{t.viewOnlyNote}</p>}
       {saver.error !== null && <p className="ow-details__note ow-details__note--error">{saver.error}</p>}
       {SECTION_IDS.filter((id) => sectionShown(id, detail)).map((id) => (

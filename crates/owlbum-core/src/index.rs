@@ -26,10 +26,15 @@
 //! - **In a view-only album** there is no writer. Rows that exist only in
 //!   memory for the session are put in with [`AlbumIndex::upsert`] and taken
 //!   out with [`AlbumIndex::remove`].
-//! - **Derived values** (score, flags, bursts) are worked out elsewhere from
-//!   a copy of the records and put in whole with
+//! - **Derived values** (flags, bursts) are worked out elsewhere from a
+//!   copy of the records and put in whole with
 //!   [`AlbumIndex::install_derived`]. A row the rebuild did not cover reads
 //!   as unscored.
+//! - **The score** is worked out here: for every photo on load and on
+//!   [`AlbumIndex::rescore`] (a scan's batches), and for a replaced row as
+//!   soon as it is refreshed, against the sharpness list of the last
+//!   rescore. A row added since then reads as unscored until the next
+//!   rescore.
 //!
 //! # Memory
 //!
@@ -47,6 +52,7 @@ use rusqlite::{Connection, OptionalExtension, Row};
 
 use crate::album::sqlite_error;
 use crate::error::AppResult;
+use crate::organise::score;
 use crate::scan::natural_cmp_text;
 use crate::text;
 
@@ -104,6 +110,9 @@ struct State {
     dead_names: usize,
     /// Photo ids in name order.
     name_order: Vec<u32>,
+    /// The sharpness of every analysed photo at the last rescore, sorted
+    /// ascending: the `S` of the photo score's Focus line.
+    sharpness: Vec<f32>,
 }
 
 /// The columns the index reads, in the order [`facts_from_row`] expects.
@@ -146,16 +155,19 @@ impl AlbumIndex {
     /// Loads the index from the album database: every row inside `scope`
     /// with `missing = 0` and no `scan_error`, in one `SELECT`.
     pub fn load(conn: &Connection, scope: &str) -> AppResult<Self> {
+        let mut state = State::load(conn, scope)?;
+        state.rescore();
         Ok(Self {
-            state: RwLock::new(State::load(conn, scope)?),
+            state: RwLock::new(state),
         })
     }
 
     /// Replaces everything in the index with a fresh load from `conn`.
-    /// Derived values are cleared.
+    /// Derived values are cleared and the photos scored again.
     pub fn reload(&self, conn: &Connection) -> AppResult<()> {
         let scope = self.read(|v| v.scope().to_owned());
         let mut fresh = State::load(conn, &scope)?;
+        fresh.rescore();
         let mut state = self.write();
         fresh.generation = state.generation + 1;
         *state = fresh;
@@ -166,7 +178,8 @@ impl AlbumIndex {
     /// that is eligible is added or replaced; one that is not (deleted,
     /// `missing`, with a `scan_error`, outside the scope) is taken out.
     /// Applied in one step under the write lock. A replaced row keeps its
-    /// derived values until the next rebuild.
+    /// derived values until the next rebuild, except its score, which is
+    /// worked out again at once (see [`AlbumIndex::rescore`]).
     pub fn refresh(&self, conn: &Connection, ids: &[i64]) -> AppResult<()> {
         if ids.is_empty() {
             return Ok(());
@@ -211,11 +224,14 @@ impl AlbumIndex {
     }
 
     /// Puts a rebuild's derived values in, in one step. `values` are keyed
-    /// by photo id; a photo with no entry gets [`Derived::default`] (not
-    /// scored), and an entry for a photo no longer in the index is ignored.
+    /// by photo id; a photo with no entry gets [`Derived::default`], and an
+    /// entry for a photo no longer in the index is ignored. The score in
+    /// `values` is not used: each photo's score is worked out again here,
+    /// since its Burst line reads the burst and keeper just put in.
     pub fn install_derived(&self, mut values: Vec<(u32, Derived)>) {
         values.sort_by_key(|(id, _)| *id);
         let mut state = self.write();
+        let state = &mut *state;
         let mut next = values.iter().peekable();
         for photo in &mut state.photos {
             while next.next_if(|(id, _)| *id < photo.id).is_some() {}
@@ -223,7 +239,20 @@ impl AlbumIndex {
                 Some((id, derived)) if *id == photo.id => *derived,
                 _ => Derived::default(),
             };
+            photo.derived.score = score::score(photo, &state.sharpness);
         }
+    }
+
+    /// Works out every photo's score again (docs/05-organising.md, "Photo
+    /// score"): the sharpness list from every analysed photo, then each
+    /// photo's score from it. Called on load, and by a scan after it adds,
+    /// removes or re-reads photos, which can change the sharpness list. A
+    /// change of star, hidden, nudge or people needs no rescore: the
+    /// refresh after the write scores the changed rows against the kept
+    /// list. Only [`Derived::score`] is written; the other derived values
+    /// are left as they are.
+    pub fn rescore(&self) {
+        self.write().rescore();
     }
 
     /// Runs `f` over a consistent view of the index, holding the read lock
@@ -250,7 +279,7 @@ impl AlbumIndex {
     }
 
     /// The bytes the index holds on the heap, by capacity: the records, the
-    /// file names, the folders and the name order.
+    /// file names, the folders, the name order and the sharpness list.
     pub fn heap_bytes(&self) -> usize {
         self.read(|v| {
             let s = v.state;
@@ -258,6 +287,7 @@ impl AlbumIndex {
             s.photos.capacity() * size_of::<Photo>()
                 + s.names.capacity()
                 + s.name_order.capacity() * size_of::<u32>()
+                + s.sharpness.capacity() * size_of::<f32>()
                 + s.folders.capacity() * size_of::<Box<str>>()
                 + s.folder_ids.capacity() * (size_of::<Box<str>>() + size_of::<u32>() + 1)
                 + 2 * folder_text
@@ -323,6 +353,12 @@ impl IndexView<'_> {
     pub fn generation(&self) -> u64 {
         self.state.generation
     }
+
+    /// The sharpness of every analysed photo at the last rescore, sorted
+    /// ascending (the photo score's `S`).
+    pub fn sharpness(&self) -> &[f32] {
+        &self.state.sharpness
+    }
 }
 
 impl State {
@@ -350,6 +386,19 @@ impl State {
         state.photos.shrink_to_fit();
         state.names.shrink_to_fit();
         Ok(state)
+    }
+
+    fn rescore(&mut self) {
+        let mut sharpness: Vec<f32> = self
+            .photos
+            .iter()
+            .filter_map(|p| p.analysis().map(|a| a.sharpness))
+            .collect();
+        sharpness.sort_unstable_by(f32::total_cmp);
+        for photo in &mut self.photos {
+            photo.derived.score = score::score(photo, &sharpness);
+        }
+        self.sharpness = sharpness;
     }
 
     fn position(&self, id: u32) -> Result<usize, usize> {
@@ -465,6 +514,7 @@ impl State {
                 Ok(at) => {
                     let old = self.photos[at];
                     photo.derived = old.derived;
+                    photo.derived.score = score::score(&photo, &self.sharpness);
                     photo.name_rank = old.name_rank;
                     if old.folder == folder && self.name(&old) == f.file_name {
                         photo.name_at = old.name_at;

@@ -298,6 +298,7 @@ The old program used 7 px on buttons; that becomes 6 px. Its single `--radius` t
 | `--motion-travel` | 4 px | How far menus, popovers and toasts travel as they appear. |
 | `--motion-press` | 1 px | How far a button moves down while pressed. |
 | `--motion-mark` | 800 ms | How long the star and hide mark plays. |
+| `--motion-score-toast` | 1100 ms | How long the score toast fades after a nudge. |
 | `--mark-grow` | `1.08` | How much the mark grows as it plays. With reduced motion it is `1`. |
 | `--mark-fade` | `0` | The mark's opacity at the end. With reduced motion it is `1`: the mark stands still and is removed after 800 ms. |
 | `--progress-unknown-width` | `25%` | The travelling block of a progress bar with no known total. |

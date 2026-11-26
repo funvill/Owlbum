@@ -214,6 +214,10 @@ impl<'a> Changes<'a> {
     /// Sends under the state lock; `every` runs from the end of the send,
     /// as for `scan_progress`.
     fn send(&self, s: &mut ChangesState) {
+        // New, gone or re-read photos change the photo score's sharpness
+        // list, so the scores are worked out again before the page re-runs
+        // its query (docs/05-organising.md, "Is the score stored?").
+        self.album.index().rescore();
         let event = AlbumChanged {
             revision: self.album.next_revision(),
             reason: self.reason,

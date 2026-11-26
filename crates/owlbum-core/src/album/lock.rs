@@ -126,9 +126,9 @@ pub fn judge(
 }
 
 /// Reads `<dir>/lock`. `Ok(None)` when there is none; a file that is not a
-/// lock (empty, or not the JSON above) reads as `Ok(None)` too, because
-/// Owlbum writes the lock by renaming a finished file into place, so such a
-/// file was never written by a running Owlbum.
+/// lock (empty, or not the JSON above) reads as `Ok(None)` too. It may be a
+/// lock another Owlbum has just created and is still filling, so
+/// `Album::open` reads it again a moment later before replacing it.
 pub fn read(dir: &Path) -> io::Result<Option<LockInfo>> {
     match std::fs::read(dir.join(LOCK_FILE)) {
         Ok(bytes) => Ok(serde_json::from_slice(&bytes).ok()),
@@ -204,9 +204,8 @@ impl AlbumLock {
             write_whole(dir, &info)?;
         } else {
             // `create_new` makes "is there a lock?" and "take it" one step.
-            // The file is written in place here; a reader that catches it
-            // empty reads no lock, and the writer of an empty lock is alive,
-            // so at worst both computers decide the same way a moment apart.
+            // The file is filled in place here; a reader that catches it
+            // empty reads it again a moment later (`Album::open`).
             let mut file = std::fs::OpenOptions::new()
                 .write(true)
                 .create_new(true)

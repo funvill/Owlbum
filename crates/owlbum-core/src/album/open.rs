@@ -183,7 +183,7 @@ impl Album {
         };
         let mut raced = false;
         let lock = loop {
-            let existing = match lock::read(&owl) {
+            let existing = match read_lock_settled(&owl) {
                 Ok(existing) => existing,
                 Err(e) if is_read_only(&e) => {
                     return Self::view_only(location, safety, ViewOnly::ReadOnly, None);
@@ -349,6 +349,23 @@ impl Album {
     pub fn db(&self) -> &AlbumDb {
         &self.db
     }
+}
+
+/// How long a lock file that is not (yet) a lock is given to be finished
+/// by the Owlbum that is creating it, before it is treated as junk.
+const UNFINISHED_LOCK_WAIT: Duration = Duration::from_millis(250);
+
+/// Reads the lock. A lock file that exists but does not read as a lock may
+/// be one another computer has just created and is still writing (a new lock
+/// is created empty with `create_new`, then filled), so it is read once more
+/// after [`UNFINISHED_LOCK_WAIT`].
+fn read_lock_settled(owl: &Path) -> io::Result<Option<lock::LockInfo>> {
+    let first = lock::read(owl)?;
+    if first.is_some() || !owl.join(lock::LOCK_FILE).exists() {
+        return Ok(first);
+    }
+    std::thread::sleep(UNFINISHED_LOCK_WAIT);
+    lock::read(owl)
 }
 
 /// True for the I/O errors that mean "this cannot be written here".
@@ -639,6 +656,37 @@ mod tests {
         assert_view_only_refuses_writes(&album, &text::album::view_only::locked("THERE"));
         drop(album);
         assert_eq!(snapshot(tmp.path()), before, "nothing written");
+    }
+
+    #[test]
+    fn a_lock_being_written_by_another_computer_is_waited_for() {
+        let tmp = tempfile::tempdir().unwrap();
+        existing_album(tmp.path());
+        let env = env();
+        let lock_path = owl(tmp.path()).join(LOCK_FILE);
+        std::fs::write(&lock_path, b"").unwrap();
+        let filler = {
+            let root = tmp.path().to_path_buf();
+            let seen = now_ms(&env);
+            std::thread::spawn(move || {
+                std::thread::sleep(Duration::from_millis(50));
+                write_lock(&root, "THERE", 7, seen);
+            })
+        };
+        let album = Album::open_with(tmp.path(), &none(), &env).unwrap();
+        filler.join().unwrap();
+        assert_eq!(album.safety().view_only, Some(ViewOnly::Locked));
+        assert_eq!(lock::read(&owl(tmp.path())).unwrap().unwrap().host, "THERE");
+    }
+
+    #[test]
+    fn a_lock_file_that_stays_junk_is_replaced() {
+        let tmp = tempfile::tempdir().unwrap();
+        existing_album(tmp.path());
+        std::fs::write(owl(tmp.path()).join(LOCK_FILE), b"{\"host\":").unwrap();
+        let album = Album::open_with(tmp.path(), &none(), &env()).unwrap();
+        assert!(!album.is_view_only());
+        assert_eq!(lock::read(&owl(tmp.path())).unwrap().unwrap().host, "HERE");
     }
 
     #[test]

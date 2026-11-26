@@ -35,7 +35,7 @@ If a folder inside an album later gets its own `.owlbum` (for example a subfolde
 
 The database is opened with `journal_mode = DELETE` and `synchronous = FULL`. Write-ahead logging is not used, because its extra files do not work on network shares and confuse sync tools. Between sessions the only file is `owlbum.sqlite`.
 
-The `lock` file is JSON: `{ "host", "pid", "user", "app_version", "opened_at", "heartbeat" }`, with times in milliseconds since the epoch. The holder rewrites `heartbeat` every 30 seconds (writing a temporary file and renaming it into place) and deletes the file on close. A new lock is created only if there is none, so two computers opening at once cannot both take it.
+The `lock` file is JSON: `{ "host", "pid", "user", "app_version", "opened_at", "heartbeat" }`, with times in milliseconds since the epoch. The holder rewrites `heartbeat` every 30 seconds (writing a temporary file and renaming it into place) and deletes the file on close. A new lock is created only if there is none (created empty, then filled), so two computers opening at once do not both take it; a lock file that does not read as a lock is read again after a quarter of a second before it counts as junk. Two computers can still both believe they hold the lock in rarer races (a heartbeat landing on another computer's fresh lock); the next heartbeat on each side settles it, and the one that loses turns view-only.
 
 | Situation on open | Result |
 |---|---|
@@ -50,7 +50,7 @@ Cases the table leaves out:
 
 - A lock of this host whose process is still running (another Owlbum, such as a development build) is judged by its heartbeat, like a lock of another host. A lock naming this very process is treated as its own and replaced.
 - Host names compare without regard to case. A heartbeat in the future (the other computer's clock is ahead) counts as just now.
-- A `lock` file that is empty or not the JSON above is replaced without asking: Owlbum always renames a finished lock into place, so no running Owlbum wrote it.
+- A `lock` file that is still empty or not the JSON above after the second read is replaced without asking.
 - **Open anyway** (`take_lock`) never replaces a lock whose heartbeat is under 2 minutes old; the album opens view-only (`locked`) instead.
 - If the heartbeat finds that the lock now names another computer (someone chose Open anyway there), the album becomes view-only (`locked`, naming that computer) from then on, and the lock file is left as the other computer wrote it.
 
@@ -63,7 +63,7 @@ The checks run in this order, and a view-only open writes nothing in the album f
 ### Backups and damage
 
 - On the first writable open of each calendar day (local time), the database is copied to `.owlbum/backup/owlbum-<YYYY-MM-DD>.sqlite` using SQLite's backup API, after the damage check and before any migration. The day an album is created has no copy. The newest three are kept, judged by the date in the name. The copy leaves out the `vectors` table (it is there, empty), which can be made again by tagging and would otherwise add hundreds of megabytes to each backup of a large album. A backup that fails does not stop the album opening.
-- On every open that would write, and on **Open view-only** without an old lock, `PRAGMA quick_check` runs (a file that is not an SQLite database at all counts as failing). If it fails, Owlbum does not write to the database. It offers: restore the newest backup that itself passes the check (the damaged file is renamed `owlbum.damaged-<YYYYMMDD-HHMMSS>.sqlite`, and a journal beside it `….sqlite-journal`, never deleted), or open view-only. Asked to restore when there is no sound backup, it answers `album_damaged` again and changes nothing.
+- On every open that would write, and on **Open view-only** without an old lock, `PRAGMA quick_check` runs (not when the album is already view-only for another reason: a damaged database there shows as read errors, not the `damaged` banner) (a file that is not an SQLite database at all counts as failing). If it fails, Owlbum does not write to the database. It offers: restore the newest backup that itself passes the check (the damaged file is renamed `owlbum.damaged-<YYYYMMDD-HHMMSS>.sqlite`, and a journal beside it `….sqlite-journal`, never deleted), or open view-only. Asked to restore when there is no sound backup, it answers `album_damaged` again and changes nothing.
 - If a file matching a sync tool's conflict naming sits beside the database (for example `owlbum (conflicted copy).sqlite`, `owlbum-PC-NAME.sqlite`), the banner warns that another computer changed this album at the same time and names the file. Owlbum does not merge it. The rule: a file in `.owlbum` whose name starts with `owlbum` and ends with `.sqlite` (any case), other than `owlbum.sqlite` and `owlbum.damaged-…`. When there are several, the first by name is named.
 
 ### Schema

@@ -41,6 +41,7 @@ use crate::album::root::AlbumLocation;
 use crate::album::schema::CURRENT_VERSION;
 use crate::album::{backup, locate};
 use crate::error::AppResult;
+use crate::index::{AlbumIndex, Touched};
 use crate::{AppError, ErrorCode, text};
 
 /// The choices `album_open` can carry after a question
@@ -125,11 +126,13 @@ impl std::fmt::Debug for Env {
     }
 }
 
-/// An open album: where it is, what safety found, and its database.
+/// An open album: where it is, what safety found, its database and its
+/// album index.
 #[derive(Debug)]
 pub struct Album {
     location: AlbumLocation,
     safety: Safety,
+    index: Arc<AlbumIndex>,
     // Field order matters on drop: the database (writer and readers) closes
     // before the lock file is removed.
     db: AlbumDb,
@@ -264,6 +267,7 @@ impl Album {
             Opened::Newer { db, .. } => {
                 drop(lock);
                 return Ok(Self {
+                    index: load_index(&db, &location.scope, true)?,
                     location,
                     safety: Safety {
                         view_only: Some(ViewOnly::Newer),
@@ -277,6 +281,7 @@ impl Album {
         };
         db.refuse_writes_when(lock.lost_to());
         Ok(Self {
+            index: load_index(&db, &location.scope, false)?,
             location,
             safety,
             db,
@@ -309,6 +314,7 @@ impl Album {
             AlbumDb::view_only(&location.database_path(), &message)?
         };
         Ok(Self {
+            index: load_index(&db, &location.scope, true)?,
             location,
             safety: Safety {
                 view_only: Some(reason),
@@ -365,6 +371,49 @@ impl Album {
     /// Raises the revision and answers the new one.
     pub fn next_revision(&self) -> u64 {
         self.revision.fetch_add(1, Ordering::SeqCst) + 1
+    }
+
+    /// The album index: the in-memory copy that filters, sorts, scores and
+    /// stacks read (docs/05-organising.md, "The album index").
+    pub fn index(&self) -> &Arc<AlbumIndex> {
+        &self.index
+    }
+
+    /// Runs `job` in a transaction on the writer thread, like
+    /// [`AlbumDb::write`], and keeps the album index in step with it.
+    ///
+    /// The job reports, through [`Touched`], every photo id whose `photos`
+    /// row it inserted, changed or deleted and every photo whose
+    /// `photo_people` rows it changed. After the commit, still on the writer
+    /// thread and before this answers, the index reads those rows again.
+    /// So when this returns, a query sees the change.
+    ///
+    /// **Every write that changes `photos` or `photo_people` goes through
+    /// here**, not through [`AlbumDb::write`]; a write that bypasses it
+    /// leaves the index stale until the next open. Never call it from
+    /// inside [`AlbumIndex::read`] or from inside a writer job.
+    ///
+    /// A job that answers `Err` or panics is rolled back and the index is
+    /// not touched. If reading the rows again fails after the commit, the
+    /// write still answers `Ok` (it happened); the index is then loaded
+    /// again whole.
+    pub fn write_photos<T, F>(&self, job: F) -> AppResult<T>
+    where
+        T: Send + 'static,
+        F: FnOnce(&rusqlite::Transaction<'_>, &mut Touched) -> AppResult<T> + Send + 'static,
+    {
+        unimplemented!("{}", std::any::type_name_of_val(&job))
+    }
+}
+
+/// Loads the album index from `db`. When `tolerant` (a view-only open,
+/// which may be of a newer or damaged database), a database that cannot be
+/// read gives an empty index rather than a failed open.
+fn load_index(db: &AlbumDb, scope: &str, tolerant: bool) -> AppResult<Arc<AlbumIndex>> {
+    match db.read(|conn| AlbumIndex::load(conn, scope)) {
+        Ok(index) => Ok(Arc::new(index)),
+        Err(_) if tolerant => Ok(Arc::new(AlbumIndex::empty(scope))),
+        Err(e) => Err(e),
     }
 }
 
@@ -1051,6 +1100,164 @@ mod tests {
             album.safety().conflict_file.as_deref(),
             Some("owlbum-PC-NAME.sqlite")
         );
+    }
+
+    // The album index (#12): loaded on open, kept in step by write_photos.
+
+    fn insert_reported(album: &Album, name: &str) -> AppResult<i64> {
+        let name = name.to_owned();
+        album.write_photos(move |tx, touched| {
+            tx.execute(
+                "INSERT INTO photos (rel_path, rel_dir, file_name, size, mtime_ms, file_key, thumb_key, kind, format, width, height, scan_version)
+                 VALUES (?1, '', ?1, 1, 1, 'fk', 'tk', 'image', 'jpeg', 1, 1, 1)",
+                [&name],
+            )
+            .map_err(sqlite_error(text::album::WRITING_DATABASE))?;
+            let id = tx.last_insert_rowid();
+            touched.photo(id);
+            Ok(id)
+        })
+    }
+
+    fn index_ids(album: &Album) -> Vec<u32> {
+        album
+            .index()
+            .read(|v| v.photos().iter().map(|p| p.id).collect())
+    }
+
+    #[test]
+    fn opening_loads_the_album_index() {
+        let tmp = tempfile::tempdir().unwrap();
+        existing_album(tmp.path());
+        let album = Album::open_with(tmp.path(), &none(), &env()).unwrap();
+        assert_eq!(album.index().len(), 1);
+    }
+
+    #[test]
+    fn a_scoped_open_indexes_the_scope_only() {
+        let tmp = tempfile::tempdir().unwrap();
+        {
+            let album = Album::open_with(tmp.path(), &none(), &env()).unwrap();
+            album
+                .db()
+                .write(|tx| {
+                    tx.execute_batch(
+                        "INSERT INTO photos (rel_path, rel_dir, file_name, size, mtime_ms, file_key, thumb_key, kind, format, width, height, scan_version)
+                         VALUES ('a.jpg', '', 'a.jpg', 1, 1, 'fk', 'tk', 'image', 'jpeg', 1, 1, 1),
+                                ('Trip/b.jpg', 'Trip', 'b.jpg', 1, 1, 'fk', 'tk', 'image', 'jpeg', 1, 1, 1);",
+                    )
+                    .map_err(sqlite_error(text::album::WRITING_DATABASE))
+                })
+                .unwrap();
+        }
+        let sub = tmp.path().join("Trip");
+        std::fs::create_dir_all(&sub).unwrap();
+        let album = Album::open_with(&sub, &none(), &env()).unwrap();
+        assert_eq!(index_ids(&album), [2]);
+        assert_eq!(album.index().read(|v| v.scope().to_owned()), "Trip");
+    }
+
+    #[test]
+    fn a_reported_write_is_in_the_index_when_it_answers() {
+        let tmp = tempfile::tempdir().unwrap();
+        let album = Album::open_with(tmp.path(), &none(), &env()).unwrap();
+        assert!(album.index().is_empty());
+        let id = insert_reported(&album, "a.jpg").unwrap();
+        assert_eq!(index_ids(&album), [u32::try_from(id).unwrap()]);
+        album
+            .write_photos(move |tx, touched| {
+                tx.execute("UPDATE photos SET star = 1 WHERE id = ?1", [id])
+                    .map_err(sqlite_error(text::album::WRITING_DATABASE))?;
+                touched.photo(id);
+                Ok(())
+            })
+            .unwrap();
+        assert!(album.index().read(|v| v.photos()[0].star()));
+    }
+
+    #[test]
+    fn a_reported_write_that_fails_changes_neither_the_database_nor_the_index() {
+        let tmp = tempfile::tempdir().unwrap();
+        let album = Album::open_with(tmp.path(), &none(), &env()).unwrap();
+        insert_reported(&album, "a.jpg").unwrap();
+        let g = album.index().generation();
+        let e = album
+            .write_photos(|tx, touched| -> AppResult<()> {
+                tx.execute("UPDATE photos SET star = 1", [])
+                    .map_err(sqlite_error(text::album::WRITING_DATABASE))?;
+                touched.photo(1);
+                Err(AppError::new(ErrorCode::ViewOnly, "no"))
+            })
+            .unwrap_err();
+        assert_eq!(e.code, ErrorCode::ViewOnly);
+        let e = album
+            .write_photos(|tx, touched| -> AppResult<()> {
+                tx.execute("UPDATE photos SET star = 1", [])
+                    .map_err(sqlite_error(text::album::WRITING_DATABASE))?;
+                touched.photo(1);
+                panic!("a bug in a job");
+            })
+            .unwrap_err();
+        assert_eq!(e.code, ErrorCode::Internal);
+        assert_eq!(album.index().generation(), g);
+        assert!(!album.index().read(|v| v.photos()[0].star()));
+        let stars: i64 = album
+            .db()
+            .read(|c| {
+                c.query_row("SELECT sum(star) FROM photos", [], |r| r.get(0))
+                    .map_err(sqlite_error(text::album::READING_DATABASE))
+            })
+            .unwrap();
+        assert_eq!(stars, 0);
+    }
+
+    #[test]
+    fn a_view_only_album_indexes_its_database_and_takes_rows_in_memory() {
+        let tmp = tempfile::tempdir().unwrap();
+        existing_album(tmp.path());
+        let mut env = env();
+        env.pretend_read_only = true;
+        let album = Album::open_with(tmp.path(), &none(), &env).unwrap();
+        assert_eq!(index_ids(&album), [1]);
+        let e = insert_reported(&album, "b.jpg").unwrap_err();
+        assert_eq!(e.code, ErrorCode::ViewOnly);
+        album.index().upsert(&[crate::index::PhotoFacts {
+            id: 2,
+            file_name: "b.jpg".into(),
+            kind: "image".into(),
+            ..crate::index::PhotoFacts::default()
+        }]);
+        assert_eq!(index_ids(&album), [1, 2]);
+    }
+
+    #[test]
+    fn an_in_memory_album_starts_with_an_empty_index() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut env = env();
+        env.pretend_read_only = true;
+        let album = Album::open_with(tmp.path(), &none(), &env).unwrap();
+        assert!(album.safety().in_memory);
+        assert!(album.index().is_empty());
+    }
+
+    #[test]
+    fn a_damaged_album_opened_view_only_still_opens() {
+        let tmp = tempfile::tempdir().unwrap();
+        existing_album(tmp.path());
+        damage(tmp.path());
+        let album = Album::open_with(
+            tmp.path(),
+            &OpenOptions {
+                view_only: true,
+                ..none()
+            },
+            &env(),
+        )
+        .unwrap();
+        assert_eq!(album.safety().view_only, Some(ViewOnly::Damaged));
+        // Whatever could be read is indexed; an unreadable table is an
+        // empty index, not a failed open.
+        assert!(album.index().len() <= 1);
     }
 
     // The option types are what the page sends and reads.

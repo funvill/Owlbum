@@ -344,3 +344,27 @@ fn a_drag_shows_the_outline_and_a_drop_opens_its_first_folder() {
     );
     assert!(opens.try_recv().is_err());
 }
+
+#[test]
+fn a_damaged_database_is_a_question_and_opens_view_only_when_chosen() {
+    let f = fixture();
+    let root = f.folder("Trip");
+    std::fs::create_dir_all(root.join(".owlbum")).unwrap();
+    std::fs::write(
+        root.join(".owlbum").join("owlbum.sqlite"),
+        b"not a database at all",
+    )
+    .unwrap();
+    let err = f.open(&root, json!(null)).unwrap_err();
+    assert_eq!(err["code"], "album_damaged");
+    assert_eq!(err["details"]["backup_date"], serde_json::Value::Null);
+    let opened = f.open(&root, json!({ "view_only": true })).unwrap();
+    assert_eq!(
+        opened.status.view_only,
+        Some(owlbum_core::album::ViewOnly::Damaged)
+    );
+    assert_eq!(
+        f.status().unwrap().view_only,
+        Some(owlbum_core::album::ViewOnly::Damaged)
+    );
+}

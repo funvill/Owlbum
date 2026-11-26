@@ -1995,3 +1995,62 @@ fn a_scoped_album_status_names_the_root_and_the_scope() {
     assert_eq!(status.scope, "problems");
     assert_eq!(status.name, "problems");
 }
+
+#[test]
+fn a_view_only_album_has_a_status_whatever_its_database_holds() {
+    use crate::album::ViewOnly;
+    use crate::scan::watch::WatchState;
+
+    // No database and a folder that cannot be written: in memory.
+    let mut fx = Fx::empty();
+    picture(&fx.path("a.png"), 1);
+    let root = fx.root.clone();
+    fx.album = None;
+    std::fs::remove_dir_all(root.join(".owlbum")).unwrap();
+    let env = Env {
+        pretend_read_only: true,
+        ..Env::real()
+    };
+    fx.reopen_with(&root, &OpenOptions::default(), &env);
+    let scanner = Scanner::new(fx.take_album(), fx.env.clone());
+    scanner.scan_and_wait(Request::default());
+    let status = AlbumStatus::of(&scanner, WatchState::Starting).unwrap();
+    assert_eq!(status.view_only, Some(ViewOnly::ReadOnly));
+    assert!(status.in_memory);
+    assert_eq!(status.photos, 1, "the index sees the rows held in memory");
+    drop(scanner);
+
+    // A file that is not a database, opened view-only: damaged.
+    let mut fx = Fx::empty();
+    let root = fx.root.clone();
+    fx.album = None;
+    std::fs::write(
+        root.join(".owlbum").join("owlbum.sqlite"),
+        b"not a database at all",
+    )
+    .unwrap();
+    let view_only = OpenOptions {
+        view_only: true,
+        ..OpenOptions::default()
+    };
+    fx.reopen(&root, &view_only);
+    let scanner = Scanner::new(fx.take_album(), fx.env.clone());
+    let status = AlbumStatus::of(&scanner, WatchState::Starting).unwrap();
+    assert_eq!(status.view_only, Some(ViewOnly::Damaged));
+    assert_eq!(status.unreadable, 0);
+    drop(scanner);
+
+    // A database made by a newer Owlbum.
+    let mut fx = Fx::empty();
+    let root = fx.root.clone();
+    fx.album = None;
+    let conn = rusqlite::Connection::open(root.join(".owlbum").join("owlbum.sqlite")).unwrap();
+    conn.execute_batch("DROP TABLE photos; PRAGMA user_version = 999;")
+        .unwrap();
+    drop(conn);
+    fx.reopen(&root, &OpenOptions::default());
+    let scanner = Scanner::new(fx.take_album(), fx.env.clone());
+    let status = AlbumStatus::of(&scanner, WatchState::Starting).unwrap();
+    assert_eq!(status.view_only, Some(ViewOnly::Newer));
+    assert_eq!((status.photos, status.unreadable), (0, 0));
+}

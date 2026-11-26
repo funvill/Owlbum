@@ -62,9 +62,18 @@ command! {
             {
                 tracing::warn!(target: "album", "the recent list could not be updated: {}", e.message);
             }
-            let status = session
-                .status()?
-                .ok_or_else(|| AppError::internal(text::album::OPENING_DATABASE))?;
+            let status = match session.status() {
+                Ok(Some(status)) => status,
+                // Nothing is left open that the page does not know of.
+                Ok(None) => {
+                    session.close();
+                    return Err(AppError::internal(text::album::OPENING_DATABASE));
+                }
+                Err(e) => {
+                    session.close();
+                    return Err(e);
+                }
+            };
             Ok(AlbumOpened {
                 status,
                 session: None,

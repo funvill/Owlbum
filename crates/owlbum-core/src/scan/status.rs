@@ -63,6 +63,7 @@ impl AlbumStatus {
         let album = scanner.album();
         let location = album.location();
         let safety = album.safety();
+        let view_only = safety.view_only;
         let report = scanner.report();
         let opened = location.opened();
         Ok(Self {
@@ -70,7 +71,7 @@ impl AlbumStatus {
             scope: location.scope.clone(),
             folder: opened.display().to_string(),
             name: display_name(&opened.display().to_string()),
-            view_only: safety.view_only,
+            view_only,
             in_memory: safety.in_memory,
             lock_host: safety.lock_host,
             conflict_file: safety.conflict_file,
@@ -80,7 +81,13 @@ impl AlbumStatus {
                 count: report.unsupported.iter().map(|u| u.count).sum(),
                 labels: report.unsupported.into_iter().map(|u| u.label).collect(),
             },
-            unreadable: scanner.scan_errors(0, 0)?.total,
+            unreadable: match scanner.scan_errors(0, 0) {
+                Ok(errors) => errors.total,
+                // A view-only album may be of a newer or damaged database
+                // that cannot be read; it opens all the same.
+                Err(_) if view_only.is_some() => 0,
+                Err(e) => return Err(e),
+            },
             scan: ScanStatus {
                 watching: watch.may_watch(),
                 ..scanner.status()

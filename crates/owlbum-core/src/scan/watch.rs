@@ -11,8 +11,8 @@
 //! start, such as the Linux inotify watch limit, or a watch that fails
 //! later) there is no watch, `album_status` says `watching: false`, and
 //! the album is rescanned when the window gains focus and the last scan
-//! ended over 5 minutes ago ([`AlbumWatch::focused`]). A watch lost because
-//! its folder went away (an unplugged drive, a share that dropped) is
+//! ended over 5 minutes ago ([`AlbumWatch::focused`]). Only a watch lost
+//! because its folder went away (an unplugged drive, a share that dropped) is
 //! started again on focus once the folder is back, followed by a whole
 //! scan, since changes made meanwhile were not seen.
 
@@ -102,10 +102,12 @@ pub enum WatchState {
     /// The folder is on a network share: no watch is set.
     NetworkShare,
     /// The watch would not start (for example the Linux inotify watch
-    /// limit). Not tried again while the album is open.
+    /// limit), or reported an error later while its folder was still
+    /// there. Not tried again while the album is open: trying would walk
+    /// the tree and fail the same way on every focus.
     Failed,
-    /// The watch reported an error, or its folder went away. Tried again
-    /// on window focus.
+    /// The watched folder went away (an unplugged drive, a dropped share,
+    /// the folder renamed). Tried again on window focus once it is back.
     Lost,
 }
 
@@ -378,7 +380,13 @@ impl Job {
         {
             self.ask(due);
         }
-        self.set(WatchState::Lost);
+        // Only a folder that went away can come back; an error with the
+        // folder still there would recur.
+        self.set(if self.folder.is_dir() {
+            WatchState::Failed
+        } else {
+            WatchState::Lost
+        });
     }
 
     fn ask(&self, due: Due) {

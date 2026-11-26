@@ -731,12 +731,12 @@ Owlbum's own file actions (Save into the file, Save as…, moving to the Recycle
 |---|---|---|
 | Network share | Windows: a UNC path or a drive of type remote. Linux: the mount's file system is `nfs`, `nfs4`, `cifs`, `smb3`, `fuse.sshfs`, `davfs` or `9p`. | No watch is set. |
 | Watch limit reached (Linux inotify), or the watch fails to start | `notify` returns an error. | No watch. |
-| The watcher reports an error later | An error event, except "path not found" for a folder that vanished while the watch was being added to it while the scope is still there. | The watch is dropped. Folders already collected are still scanned. |
+| The watcher reports an error later (including the inotify limit reached while adding the watches of the tree, or for a folder made later) | An error event, except "path not found" for a folder that vanished while the watch was being added to it while the scope is still there. | The watch is dropped. Folders already collected are still scanned. |
 | The watched folder goes away (an unplugged drive, a share that dropped, the folder renamed) | An event for the folder itself, or the check every 5 seconds that it is still a folder (not every system tells a watch that its own folder went away). | The watch is dropped. No scan is asked for, so nothing is marked missing. |
 
 In all these cases Owlbum falls back to **rescan on window focus**: when the window gains focus and the last scan ended more than 5 minutes ago, a whole-scope scan starts. The status line says once per session: "Owlbum can't watch this folder for changes. It checks when you come back to the window; use Rescan to check now."
 
-A watch that was dropped (the last two rows) is started again on window focus once its folder is back, followed by a whole-scope scan, since changes made meanwhile were not seen. A network share is never watched, and a watch that would not start is not tried again while the album is open: the inotify limit does not go away by itself.
+A watch dropped because its folder went away (the last row) is started again on window focus once the folder is back, followed by a whole-scope scan, since changes made meanwhile were not seen. A network share is never watched, and a watch that would not start or reported an error while its folder was there is not tried again while the album is open: the inotify limit does not go away by itself, and trying would walk the whole tree on every focus.
 
 ### Manual Rescan
 

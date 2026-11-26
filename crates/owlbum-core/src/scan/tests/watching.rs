@@ -238,6 +238,37 @@ fn a_watch_that_will_not_start_falls_back_to_rescanning_on_focus() {
     assert_eq!(w.watch().state(), WatchState::Failed);
 }
 
+fn errs_after_starting(
+    _: &Path,
+    mut handler: Box<dyn FnMut(notify::Result<notify::Event>) + Send>,
+) -> notify::Result<Box<dyn std::any::Any + Send>> {
+    // As inotify does when the limit is reached while adding the watches
+    // of a recursive tree, or for a folder made later.
+    handler(Err(notify::Error::new(notify::ErrorKind::MaxFilesWatch)));
+    Ok(Box::new(()))
+}
+
+#[test]
+fn a_watch_that_reports_an_error_later_is_dropped_and_not_tried_again() {
+    let env = WatchEnv {
+        start: errs_after_starting,
+        ..quick()
+    };
+    let w = Watched::new(&["a/1.jpg"], env);
+    eventually("the watch to be dropped", || {
+        w.watch().state() == WatchState::Failed
+    });
+    assert!(!w.scanner.status().watching);
+    w.settle();
+    let before = w.scans_finished();
+    // Focus within the 5 minutes: no new watch, no scan.
+    w.watch().focused();
+    w.watch().focused();
+    w.scanner.wait();
+    assert_eq!(w.watch().state(), WatchState::Failed);
+    assert_eq!(w.scans_finished(), before);
+}
+
 #[test]
 fn focus_rescans_only_when_the_last_scan_ended_long_enough_ago() {
     let env = WatchEnv {
@@ -305,4 +336,43 @@ fn a_watched_folder_that_disappears_loses_no_rows_and_is_watched_again_when_back
     // And it watches again.
     picture(&w.fx.path("s/b/4.jpg"), 4);
     eventually("a file added after", || w.row("s/b/4.jpg").is_some());
+}
+
+/// The real inotify limit. Run inside a user namespace with a low limit,
+/// which leaves the machine's own limit alone:
+///
+/// ```text
+/// unshare -Ur sh -c 'echo 40 > /proc/sys/user/max_inotify_watches &&
+///   cargo test -p owlbum-core --lib inotify_limit -- --ignored --nocapture'
+/// ```
+#[cfg(target_os = "linux")]
+#[test]
+#[ignore = "needs a low inotify limit; see the comment"]
+fn inotify_limit_falls_back_without_losing_rows() {
+    // Reached while adding the watches of the tree.
+    let many: Vec<String> = (0..100).map(|i| format!("f{i}/x.jpg")).collect();
+    let rels: Vec<&str> = many.iter().map(String::as_str).collect();
+    let w = Watched::new(&rels, quick());
+    w.settle();
+    let state = w.watch().state();
+    eprintln!("limit reached at start: {state:?}");
+    assert_eq!(state, WatchState::Failed);
+    assert!(!w.scanner.status().watching);
+    assert!(!w.row("f0/x.jpg").unwrap().1);
+    drop(w);
+
+    // Reached later, by folders made after the watch started.
+    let w = Watched::new(&["a/1.jpg"], quick());
+    assert_eq!(w.watch().state(), WatchState::Watching);
+    for i in 0..100 {
+        std::fs::create_dir_all(w.fx.path(&format!("new{i}"))).unwrap();
+    }
+    picture(&w.fx.path("new0/y.jpg"), 1);
+    eventually("the watch to be dropped", || {
+        w.watch().state() != WatchState::Watching
+    });
+    w.settle();
+    eprintln!("limit reached later: {:?}", w.watch().state());
+    assert_eq!(w.watch().state(), WatchState::Failed);
+    assert!(!w.row("a/1.jpg").unwrap().1);
 }

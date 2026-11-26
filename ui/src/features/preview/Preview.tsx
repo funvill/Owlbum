@@ -8,10 +8,11 @@
 // preloading (#21) replace that order with a cache lookup; the stage takes
 // its pictures as addresses, so the cache only changes what is passed in.
 
-import { useCallback, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type Ref } from "react";
+import { useCallback, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type Ref } from "react";
 import { fullUrl, thumbUrl } from "../../api";
 import type { PhotoAt } from "../../api/bindings/PhotoAt";
 import type { PhotoDetail } from "../../api/bindings/PhotoDetail";
+import type { Row } from "../../api/bindings/Row";
 import { previewText as t } from "../../text/preview";
 import { useSettingsStore } from "../app";
 import { gridBlocks, useGridStore } from "../grid";
@@ -40,6 +41,9 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
     useCallback((listener: () => void) => gridBlocks().subscribe(listener), []),
     () => gridBlocks().version,
   );
+  // The last row seen for the current photo: a re-run that moves it, or a
+  // scroll that lets its block go, must not blank the preview.
+  const [held, setHeld] = useState<Row | null>(null);
 
   if (current === null && pending === null) {
     return (
@@ -54,11 +58,13 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
   // Only a row that is this photo's: the index may be an old result's. A
   // step waiting for its row shows a placeholder, never the photo it left.
   const candidate = current === null || pending !== null ? undefined : blocks.row(current.index);
-  const row = candidate?.id === current?.id ? candidate : undefined;
+  const found = candidate !== undefined && candidate.id === current?.id ? candidate : undefined;
+  if (found !== undefined && found !== held) setHeld(found);
+  const row = found ?? (pending === null && held !== null && held.id === current?.id ? held : undefined);
   if (current === null || row === undefined) {
     return (
       <section className="ow-preview" aria-label={t.region} aria-busy="true">
-        <div className="ow-preview__stage" aria-label={t.loading} />
+        <div className="ow-preview__stage" />
       </section>
     );
   }
@@ -70,6 +76,7 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
       <div className="ow-preview__stage">
         <ZoomStage
           key={`${row.id}:${row.thumb_key}`}
+          ready={row.thumb_key !== ""}
           pictures={{
             small: thumbUrl(row.thumb_key, "s"),
             medium: thumbUrl(row.thumb_key, "m"),

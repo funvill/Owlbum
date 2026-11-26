@@ -1,10 +1,10 @@
 /* docs/04-browsing.md, "Zoom and pan" and "Mini map". */
 
+/* Fills the preview's stage (or the viewer) whatever its layout. */
 .ow-zoom {
-  position: relative;
+  position: absolute;
+  inset: 0;
   overflow: hidden;
-  width: 100%;
-  height: 100%;
   touch-action: none;
   user-select: none;
 }
@@ -35,6 +35,8 @@
   inset: 0;
   width: 100%;
   height: 100%;
+  /* The shape is the row's aspect; a picture of another shape is not stretched. */
+  object-fit: contain;
   opacity: 0;
   pointer-events: none;
 }

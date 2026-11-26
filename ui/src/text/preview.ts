@@ -4,8 +4,6 @@
 export const previewText = {
   region: "Preview",
   hint: "Select a photo to see it here.",
-  /** The stage while the current photo's row has not arrived. */
-  loading: "Loading…",
   selected: (n: number) => `${n} selected ·`,
   starred: "Starred",
   hidden: "Hidden",

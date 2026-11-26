@@ -8,6 +8,7 @@ import { createQueryFake, type FakePhoto } from "../../api/fake/query";
 import { handlerGaps, row as keyRow } from "../../keys";
 import { useSettingsStore } from "../app";
 import { resetGrid, useGridStore } from "../grid";
+import { seriousFindings } from "../../test/axe";
 import { Review } from "../album/Review";
 import { Caption } from "./Caption";
 import { ZOOM_KEY_IDS, zoomKeyHandlers, type ZoomHandle } from "./ZoomStage";
@@ -41,9 +42,12 @@ function photos(n: number, change: (p: FakePhoto) => FakePhoto = (p) => p): Fake
   );
 }
 
+let album: ReturnType<typeof createQueryFake>;
+
 function setup(list: FakePhoto[] = photos(5), detail = (id: number) => fakeDetail(id, { width: 4000, height: 2000 })) {
+  album = createQueryFake(list);
   fake = createFakeApi({
-    ...createQueryFake(list).handlers,
+    ...album.handlers,
     photo_detail: ({ id }) => detail(id),
   });
   setApi(fake);
@@ -201,6 +205,22 @@ describe("Preview", () => {
     wheel(-100);
     expect(zoomOf()).toBe(1);
     expect(miniMap()).toBeNull();
+  });
+
+  it("keeps showing the photo when a re-run moves it", async () => {
+    await show(3);
+    act(() => void album.change((list) => [{ id: 99, rel_path: "day/a0.jpg", width: 4000, height: 2000 }, ...list]));
+    act(() => void grid().refresh());
+    await waitFor(() => expect(grid().current).toEqual({ id: 3, index: 3 }));
+    expect(images().every((s) => s!.includes("tk-3"))).toBe(true);
+    expect(images().length).toBeGreaterThan(0);
+  });
+
+  it("has no serious accessibility findings, at fit or zoomed in", async () => {
+    await show(2);
+    expect(await seriousFindings(preview())).toEqual([]);
+    wheel(-100);
+    expect(await seriousFindings(preview())).toEqual([]);
   });
 
   it("centres the view on the point pressed in the mini map", async () => {

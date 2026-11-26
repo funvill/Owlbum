@@ -404,10 +404,37 @@ describe("100,000 photos", () => {
     expect(most).toBeLessThanOrEqual(FETCHES);
     expect(tiles().length).toBeLessThanOrEqual(drawnMax);
 
+    // Rows are placed near the drawn window, never at their real height.
+    for (const row of screen.getAllByRole("row")) {
+      const y = Number(/translateY\((-?[\d.]+)px\)/.exec(row.style.transform)?.[1]);
+      expect(y).toBeLessThan(100 * l.stride);
+    }
+
     // The middle, then back.
     await scrollTo((l.height - 600) / 2);
     await waitFor(() => expect(tiles()[tiles().length >> 1]).toHaveAccessibleName(/IMG_\d+\.jpg/));
     expect(windows().length).toBeLessThan(12);
+  }, 30_000);
+
+  it("keeps the view still above the height limit when a scan adds photos", async () => {
+    const album = useAlbum(all);
+    render(<Grid />);
+    const grid = await screen.findByRole("grid");
+    await waitFor(() => expect(grid).toHaveAttribute("aria-rowcount", String(N / 2)), { timeout: 10_000 });
+    const l = gridLayout(420, N, 160);
+    await scrollTo((l.height - 600) / 2);
+    const firstRow = () => screen.getAllByRole("row")[0]!.getAttribute("aria-rowindex");
+    const before = firstRow();
+    const revision = album.change((ps) => [
+      ...ps,
+      ...Array.from({ length: 2000 }, (_, i) => ({ id: N + 1 + i, rel_path: `new/${i}.jpg`, date: "2099-01-01T00:00:00" })),
+    ]);
+    fake.emit("album_changed", { reason: "scan", revision });
+    await waitFor(() => expect(grid).toHaveAttribute("aria-rowcount", String((N + 2000) / 2)), { timeout: 10_000 });
+    await act(async () => {
+      await new Promise((r) => requestAnimationFrame(() => r(null)));
+    });
+    expect(firstRow()).toBe(before);
   }, 30_000);
 
   it("moves about one row per wheel notch above the height limit", async () => {

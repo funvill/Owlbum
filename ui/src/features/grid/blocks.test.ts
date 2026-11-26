@@ -152,6 +152,15 @@ describe("block store", () => {
     expect(store.row(5)).toBeUndefined();
   });
 
+  it("forgets every row, old ones included, when cleared", async () => {
+    const { store, answer } = setup(1000);
+    store.want({ first: 0, last: 10, span: 10, direction: 1, current: null, anchor: null });
+    await answer(0);
+    store.clear();
+    store.reset("t2", 1000);
+    expect(store.row(3)).toBeUndefined();
+  });
+
   it("throws away a reply for an older token", async () => {
     const { store, asked } = setup(1000);
     store.want({ first: 0, last: 10, span: 10, direction: 1, current: null, anchor: null });

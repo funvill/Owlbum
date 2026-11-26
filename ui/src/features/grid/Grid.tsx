@@ -81,6 +81,23 @@ export function Grid(props: GridProps) {
     Object.assign(live.current, { layout, size, count, current, anchor });
   });
 
+  /** The first row drawn, as committed: rows are placed relative to it. */
+  const drawnFirst = useRef(0);
+
+  /**
+   * Moves the layer of rows so the drawn rows sit where they belong in the
+   * box. Rows are placed from the first drawn row, so no transform is ever
+   * near the real height of a very tall result.
+   */
+  const placeLayer = useCallback(() => {
+    const el = boxRef.current;
+    const layer = layerRef.current;
+    if (el === null || layer === null) return;
+    const v = live.current;
+    const y = el.scrollTop - v.real + PAD + drawnFirst.current * v.layout.stride;
+    layer.style.transform = `translateY(${y}px)`;
+  }, []);
+
   /** Reads the scroll position and works out what is drawn and wanted. */
   const update = useCallback(() => {
     const el = boxRef.current;
@@ -90,7 +107,7 @@ export function Grid(props: GridProps) {
     const real = realScroll(el.scrollTop, v.layout, viewport);
     if (real !== v.real) v.direction = real > v.real ? 1 : -1;
     v.real = real;
-    if (layerRef.current !== null) layerRef.current.style.transform = `translateY(${el.scrollTop - real}px)`;
+    placeLayer();
     const next = visibleRange(v.layout, real, viewport, v.count);
     setRange((before) => (sameRange(before, next) ? before : next));
     blocks.want({
@@ -101,7 +118,7 @@ export function Grid(props: GridProps) {
       current: v.current?.index ?? null,
       anchor: v.anchor?.index ?? null,
     });
-  }, [blocks]);
+  }, [blocks, placeLayer]);
 
   /** Sets the real scroll position. */
   const scrollReal = useCallback((real: number) => {
@@ -167,6 +184,11 @@ export function Grid(props: GridProps) {
         const to = scrollToShow(v.current.index, layout, v.real, v.size.height);
         if (to !== null) scrollReal(to);
       }
+    } else {
+      // The count or the viewport changed. Above MAX_SCROLL that changes the
+      // scale, so the box's scrollTop is set again for the same real place:
+      // a scan adding photos does not move the view.
+      scrollReal(v.real);
     }
     update();
   }, [layout, size.height, update, scrollReal]);
@@ -187,6 +209,12 @@ export function Grid(props: GridProps) {
   useEffect(() => {
     update();
   }, [current, anchor, update]);
+
+  // New rows are drawn: place the layer for them.
+  useLayoutEffect(() => {
+    drawnFirst.current = range.firstRow;
+    placeLayer();
+  }, [range, layout, placeLayer]);
 
   const onScroll = () => {
     const v = live.current;
@@ -267,7 +295,7 @@ export function Grid(props: GridProps) {
         role="row"
         aria-rowindex={r + 1}
         className="ow-grid__row"
-        style={{ height: layout.side, transform: `translateY(${PAD + r * layout.stride}px)` }}
+        style={{ height: layout.side, transform: `translateY(${(r - range.firstRow) * layout.stride}px)` }}
       >
         {cells}
       </div>,

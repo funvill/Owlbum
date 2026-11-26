@@ -87,6 +87,19 @@ export class BlockStore {
     if (this.last !== null) this.want(this.last);
   }
 
+  /** Forgets everything, old rows included (the album closed). */
+  clear(): void {
+    this.token = "";
+    this.count = 0;
+    this.blocks = new Map();
+    this.stale = new Map();
+    this.staleCount = 0;
+    this.asking = new Set();
+    this.queue = [];
+    this.last = null;
+    this.changed();
+  }
+
   /** The same result, but its rows changed (an edit): ask again, drawing the old ones meanwhile. */
   refresh(): void {
     for (const [b, rows] of this.blocks) this.stale.set(b, rows);

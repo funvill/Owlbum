@@ -100,7 +100,7 @@ function newBlocks(): BlockStore {
         // The token expired: run the query again. The new result's rows are
         // then asked for again, which repeats the call. The re-run is spaced
         // like any other, so a backend that keeps expiring cannot spin.
-        if (isAppError(e) && e.code === "query_expired") rerunExpired();
+        if (isAppError(e) && e.code === "query_expired" && token === blocks.token) rerunExpired();
         throw e;
       }
     },
@@ -222,7 +222,7 @@ export const useGridStore = create<GridState>()((set, get) => {
         clearTimeout(s.rerunTimer);
         if (s.frame !== undefined) cancelAnimationFrame(s.frame);
       }
-      blocks.reset("", 0);
+      blocks.clear();
       set({ result: null, error: null, query: defaultQuery(), scroll: null, ...empty });
     },
 

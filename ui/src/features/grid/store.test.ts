@@ -191,6 +191,24 @@ describe("thumbnail size", () => {
   });
 });
 
+describe("closing the album", () => {
+  it("draws none of the closed album's rows in the next one", async () => {
+    await grid().start();
+    gridBlocks().want({ first: 0, last: 9, span: 10, direction: 1, current: null, anchor: null });
+    await vi.waitFor(() => expect(gridBlocks().row(0)?.rel_path).toBe("p1.jpg"));
+    grid().stop();
+    const next = createQueryFake([{ id: 50, rel_path: "other.jpg" }]);
+    fake = createFakeApi({
+      ...next.handlers,
+      query_window: () => new Promise(() => {}),
+    });
+    setApi(fake);
+    await grid().start();
+    expect(grid().result?.count).toBe(1);
+    expect(gridBlocks().row(0)).toBeUndefined();
+  });
+});
+
 describe("expired tokens", () => {
   it("runs the query again and repeats the window, without spinning when it keeps expiring", async () => {
     await grid().start();

@@ -630,6 +630,26 @@ fn a_huge_jpeg_header_gives_too_large() {
     }
 }
 
+#[test]
+fn wide_pictures_are_not_capped_by_a_decoder() {
+    // Only Owlbum's own pixel limit refuses a picture: a long, thin one well
+    // under it decodes in full.
+    let dir = TempDir::new().unwrap();
+    let img = RgbImage::from_fn(20_000, 8, |x, _| Rgb([(x % 256) as u8, 0, 0]));
+    let files = [
+        ("wide.jpg", jpeg_bytes(&img)),
+        (
+            "wide.png",
+            encode(&image::DynamicImage::ImageRgb8(img), ImageFormat::Png),
+        ),
+    ];
+    for (name, bytes) in files {
+        let path = write(&dir, name, &bytes);
+        let px = handler_for(&path).handler.working(&path).unwrap();
+        assert_eq!((px.width, px.height), (20_000, 8), "{name}");
+    }
+}
+
 // ---- Leniency, files closed, cost ----
 
 #[test]

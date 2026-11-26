@@ -130,6 +130,9 @@ impl MediaHandler for Jxl {
         let (image, render) = render(file)?;
         let layout = layout_of(&image)?;
         let (width, height, channels, buf) = samples::<u8>(&render);
+        if channels != layout.channels() {
+            return Err(decode_error());
+        }
         let mut rgba = Vec::with_capacity(width as usize * height as usize * 4);
         for px in buf.chunks_exact(channels) {
             match layout {

@@ -6,7 +6,9 @@
 //! `unsupported`. The scanner therefore records such a file as an
 //! unreadable photo with a plain reason instead of skipping it silently.
 //! The issue that builds the real handler replaces the static in the
-//! registry and deletes this one.
+//! registry and deletes this one. It must also raise `SCAN_VERSION`, so
+//! that the rows these placeholders gave an `unsupported` error are read
+//! again by the next scan.
 
 use std::path::Path;
 

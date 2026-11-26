@@ -235,7 +235,7 @@ These are the starting choices. A prototype may replace one; the replacement is 
 | Need | Choice | Notes |
 |---|---|---|
 | Database | `rusqlite` with bundled SQLite, FTS5 enabled | |
-| JPEG decode and resize | `zune-jpeg`, `fast_image_resize`; `image` for other formats | |
+| JPEG decode and resize | `zune-jpeg` (through `image`, which uses it as its JPEG decoder), `fast_image_resize`; `image` for other formats | |
 | JPEG encode | `mozjpeg` or `image`'s encoder | Chosen by measurement in the thumbnail work. |
 | EXIF and video metadata | `nom-exif` | Read only. |
 | JPEG XL | `jxl-oxide` | |

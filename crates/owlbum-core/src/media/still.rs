@@ -75,9 +75,12 @@ impl Still {
     /// For JPEG, reads the size from the markers. `image` needs the whole
     /// stream to be well formed before it reports a size, and the pixel
     /// limit must hold even for a file whose header alone is readable.
+    /// A marker walk that fails is not an error here: the decoder, which is
+    /// more lenient, tries anyway.
     fn check_jpeg_header(&self, file: &Path) -> Result<(), MediaError> {
-        if self.format == StillFormat::Jpeg {
-            let h = headers::jpeg(&mut Self::open(file)?).map_err(self.decode_err())?;
+        if self.format == StillFormat::Jpeg
+            && let Ok(h) = headers::jpeg(&mut Self::open(file)?)
+        {
             check_size(h.width, h.height)?;
         }
         Ok(())

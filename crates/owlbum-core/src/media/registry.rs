@@ -679,7 +679,10 @@ mod tests {
         }
         assert!(
             offenders.is_empty(),
-            "media extensions belong in media::registry only:\n{}",
+            "media extensions belong in media::registry only. Ask the registry \
+             (format_of, format_by_id, identify) in Rust or `app_formats` on the \
+             page; or, for a file that only looks like a list (generated code, \
+             test data), add it to GUARD_ALLOW with a reason:\n{}",
             offenders.join("\n")
         );
     }

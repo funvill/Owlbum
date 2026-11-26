@@ -137,3 +137,60 @@ fn opening_scans_and_rescan_scans_again_with_progress_events() {
     invoke(&window, "album_scan_cancel", serde_json::json!({})).expect("no error");
     app.state::<owlbum_lib::session::Session>().close();
 }
+
+#[test]
+fn a_file_added_to_the_open_album_is_scanned_with_reason_watch() {
+    use owlbum_core::album::{AlbumChanged, ChangeReason};
+    use owlbum_core::scan::watch::WatchEnv;
+    use owlbum_core::scan::watch::intake::Timing;
+
+    let tmp = tempfile::tempdir().unwrap();
+    let fixture = owlbum_fixtures::trip(&tmp.path().join("trip")).unwrap();
+    let (app, _window) = app_window();
+    let events = progress_events(&app);
+    let (send, changes) = mpsc::channel();
+    app.listen_any("album_changed", move |event| {
+        let c: AlbumChanged = serde_json::from_str(event.payload()).unwrap();
+        let _ = send.send(c);
+    });
+
+    let album = Album::open(&fixture.root, &OpenOptions::default()).unwrap();
+    let env = owlbum_core::scan::ScanEnv::new(std::sync::Arc::new(
+        owlbum_lib::events::TauriEmitter(app.handle().clone()),
+    ));
+    let watch = WatchEnv {
+        timing: Timing {
+            quiet: Duration::from_millis(200),
+            most: Duration::from_secs(2),
+            max_folders: 500,
+        },
+        ..WatchEnv::default()
+    };
+    let session = app.state::<owlbum_lib::session::Session>();
+    session.open_with(album, env, watch);
+    next_finished(&events);
+    while changes.try_recv().is_ok() {}
+    let watching = |s: &owlbum_lib::session::Session| {
+        s.with(|open| Ok(open.scanner().status().watching)).unwrap()
+    };
+    let until = std::time::Instant::now() + Duration::from_secs(30);
+    while !watching(&session) {
+        assert!(std::time::Instant::now() < until, "the watch starts");
+        std::thread::sleep(Duration::from_millis(50));
+    }
+
+    let copy_from = fixture.root.join(&fixture.files[0].rel_path);
+    std::fs::copy(copy_from, fixture.root.join("added.jpg")).unwrap();
+    let change = loop {
+        let c = changes
+            .recv_timeout(Duration::from_secs(30))
+            .expect("album_changed arrives");
+        if c.reason == ChangeReason::Watch {
+            break c;
+        }
+    };
+    assert!(change.revision > 0);
+    // Focus while watched starts nothing.
+    session.focused();
+    session.close();
+}

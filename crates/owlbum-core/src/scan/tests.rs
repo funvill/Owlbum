@@ -23,6 +23,9 @@ use crate::events::Emitter;
 use crate::media::{MediaError, MediaFormat, Metadata, Pixels, VideoInfo};
 use crate::{ErrorCode, text};
 
+mod targeted;
+mod watching;
+
 // ---- Helpers ----
 
 /// Records every event with the moment it was sent.
@@ -246,7 +249,7 @@ impl Fx {
     /// A manual Rescan.
     fn rescan(&self) -> ScanSummary {
         self.cancel.store(false, Ordering::SeqCst);
-        self.run(Request { manual: true })
+        self.run(Request::manual())
     }
 
     fn path(&self, rel: &str) -> PathBuf {
@@ -1567,7 +1570,7 @@ fn the_scanner_runs_one_scan_at_a_time_and_queues_one_more() {
     scanner.request(Request::default());
     wait_until_scanning(&scanner);
     scanner.request(Request::default());
-    scanner.request(Request { manual: true });
+    scanner.request(Request::manual());
     scanner.wait();
     let finished = fx
         .events

@@ -326,7 +326,7 @@ The page calls `query_run(query, keep?)` whenever the query changes: view, timel
 - **Coalescing.** Changes within one animation frame make one call. Re-runs caused by `album_changed` are limited to one per second while a scan or tagging is running, and one per 100 ms otherwise. A re-run is skipped when the event's `revision` is not newer than the revision of the result the page already holds.
 - **Late answers.** Each call carries a counter. An answer to anything but the newest call is thrown away.
 - **No blank flash.** Until the first rows of a new result arrive, the page keeps drawing the rows it already has at their old places. The total height changes at once.
-- **Expired tokens.** Any `query_` command that answers `query_expired` makes the page re-run the query once and repeat the call.
+- **Expired tokens.** Any `query_` command that answers `query_expired` makes the page re-run the query once and repeat the call. For the grid's blocks, the re-run is spaced like a re-run after `album_changed`, and the new result's blocks are then asked for again, which is the repeat; a backend that kept expiring could otherwise keep the page busy for ever.
 
 ### Blocks of rows
 
@@ -374,7 +374,7 @@ Rust settles the current photo in this order. [Organising](05-organising.md#wher
 
 ## The grid
 
-The grid is a scroll box with 12px padding (`--space-4`), an 8px gap between tiles (`--space-3`) and background `--stage`. Inside is one box as tall as the whole content. Only tiles in view, plus the overscan, exist as elements. Each tile is placed with `transform: translate(x, y)` and has `contain: strict`.
+The grid is a scroll box with 12px padding (`--space-4`), an 8px gap between tiles (`--space-3`) and background `--stage`. Inside is one box as tall as the whole content. Only tiles in view, plus the overscan, exist as elements. Each row of tiles is a `role=row` box placed with `transform: translateY(y)`; each tile inside it is placed with `transform: translateX(x)` and has `contain: strict`. The rows are what [Visual design](09-visual-design.md#accessibility-baseline) asks of the grid's roles.
 
 ### Layout maths
 
@@ -395,7 +395,7 @@ tile i     → x = (i mod cols) × stride, y = floor(i / cols) × stride
 
 - **Measuring.** The box is watched for size changes. A scroll is handled once per animation frame.
 - **A tile's side** is never smaller than the chosen thumbnail size unless the column is narrower than one tile.
-- **Very tall content.** Browsers stop laying out elements beyond a height limit. When `total` is more than `MAX_SCROLL = 8,000,000` px, the inner box is made exactly `MAX_SCROLL` tall and positions are scaled: `top = scrollTop × (total − viewport) / (MAX_SCROLL − viewport)`. Wheel and key scrolling are then applied by the page in real pixels (the wheel's delta is divided by the same ratio before it is added to `scrollTop`), so one wheel notch still moves about one row. Dragging the scrollbar moves in proportion. Below the limit none of this applies.
+- **Very tall content.** Browsers stop laying out elements beyond a height limit. When `total` is more than `MAX_SCROLL = 8,000,000` px, the inner box is made exactly `MAX_SCROLL` tall (plus the padding) and positions are scaled: the real scroll position is `scrollTop × (total + 24 − viewport) / (MAX_SCROLL + 24 − viewport)`, and `top` is worked out from it as above, so the last row sits exactly at the bottom at the end of the bar. Wheel and key scrolling are then applied by the page in real pixels (the wheel's delta is divided by the same ratio before it is added to `scrollTop`), so one wheel notch still moves about one row. Dragging the scrollbar moves in proportion. Below the limit none of this applies.
 
 ### Keeping the current photo in view
 

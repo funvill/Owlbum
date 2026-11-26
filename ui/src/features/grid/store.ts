@@ -11,7 +11,6 @@ import type { PhotoAt } from "../../api/bindings/PhotoAt";
 import type { Query } from "../../api/bindings/QueryShape";
 import type { QueryResult } from "../../api/bindings/QueryResult";
 import { QueryClient, defaultQuery, rerunFor } from "../../api/query";
-import { useScanStore } from "../album";
 import { useSettingsStore } from "../app";
 import { BlockStore } from "./blocks";
 import { clampThumbSize, THUMB_DEFAULT } from "./layout";
@@ -41,7 +40,7 @@ export interface ScrollRequest {
 export interface GridOptions {
   /**
    * Whether a scan or tagging is running, which spaces re-runs a second
-   * apart. By default: whether a scan is running.
+   * apart. By default nothing is running.
    */
   busy?: () => boolean;
 }
@@ -114,11 +113,6 @@ function newBlocks(): BlockStore {
 /** The rows of the current result. */
 export function gridBlocks(): BlockStore {
   return blocks;
-}
-
-function scanning(): boolean {
-  const p = useScanStore.getState().progress;
-  return p.phase !== "idle" && !p.finished;
 }
 
 const empty: Selected = { current: null, anchor: null, selection: [] };
@@ -197,7 +191,7 @@ export const useGridStore = create<GridState>()((set, get) => {
         }),
         ready: Promise.resolve(),
         unlisten: null,
-        busy: options.busy ?? scanning,
+        busy: options.busy ?? (() => false),
         cause: "first",
         lastRerun: Number.NEGATIVE_INFINITY,
         rerunTimer: undefined,

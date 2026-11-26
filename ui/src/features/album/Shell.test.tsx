@@ -12,12 +12,16 @@ import { defaultSettings } from "../../api/fake/app";
 import { Toasts, useToasts } from "../../controls";
 import { albumText } from "../../text/album";
 import { seriousFindings } from "../../test/axe";
+import { createQueryFake } from "../../api/fake/query";
+import { gridText } from "../../text/grid";
+import { resetGrid, useGridStore } from "../grid";
 import { Shell } from "./Shell";
 import { LATE_SCAN_SHOW_MS, resetAlbumSession, useAlbumStore } from "./session";
 
 const initial = useAlbumStore.getState();
 
 beforeEach(() => {
+  resetGrid();
   resetAlbumSession();
   useAlbumStore.setState(initial, true);
   useToasts.setState({ toasts: [] });
@@ -233,6 +237,27 @@ describe("opening a folder", () => {
     await userEvent.click(await screen.findByRole("button", { name: albumText.closeFolder }));
     expect(fake.calls.some((c) => c.command === "album_close")).toBe(true);
     expect(screen.getByRole("heading", { level: 1, name: albumText.startHeading })).toBeInTheDocument();
+  });
+});
+
+describe("the grid in the window", () => {
+  it("fills the review screen, has its size slider in the top bar, and lets its result go on close", async () => {
+    const album = createQueryFake([
+      { id: 1, rel_path: "a.jpg", date: "2024-01-01T00:00:01" },
+      { id: 2, rel_path: "b.jpg", date: "2024-01-01T00:00:02" },
+    ]);
+    const fake = await shell({
+      ...album.handlers,
+      album_open: () => ({ status: { ...fakeStatus("D:\\Trip"), photos: 2 }, session: null }),
+    });
+    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    const region = await screen.findByRole("region", { name: albumText.photosRegion });
+    const grid = await within(region).findByRole("grid", { name: gridText.label });
+    await waitFor(() => expect(within(grid).getAllByRole("gridcell")).toHaveLength(2));
+    expect(within(screen.getByRole("banner")).getByRole("slider", { name: gridText.thumbSize })).toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole("button", { name: albumText.closeFolder }));
+    await waitFor(() => expect(useGridStore.getState().result).toBeNull());
   });
 });
 

@@ -27,7 +27,10 @@ import { gridBlocks, useGridStore } from "./store";
 import { Tile, type TileActions } from "./Tile";
 import "./Grid.css";
 
-export type GridProps = TileActions;
+export interface GridProps extends TileActions {
+  /** Whether a scan or tagging is running, which spaces re-runs a second apart. */
+  busy?: () => boolean;
+}
 
 /** Pixels per wheel line, for a wheel that reports lines. */
 const LINE = 16;
@@ -57,9 +60,13 @@ export function Grid(props: GridProps) {
     () => blocks.version,
   );
 
+  const busy = useRef(props.busy);
   useEffect(() => {
-    void useGridStore.getState().start();
+    void useGridStore.getState().start({ busy: () => busy.current?.() ?? false });
   }, []);
+  useEffect(() => {
+    busy.current = props.busy;
+  });
 
   const boxRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);

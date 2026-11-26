@@ -2,6 +2,7 @@ import { useSyncExternalStore } from "react";
 import { Button, IconButton, Pill, Tooltip } from "../../controls";
 import { albumText } from "../../text/album";
 import { appText } from "../../text/app";
+import { ThumbSize } from "../grid";
 import { shownScope, viewOnlyBanner } from "./banners";
 import { useAlbumStore } from "./session";
 
@@ -25,8 +26,7 @@ function useNarrow(): boolean {
 
 /**
  * The 48 px bar at the top of the window (docs/04-browsing.md, "Top bar").
- * The thumbnail size control comes with the grid (#18), Tidy… with #34
- * and Settings with #59.
+ * Tidy… comes with #34 and Settings with #59.
  */
 export function TopBar() {
   const status = useAlbumStore((s) => s.status);
@@ -79,6 +79,7 @@ export function TopBar() {
       </div>
       {status !== null && (
         <div className="ow-topbar__right">
+          <ThumbSize />
           {narrow ? (
             <>
               <IconButton icon="close-album" label={albumText.closeFolder} onClick={() => void close()} />

@@ -21,4 +21,11 @@ anchor_id: number | null,
 /**
  * Every selected photo id.
  */
-selection: Array<number>, };
+selection: Array<number>, 
+/**
+ * The photo the grid's place is kept by while rows arrive: the
+ * current photo when it is in view, else the first photo in view;
+ * null to keep nothing (docs/04-browsing.md, "When the result
+ * changes"). May be left out.
+ */
+view: PhotoAt | null, };

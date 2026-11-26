@@ -424,16 +424,17 @@ For each waiting row, on the scan pool:
 3. Encode and write the small thumbnail, and the medium one when the cache has room.
 4. Send the writer `analysis`, and `width` and `height` when the header gave none or when the decode reports a different full size (`full_width`, `full_height`, when not 0). The size of a reduced or embedded preview is never stored.
 
-**Order of work.** The pool takes jobs by priority, then walker order:
+**Order of work (#106).** Decodes, the scan's and the page's together, run in **decode slots**: as many at once as the scan pool has threads (held by `Thumbs`, in `thumbs::slots`). A free slot goes:
 
 | Priority | Jobs |
 |---|---|
-| 1 | Photos the page has asked for through `owlbum://thumb` and that are still waiting. What is on screen is read first. (Not built yet, #91: on-demand thumbnails run on their own bounded workers; see "Concurrency and writes".) |
-| 2 | Cheap handlers (JPEG, small PNG). |
-| 3 | Decode-cost handlers. |
-| 4 | Heavy handlers (RAW, video, large TIFF). |
+| 1 | Pictures the page asks for through `owlbum://` (thumbnails and zoom copies), **newest request first**: what is on screen now comes before what was on screen a moment ago, so scrolling to a part of the album the scan has not reached makes its thumbnails come next. |
+| 2 | The scan's pixels pass, in its own order: cheap handlers (JPEG, small PNG), then decode-cost handlers, then heavy handlers (RAW, video, large TIFF), each in walker order. |
+| 3 | The warm pass after a scan, which waits behind the page like the pixels pass. |
 
-A folder of mixed JPEG and RAW therefore shows its JPEGs first. At most `max(1, pool size / 2)` heavy jobs run at once, to bound memory.
+A job holds its slot from the decode until its thumbnails and analysis are made, so no more full-size pictures are in memory than there are slots, and the scan's resizing does not compete with the page's. A scan job takes a slot only while no request from the page waits, so a request waits at most for one of the running jobs to end. A folder of mixed JPEG and RAW shows its JPEGs first. At most `max(1, pool size / 2)` heavy jobs run at once, to bound memory. A busy file's retries (Errors per file) keep their slot; they are rare.
+
+When the page asks for a photo still waiting for its pixels pass, the request's job **is** that photo's pixels pass: one decode makes the thumbnails and the analysis, and the analysis is kept in memory by `thumb_key` (at most 4,096 of them) until the scan reaches the photo and sends it to the writer like any other result, without decoding again. When the scan's job for that photo is already running, the request joins it instead (see "Concurrency and writes"). The scan's walker order is not changed: rows still arrive and complete in that order, while what is on screen jumps ahead through the page's requests.
 
 ### Errors per file
 
@@ -475,7 +476,7 @@ After the last write the scanner emits the final `scan_progress` and starts the 
 - The writer collects scan results and commits them in one transaction when **200 rows** are waiting or **250 ms** have passed since the first waiting row, whichever comes first. The FTS `search` table is updated in the same transaction.
 - A typed change (a star, a note) is always its own transaction. It waits for at most one scan batch.
 - The compare stage reads `id, rel_path, size, mtime_ms, scan_version, scan_error, missing, file_key, analysis IS NULL, format, width, height` for the scope in one query (the last four tell a waiting row and give its pixels job its cost) into a hash map. It never queries per file.
-- Two on-demand requests for the same photo's pixels share one decode: work in flight is keyed by `thumb_key`. A scan job and an on-demand request do not share one yet: when the page asks for a photo still waiting for its pixels pass, the thumbnail is made on demand and the scan's later pass for that photo skips encoding it (a thumbnail already on disk is never encoded again). Running the whole pixels pass on demand, and priority 1 below, wait for a scan pool that outlives a scan stage (#91).
+- Work in flight is keyed by `thumb_key`, for the page's requests and the scan's pixels pass alike (#91, #106): a request that finds the scan decoding that photo waits for the scan's job and serves its thumbnail; a scan job that finds a request's job running waits for it and writes the pass that job made. Either way the photo is decoded once. The scan pool itself is still made per stage; the decode slots in `Thumbs`, which outlive a scan, are what puts the page's work before the scan's.
 
 ### Progress and change events
 
@@ -512,7 +513,10 @@ These are targets to measure against with the `large-N` fixture, not promises. E
 |---|---|
 | Reopen an album of 100,000 photos already scanned | First tiles within 1 s of opening; walk and compare done within 15 s on a local SSD. |
 | First open of 10,000 JPEGs | First tiles within 2 s; every photo listed (facts pass done) within 20 s. |
+| First open of 2,000 photos of 12 to 24 MP (#106) | First rows within 1 s; the first screen of thumbnails within about 2 s while the rest keeps scanning. |
 | Any scan | A star or a note is saved within 300 ms while the scan runs. Memory stays bounded: no stage holds decoded pixels for more than the pool's worth of files. |
+
+**First open (#106).** `crates/owlbum-core/tests/first_open.rs` plays the page against a new album (its header says how to run it). On the development machine (11 decode slots), release build, 2,000 photos of 12 to 24 MP: the first `album_changed`, with 400 rows, came 0.2 s after opening, well inside the target. The first screen of 60 thumbnails, asked for all at once, was served by 4.4 s after opening (half of them by 2.7 s), against 7.9 s before the decode slots, when a request's resizing and encoding ran outside any limit on all 60 request threads at once. A screen near the end of the walk, asked for while the scan decoded, was served by 3.9 s (half by 2.4 s), against 6.8 s (3.9 s) when the page's decodes ran beside the scan's. The whole scan took 112 s (116 s before). The 2 s target is not met: a 24 MP JPEG costs about 270 ms alone (90 ms decoding at full size, 160 ms resizing from it), and making that smaller is #114.
 
 **Windows and Defender (#95).** On Windows a first scan with thumbnails pays for Defender's real-time protection, which scans each thumbnail file as it is created: on the development machine `MsMpEng` used two to almost four cores while thumbnails were written, and 20,000 tiny files took about 11 s at 11 threads even written in place with their folders made ahead. Owlbum keeps that to one created file per thumbnail (no temporary file, no rename, no folder call per write) and does not change Defender's settings or ask for an exclusion. On real photos the cost is small next to decoding: on 2,000 photos of 12 to 24 megapixels a first scan took about 106 s without thumbnails and 118 to 128 s with them, within the noise between runs. An album of tens of thousands of tiny files shows it most. A user who adds the app data folder to Defender's exclusions removes it; Owlbum does not suggest that.
 
@@ -684,7 +688,7 @@ Making the medium size for every photo of a very large album would fill the cach
 
 1. Find the photo. `thumb_key` is a stored column of `photos` with its own index (`photos_thumb_key`, see [Data](02-data.md#schema)), so this is one indexed read on a pooled read-only connection. A key that belongs to no row of the open album that is in scope and not missing answers 404, even if a file for it sits in the shared cache.
 2. If the file exists and passes the end-marker check, serve it. Nothing is written to any database.
-3. Otherwise make the thumbnail and serve it. Requests for the same key share one job, whichever size they ask for: the job decodes once with `preview(1600)`, writes the small thumbnail and the one asked for, and the medium one too while the cache is under 70% of its limit. On-demand jobs run on the blocking pool, at most as many decodes at once as the scan pool has threads.
+3. Otherwise make the thumbnail and serve it. Requests for the same key share one job, whichever size they ask for, and share the scan's job when the scan is decoding that photo: the job decodes once with `preview(1600)`, writes the small thumbnail and the one asked for, and the medium one too while the cache is under 70% of its limit. For a photo still waiting for its pixels pass the job makes the analysis too, for the scan to write (see "Order of work"). Requests are answered on the blocking pool; their decodes take the decode slots ahead of the scan's, newest request first.
 4. If the photo cannot be decoded, answer 404. A video with no poster answers 404 and the page shows its placeholder tile.
 
 `query_window` reads each row's `thumb_key` from the same stored column, so no hashing happens per request. The scanner writes the column whenever it writes `file_key` or `mtime_ms`. In a view-only album the keys of rows held only in memory are kept with those rows.

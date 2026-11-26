@@ -351,7 +351,7 @@ Rows are fetched in blocks with `query_window(token, offset, limit)`.
 
 Every `query_run` after the first passes `keep`, so Rust can say where things went.
 
-`keep = { token, current: { id, index } | null, anchor_id, selection: id[] }` and the answer's `kept = { current: { id, index } | null, anchor: { id, index } | null, selection: id[] }`. Both shapes (`Keep` and `Kept`) are defined in [Organising](05-organising.md#the-query).
+`keep = { token, current: { id, index } | null, anchor_id, selection: id[], view: { id, index } | null }` and the answer's `kept = { current: { id, index } | null, anchor: { id, index } | null, selection: id[], view: { id, index } | null }`. Both shapes (`Keep` and `Kept`) are defined in [Organising](05-organising.md#the-query).
 
 Rust settles the current photo in this order. [Organising](05-organising.md#where-the-selection-goes-afterwards) states the same four rules for star and hide:
 
@@ -362,12 +362,14 @@ Rust settles the current photo in this order. [Organising](05-organising.md#wher
 
 `kept.selection` is the old selection limited to photos still in the result, plus the new current photo. If the anchor is gone, the anchor becomes the current photo.
 
+`keep.view` is the tile the grid keeps its place by while rows arrive (#106): on a re-run after `album_changed`, the current photo when its row is in view, else the first tile in view; null after a change the user made, and null at the very top of the grid when the current photo is out of view. `kept.view` is where that photo is now, or the photo now in its place by rule 3 when it left the result.
+
 **Scrolling after a change.**
 
 | What changed | Scroll |
 |---|---|
 | The user changed the sort, filter, search, view, timeline unit or stack setting | If there is a current photo, scroll so it is in view (see below). Otherwise go to the top. |
-| `album_changed` (a scan, a star, tags) | The scroll position in pixels is kept. The current photo is not chased, so a scan adding photos does not move the view. |
+| `album_changed` (a scan, a star, tags) | The grid scrolls by as many rows as `keep.view` moved (from its index in `keep.view` to its index in `kept.view`), so the photos in view stay where they are on screen while a scan adds or reorders rows above them; the current photo never jumps away. At the very top with the current photo out of view nothing is kept and the scroll stays at 0, so a first scan shows the photos that sort first as they arrive. A re-run with no tile to keep (none in view yet, or its row not fetched) keeps the scroll position in pixels. |
 | The user opened or folded a stack | The pixel position is kept, then the current photo is brought into view if it is not. |
 
 **First selection.** When an album opens with no session to restore, nothing is selected. The first Left, Right, Home or End selects a photo (see [Keys](#keys)). The preview shows the hint "Select a photo to see it here."

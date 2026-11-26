@@ -102,6 +102,36 @@ export function visibleRange(l: GridLayout, real: number, viewport: number, coun
 }
 
 /**
+ * The tile the grid's place is kept by while rows arrive (docs/04-browsing.md,
+ * "When the result changes"): the current photo `at` when its row is in view,
+ * else the first tile in view. Null at the very top with the current photo out
+ * of view, so the grid stays at the top and the photos that sort first show as
+ * they arrive.
+ */
+export function viewIndex(
+  l: GridLayout,
+  real: number,
+  viewport: number,
+  count: number,
+  at: number | null,
+): number | null {
+  if (count === 0 || l.cols === 0) return null;
+  if (at !== null && at < count) {
+    const top = PAD + Math.floor(at / l.cols) * l.stride;
+    if (top + l.side > real && top < real + viewport) return at;
+  }
+  if (real <= 0) return null;
+  const index = Math.floor(Math.max(0, real - PAD) / l.stride) * l.cols;
+  return index < count ? index : null;
+}
+
+/** The real scroll position that keeps tile `from`, now at index `to`, where it was on screen. */
+export function followScroll(l: GridLayout, real: number, from: number, to: number): number {
+  if (l.cols === 0) return real;
+  return Math.max(0, real + (Math.floor(to / l.cols) - Math.floor(from / l.cols)) * l.stride);
+}
+
+/**
  * The real scroll position that just shows the row of tile `index`, or
  * null when it is already in view.
  */

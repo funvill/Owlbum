@@ -5,6 +5,7 @@ import {
   PAD,
   anchorAfterResize,
   clampThumbSize,
+  followScroll,
   gridLayout,
   realScroll,
   scrollRatio,
@@ -12,8 +13,38 @@ import {
   thumbFor,
   tilePlace,
   toScrollTop,
+  viewIndex,
   visibleRange,
 } from "./layout";
+
+describe("keeping the grid's place while rows arrive", () => {
+  // 5 columns; each row is one stride tall.
+  const l = gridLayout(5 * 168 + 2 * PAD, 1000, 160);
+
+  it("keeps the place by the current photo when it is in view", () => {
+    expect(l.cols).toBe(5);
+    const real = 10 * l.stride;
+    expect(viewIndex(l, real, 4 * l.stride, 1000, 57)).toBe(57);
+  });
+
+  it("else by the first tile in view", () => {
+    const real = 10 * l.stride + PAD;
+    expect(viewIndex(l, real, 4 * l.stride, 1000, 500)).toBe(50);
+    expect(viewIndex(l, real, 4 * l.stride, 1000, null)).toBe(50);
+  });
+
+  it("keeps nothing at the very top with the current photo out of view", () => {
+    expect(viewIndex(l, 0, 4 * l.stride, 1000, null)).toBeNull();
+    expect(viewIndex(l, 0, 4 * l.stride, 1000, 2)).toBe(2);
+    expect(viewIndex(l, 0, 4 * l.stride, 0, null)).toBeNull();
+  });
+
+  it("scrolls by the rows the tile moved", () => {
+    expect(followScroll(l, 1000, 50, 62)).toBe(1000 + 2 * l.stride);
+    expect(followScroll(l, 1000, 50, 52)).toBe(1000);
+    expect(followScroll(l, 100, 50, 10)).toBe(0);
+  });
+});
 
 describe("thumbnail size", () => {
   it("clamps to 96 to 320 and rounds", () => {

@@ -49,6 +49,18 @@ export interface Pending {
   wait: "row" | "ids";
 }
 
+/**
+ * After a re-run for `album_changed`: the tile the grid's place is kept by was
+ * at `from` and is now at `to`, so the grid scrolls by the rows between them
+ * and the photos in view stay where they were while rows arrive.
+ */
+export interface Follow {
+  from: number;
+  to: number;
+  /** Moves on with each one. */
+  seq: number;
+}
+
 /** A request for the grid to scroll, after a change the user made. */
 export interface ScrollRequest {
   to: "current" | "top";
@@ -74,6 +86,8 @@ export interface GridState extends Selected {
   /** The chosen thumbnail size, 96 to 320. */
   thumbSize: number;
   scroll: ScrollRequest | null;
+  /** Where the grid's place moved in the newest result; see `Follow`. */
+  follow: Follow | null;
   /** A selection change waiting on the backend; see `Pending`. */
   pending: Pending | null;
   /** Moves on when the formats from `app_formats` arrive. */
@@ -108,6 +122,8 @@ interface Session {
   busy: () => boolean;
   /** Why the newest call was made. */
   cause: Cause;
+  /** The tile the newest call asked to keep the grid's place by. */
+  view: PhotoAt | null;
   lastRerun: number;
   rerunTimer: ReturnType<typeof setTimeout> | undefined;
   frame: number | undefined;
@@ -118,6 +134,19 @@ let saveTimer: ReturnType<typeof setTimeout> | undefined;
 /** Whether the size was chosen on the page, so the stored setting no longer applies. */
 let sizeChosen = false;
 let blocks = newBlocks();
+
+/** Answers the tile the grid's place is kept by; see `setGridView`. */
+let gridView: () => PhotoAt | null = () => null;
+
+/**
+ * Tells the store how to find the tile the grid's place is kept by while rows
+ * arrive: the current photo when it is in view, else the first tile in view,
+ * or null (docs/04-browsing.md, "When the result changes"). It is asked when
+ * a re-run for `album_changed` is made, so it sees the rows held then.
+ */
+export function setGridView(view: () => PhotoAt | null): void {
+  gridView = view;
+}
 
 /** Starts a re-run, spaced as re-runs after `album_changed` are; set by the store. */
 let rerunExpired: () => void = () => {};
@@ -181,7 +210,13 @@ export const useGridStore = create<GridState>()((set, get) => {
       kept === null ? {} : { current: kept.current, anchor: kept.anchor, selection: kept.selection };
     const current = kept === null ? get().current : kept.current;
     const scroll = s.cause === "user" ? nextScroll(current === null ? "top" : "current") : get().scroll;
-    set({ result, error: null, ...selected, scroll, pending: null });
+    const to = result.kept?.view ?? null;
+    const from = s.view;
+    const follow =
+      s.cause === "change" && from !== null && to !== null && to.index !== from.index
+        ? { from: from.index, to: to.index, seq: (get().follow?.seq ?? 0) + 1 }
+        : get().follow;
+    set({ result, error: null, ...selected, scroll, follow, pending: null });
   };
 
   const run = async (s: Session, cause: Cause) => {
@@ -240,6 +275,7 @@ export const useGridStore = create<GridState>()((set, get) => {
     error: null,
     thumbSize: THUMB_DEFAULT,
     scroll: null,
+    follow: null,
     formats: 0,
     pending: null,
     ...empty,
@@ -250,7 +286,9 @@ export const useGridStore = create<GridState>()((set, get) => {
         client: new QueryClient(api(), {
           keep: () => {
             const { current, anchor, selection } = get();
-            return { current, anchor_id: anchor?.id ?? null, selection };
+            // Only a re-run for album_changed keeps the place by a tile.
+            s.view = s.cause === "change" ? gridView() : null;
+            return { current, anchor_id: anchor?.id ?? null, selection, view: s.view };
           },
           onResult: (result) => applyResult(s, result),
         }),
@@ -259,6 +297,7 @@ export const useGridStore = create<GridState>()((set, get) => {
         unwatch: blocks.subscribe(settleStep),
         busy: options.busy ?? (() => false),
         cause: "first",
+        view: null,
         lastRerun: Number.NEGATIVE_INFINITY,
         rerunTimer: undefined,
         frame: undefined,
@@ -292,7 +331,8 @@ export const useGridStore = create<GridState>()((set, get) => {
         if (s.frame !== undefined) cancelAnimationFrame(s.frame);
       }
       blocks.clear();
-      set({ result: null, error: null, query: defaultQuery(), scroll: null, pending: null, ...empty });
+      gridView = () => null;
+      set({ result: null, error: null, query: defaultQuery(), scroll: null, follow: null, pending: null, ...empty });
     },
 
     setQuery(query) {

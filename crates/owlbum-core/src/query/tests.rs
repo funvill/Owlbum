@@ -693,6 +693,7 @@ fn keep(current: Option<(i64, u32)>, anchor: Option<i64>, selection: &[i64]) -> 
         current: current.map(|(id, index)| PhotoAt { id, index }),
         anchor_id: anchor,
         selection: selection.to_vec(),
+        view: None,
     }
 }
 
@@ -708,6 +709,23 @@ fn rule_1_the_current_photo_stays_with_its_new_index() {
     assert_eq!(kept.current, at(3, 2));
     assert_eq!(kept.anchor, at(5, 3));
     assert_eq!(kept.selection, [3, 5], "cut down to photos still shown");
+}
+
+#[test]
+fn the_view_photo_is_followed_like_the_current_photo() {
+    // Rows arrive before the photo the grid's place is kept by: it moves
+    // on by the rows that came before it.
+    let old = [1, 2, 3];
+    let new = [7, 8, 1, 9, 2, 3];
+    let mut k = keep(None, None, &[]);
+    k.view = at(2, 1);
+    let kept = settle(&k, Some(&old), &new);
+    assert_eq!(kept.view, at(2, 4));
+    assert_eq!(kept.current, None, "the view is not the current photo");
+    // It left the result: the photo now in its place.
+    let kept = settle(&k, Some(&old), &[7, 1, 3]);
+    assert_eq!(kept.view, at(1, 1), "k = 1: photo 1 was before it");
+    assert_eq!(settle(&keep(None, None, &[]), Some(&old), &new).view, None);
 }
 
 #[test]
@@ -809,6 +827,7 @@ fn hiding_the_current_photo_moves_to_the_one_in_its_place() {
         }),
         anchor_id: Some(ids[0]),
         selection: vec![ids[0]],
+        view: None,
     };
     let r = engine.run(&album, &default_query(), Some(&k)).unwrap();
     let kept = r.kept.unwrap();
@@ -846,6 +865,7 @@ fn keep_reads_the_old_result_before_a_new_token_drops_it() {
         }),
         anchor_id: None,
         selection: vec![],
+        view: None,
     };
     let r = engine.run(&album, &default_query(), Some(&k)).unwrap();
     assert_eq!(r.kept.unwrap().current, at(ids[1], 0));

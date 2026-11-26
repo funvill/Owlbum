@@ -20,6 +20,7 @@ mod flight;
 pub mod lookup;
 pub mod make;
 pub mod serve;
+mod slots;
 pub mod store;
 
 #[cfg(test)]
@@ -27,9 +28,10 @@ mod profile;
 #[cfg(test)]
 mod tests;
 
+use std::collections::HashMap;
 use std::io::Cursor;
 use std::path::Path;
-use std::sync::{Arc, Condvar, Mutex};
+use std::sync::{Arc, Mutex};
 
 use image::ImageDecoder;
 use image::codecs::jpeg::JpegDecoder;
@@ -41,6 +43,12 @@ use crate::media::{MediaError, MediaFormat, MediaKind, Pixels, colour};
 
 pub use cache::{Cache, CacheCleared, CacheUsage};
 pub use lookup::Photo;
+pub use slots::Priority;
+
+/// How many pixels passes made on demand wait for the scan to write them
+/// ([`Thumbs::scan_pixels`]). Beyond that a request's analysis is dropped
+/// and the scan decodes that photo again.
+const STASH_MAX: usize = 4096;
 
 /// What a cached picture is: `cache_entries.kind`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
@@ -93,12 +101,37 @@ pub struct Handlers;
 
 impl Source for Handlers {}
 
-/// Both thumbnails made by one on-demand job; None for a size it did not
-/// make.
+/// What the pixels pass keeps from its one decode besides the thumbnails
+/// (docs/03, "Pixels pass" step 4).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PixelsDone {
+    /// The `analysis` JSON.
+    pub analysis: String,
+    /// The decode's full upright size (`full_width`, `full_height`; 0 for
+    /// a reduced or embedded preview).
+    pub full: (u32, u32),
+}
+
+impl PixelsDone {
+    fn of(px: &Pixels, b: &make::Buffers) -> Self {
+        Self {
+            analysis: crate::scan::pixels::analysis_of(
+                b,
+                crate::scan::pixels::small_alpha(px).as_ref(),
+            ),
+            full: (px.full_width, px.full_height),
+        }
+    }
+}
+
+/// What one job for a key made: both thumbnails (None for a size it did
+/// not make), and the rest of the pixels pass when the photo was still
+/// waiting for it.
 #[derive(Debug, Clone, Default)]
 struct Made {
     small: Option<Arc<Vec<u8>>>,
     medium: Option<Arc<Vec<u8>>>,
+    pixels: Option<Arc<PixelsDone>>,
 }
 
 /// Thumbnails and zoom copies for the app. Cloning is cheap.
@@ -110,13 +143,17 @@ pub struct Thumbs {
 struct Inner {
     cache: Cache,
     source: Arc<dyn Source>,
-    /// On-demand thumbnail jobs by `thumb_key`: a request for either size
-    /// joins a job already making that key.
+    /// Thumbnail jobs by `thumb_key`, the page's and the scan's: a request
+    /// for either size, or the scan's pixels pass, joins a job already
+    /// making that key.
     thumbs: flight::Flights<Option<Made>>,
     /// Zoom copy jobs by `thumb_key`.
     fulls: flight::Flights<Option<Arc<Vec<u8>>>>,
-    /// On-demand decodes running at once.
-    permits: Permits,
+    /// Decodes running at once, the page's before the scan's.
+    slots: slots::Slots,
+    /// Pixels passes the page's requests made for photos still waiting,
+    /// by `thumb_key`, until the scan writes them.
+    stash: Mutex<HashMap<String, Arc<PixelsDone>>>,
 }
 
 impl std::fmt::Debug for Thumbs {
@@ -141,7 +178,7 @@ impl Thumbs {
     }
 
     /// Thumbnails over `cache`, decoding with `source`, at most `workers`
-    /// on-demand decodes at once.
+    /// decodes at once (the page's and the scan's together).
     pub fn with(cache: Cache, source: Arc<dyn Source>, workers: usize) -> Self {
         Self {
             inner: Arc::new(Inner {
@@ -149,7 +186,8 @@ impl Thumbs {
                 source,
                 thumbs: flight::Flights::default(),
                 fulls: flight::Flights::default(),
-                permits: Permits::new(workers.max(1)),
+                slots: slots::Slots::new(workers),
+                stash: Mutex::new(HashMap::new()),
             }),
         }
     }
@@ -163,35 +201,100 @@ impl Thumbs {
         self.inner.cache.dir()
     }
 
+    /// Runs `job`, a decode of the scan's and what is made from it, in one
+    /// of the decode slots, after every request from the page that waits
+    /// for one (docs/03, "Order of work").
+    fn background<T>(&self, job: impl FnOnce() -> T) -> T {
+        self.inner.slots.run(Priority::Background, job)
+    }
+
+    /// The scan's pixels pass for `key` (docs/03, "Pixels pass"): one
+    /// decode with `decode`, the thumbnails written from it, and what the
+    /// row needs besides. It is one job with the page's requests for the
+    /// same key: when the page already made the pass for this photo, or is
+    /// making it, nothing is decoded again. The decode and everything made
+    /// from it run in one decode slot, after the page's requests.
+    pub fn scan_pixels(
+        &self,
+        key: &str,
+        decode: &dyn Fn() -> Result<Pixels, MediaError>,
+    ) -> Result<Arc<PixelsDone>, MediaError> {
+        if !store::is_thumb_key(key) {
+            return self.background(|| {
+                let px = decode()?;
+                Ok(Arc::new(PixelsDone::of(&px, &make::buffers(&px))))
+            });
+        }
+        // At most twice: a request's job this joined may have failed, or
+        // made only thumbnails (the row was not waiting when it looked).
+        for _ in 0..2 {
+            let mut failed = None;
+            let made = self.inner.thumbs.share(key, || {
+                if let Some(done) = self.take_stash(key) {
+                    return Some(Made {
+                        pixels: Some(done),
+                        ..Made::default()
+                    });
+                }
+                match self.background(|| decode().map(|px| self.write_from_scan(key, &px))) {
+                    Ok(made) => Some(made),
+                    Err(e) => {
+                        failed = Some(e);
+                        None
+                    }
+                }
+            });
+            if let Some(e) = failed {
+                return Err(e);
+            }
+            if let Some(done) = made.and_then(|m| m.pixels) {
+                // A request's job this joined kept its pass for the scan too.
+                self.take_stash(key);
+                return Ok(done);
+            }
+        }
+        self.background(|| {
+            let px = decode()?;
+            Ok(self
+                .write_from_scan(key, &px)
+                .pixels
+                .unwrap_or_else(|| Arc::new(PixelsDone::of(&px, &make::buffers(&px)))))
+        })
+    }
+
+    /// The pixels pass's analysis that a request from the page made for
+    /// `key`, taken out.
+    fn take_stash(&self, key: &str) -> Option<Arc<PixelsDone>> {
+        self.inner
+            .stash
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .remove(key)
+    }
+
     /// The scan's thumbnails for `key` from its one decode (docs/03,
     /// "Pixels pass" step 3): the small one always, the medium one while
     /// the cache is under 70% of its limit. A thumbnail already on disk is
-    /// not encoded again. `b` is the pixels pass's buffers, which the
-    /// analysis is made from too.
-    pub fn write_from_scan(&self, key: &str, b: &make::Buffers) {
-        if !store::is_thumb_key(key) {
-            return;
-        }
+    /// not encoded again. The same buffers give the analysis.
+    fn write_from_scan(&self, key: &str, px: &Pixels) -> Made {
+        let b = make::buffers(px);
         let small = store::path(self.dir(), key, Kind::Small);
         let medium = store::path(self.dir(), key, Kind::Medium);
-        let want_small = !store::is_whole_file(&small);
-        let want_medium = self.inner.cache.has_room_for_medium() && !store::is_whole_file(&medium);
-        if !want_small && !want_medium {
-            return;
-        }
-        if want_small {
-            self.put(
-                key,
-                Kind::Small,
-                &make::encode(&b.small, make::SMALL_QUALITY),
-            );
-        }
-        if want_medium {
-            self.put(
-                key,
-                Kind::Medium,
-                &make::encode(&b.medium, make::MEDIUM_QUALITY),
-            );
+        let small = (!store::is_whole_file(&small)).then(|| {
+            let bytes = make::encode(&b.small, make::SMALL_QUALITY);
+            self.put(key, Kind::Small, &bytes);
+            Arc::new(bytes)
+        });
+        let medium = (self.inner.cache.has_room_for_medium() && !store::is_whole_file(&medium))
+            .then(|| {
+                let bytes = make::encode(&b.medium, make::MEDIUM_QUALITY);
+                self.put(key, Kind::Medium, &bytes);
+                Arc::new(bytes)
+            });
+        Made {
+            small,
+            medium,
+            pixels: Some(Arc::new(PixelsDone::of(px, &b))),
         }
     }
 
@@ -213,13 +316,22 @@ impl Thumbs {
     /// The JPEG bytes of `photo`'s thumbnail of `kind` (small or medium),
     /// made on demand when it is not on disk (docs/03, "On demand"). None
     /// when the photo cannot be decoded, or for [`Kind::Full`].
+    /// A request from the page goes before the scan's decodes, newest
+    /// first; for a photo still waiting for its pixels pass the job makes
+    /// the whole pass, which the scan then writes without decoding again.
     pub fn thumbnail(&self, photo: &Photo, kind: Kind) -> Option<Vec<u8>> {
-        self.thumbnail_with(photo, kind, true)
+        self.thumbnail_with(photo, kind, true, Priority::Page)
     }
 
     /// [`Thumbs::thumbnail`]; `extra_medium` lets a job for the small size
     /// make the medium one too while the cache has room for it.
-    fn thumbnail_with(&self, photo: &Photo, kind: Kind, extra_medium: bool) -> Option<Vec<u8>> {
+    fn thumbnail_with(
+        &self,
+        photo: &Photo,
+        kind: Kind,
+        extra_medium: bool,
+        priority: Priority,
+    ) -> Option<Vec<u8>> {
         if kind == Kind::Full || !store::is_thumb_key(&photo.thumb_key) {
             return None;
         }
@@ -229,10 +341,9 @@ impl Thumbs {
                 self.inner.cache.touch(key, kind);
                 return Some(bytes);
             }
-            let made = self
-                .inner
-                .thumbs
-                .share(key, || self.make_on_demand(photo, kind, extra_medium))?;
+            let made = self.inner.thumbs.share(key, || {
+                self.make_on_demand(photo, kind, extra_medium, priority)
+            })?;
             let bytes = match kind {
                 Kind::Small => made.small,
                 _ => made.medium,
@@ -247,7 +358,15 @@ impl Thumbs {
 
     /// One on-demand decode: the requested size, the small one, and, when
     /// `extra_medium`, the medium one too while the cache has room for it.
-    fn make_on_demand(&self, photo: &Photo, kind: Kind, extra_medium: bool) -> Option<Made> {
+    /// For a photo still waiting, the rest of its pixels pass too, kept for
+    /// the scan.
+    fn make_on_demand(
+        &self,
+        photo: &Photo,
+        kind: Kind,
+        extra_medium: bool,
+        priority: Priority,
+    ) -> Option<Made> {
         // A job that finished between the caller's read and this one
         // starting has made it already.
         if let Some(bytes) = store::read(&store::path(self.dir(), &photo.thumb_key, kind)) {
@@ -255,25 +374,34 @@ impl Thumbs {
             return Some(match kind {
                 Kind::Small => Made {
                     small: bytes,
-                    medium: None,
+                    ..Made::default()
                 },
                 _ => Made {
-                    small: None,
                     medium: bytes,
+                    ..Made::default()
                 },
             });
         }
         let format = photo.format?;
-        let px = self.inner.permits.run(|| {
-            self.inner
+        // The whole job runs in the slot, so no more full-size pictures are
+        // held at once than there are slots.
+        self.inner.slots.run(priority, || {
+            let px = self
+                .inner
                 .source
                 .preview(format, &photo.path)
                 .map_err(|e| {
                     tracing::debug!(target: "thumbs", "no thumbnail for photo {}: {}", photo.id, e.code.as_str());
                 })
-                .ok()
-        })?;
-        let b = make::buffers(&px);
+                .ok()?;
+            Some(self.make_from(photo, &px, kind, extra_medium))
+        })
+    }
+
+    /// The thumbnails of an on-demand job from its decode, and the rest of
+    /// the pixels pass for a photo still waiting.
+    fn make_from(&self, photo: &Photo, px: &Pixels, kind: Kind, extra_medium: bool) -> Made {
+        let b = make::buffers(px);
         let key = &photo.thumb_key;
         let small = make::encode(&b.small, make::SMALL_QUALITY);
         self.put(key, Kind::Small, &small);
@@ -284,10 +412,19 @@ impl Thumbs {
             self.put(key, Kind::Medium, &bytes);
             Arc::new(bytes)
         });
-        Some(Made {
+        let pixels = photo.waiting.then(|| {
+            let done = Arc::new(PixelsDone::of(px, &b));
+            let mut stash = self.inner.stash.lock().unwrap_or_else(|p| p.into_inner());
+            if stash.len() < STASH_MAX {
+                stash.insert(key.clone(), Arc::clone(&done));
+            }
+            done
+        });
+        Made {
             small: Some(Arc::new(small)),
             medium,
-        })
+            pixels,
+        }
     }
 
     /// The zoom copy of `photo` (docs/03, "The zoom copy"): the original
@@ -317,10 +454,9 @@ impl Thumbs {
             if let Some(bytes) = store::read(&path) {
                 return Some(Arc::new(bytes));
             }
-            let px = self
-                .inner
-                .permits
-                .run(|| self.inner.source.working(format, &photo.path).ok())?;
+            let px = self.inner.slots.run(Priority::Page, || {
+                self.inner.source.working(format, &photo.path).ok()
+            })?;
             let bytes = make::encode(&make::flatten(&px), make::FULL_QUALITY);
             self.put(key, Kind::Full, &bytes);
             Some(Arc::new(bytes))
@@ -350,7 +486,10 @@ impl Thumbs {
                     .record(&photo.thumb_key, Kind::Small, bytes);
                 continue;
             }
-            if self.thumbnail_with(photo, Kind::Small, false).is_some() {
+            if self
+                .thumbnail_with(photo, Kind::Small, false, Priority::Background)
+                .is_some()
+            {
                 made += 1;
             }
         }
@@ -368,38 +507,4 @@ pub fn is_upright_srgb_jpeg(bytes: &[u8]) -> bool {
     let upright = matches!(decoder.orientation(), Ok(Orientation::NoTransforms));
     let icc = decoder.icc_profile().ok().flatten();
     upright && colour::is_srgb(icc.as_deref())
-}
-
-/// A counting semaphore: at most `n` jobs inside [`Permits::run`] at once.
-struct Permits {
-    free: Mutex<usize>,
-    freed: Condvar,
-}
-
-impl Permits {
-    fn new(n: usize) -> Self {
-        Self {
-            free: Mutex::new(n),
-            freed: Condvar::new(),
-        }
-    }
-
-    fn run<T>(&self, job: impl FnOnce() -> T) -> T {
-        {
-            let mut free = self.free.lock().unwrap_or_else(|p| p.into_inner());
-            while *free == 0 {
-                free = self.freed.wait(free).unwrap_or_else(|p| p.into_inner());
-            }
-            *free -= 1;
-        }
-        struct Release<'a>(&'a Permits);
-        impl Drop for Release<'_> {
-            fn drop(&mut self) {
-                *self.0.free.lock().unwrap_or_else(|p| p.into_inner()) += 1;
-                self.0.freed.notify_one();
-            }
-        }
-        let _release = Release(self);
-        job()
-    }
 }

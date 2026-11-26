@@ -4,7 +4,7 @@ import { appError, createFakeApi, type FakeApi } from "../../api/fake";
 import { createQueryFake, type FakePhoto, type QueryFake } from "../../api/fake/query";
 import { defaultQuery } from "../../api/query";
 import { useSettingsStore } from "../app/settings";
-import { RERUN_BUSY_MS, RERUN_IDLE_MS, SAVE_SIZE_MS, gridBlocks, resetGrid, useGridStore } from "./store";
+import { RERUN_BUSY_MS, RERUN_IDLE_MS, SAVE_SIZE_MS, gridBlocks, resetGrid, setGridView, useGridStore } from "./store";
 
 function photos(n: number): FakePhoto[] {
   return Array.from({ length: n }, (_, i) => ({
@@ -96,6 +96,31 @@ describe("grid store", () => {
     fake.emit("album_changed", { reason: "scan", revision });
     await vi.waitFor(() => expect(grid().result?.count).toBe(11));
     expect(grid().scroll).toEqual(before);
+  });
+
+  it("keeps the grid's place by the tile in view while rows arrive before it", async () => {
+    await grid().start();
+    // Photo 5 is first in view, at index 4; two photos taken earlier arrive.
+    setGridView(() => ({ id: 5, index: 4 }));
+    const revision = album.change((ps) => [
+      ...ps,
+      { id: 50, rel_path: "a.jpg", date: "2023-01-01T00:00:00" },
+      { id: 51, rel_path: "b.jpg", date: "2023-01-02T00:00:00" },
+    ]);
+    fake.emit("album_changed", { reason: "scan", revision });
+    await vi.waitFor(() => expect(grid().result?.count).toBe(12));
+    expect(runs()[1]!.args).toMatchObject({ keep: { view: { id: 5, index: 4 } } });
+    expect(grid().result?.kept?.view).toEqual({ id: 5, index: 6 });
+    expect(grid().follow).toMatchObject({ from: 4, to: 6 });
+  });
+
+  it("keeps no place by a tile after a change the user made", async () => {
+    await grid().start();
+    setGridView(() => ({ id: 5, index: 4 }));
+    grid().setQuery({ ...defaultQuery(), sort: "name" });
+    await vi.waitFor(() => expect(runs()).toHaveLength(2));
+    expect(runs()[1]!.args).toMatchObject({ keep: { view: null } });
+    expect(grid().follow).toBeNull();
   });
 
   it("re-runs at most once per 100 ms when nothing is running, and never loses the last change", async () => {

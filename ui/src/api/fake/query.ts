@@ -143,7 +143,7 @@ function check(query: Query): void {
 
 /** Settles `keep` as Rust does (owlbum_core::query::keep). */
 function settle(keep: Keep, old: number[] | undefined, tiles: number[]): Kept {
-  if (tiles.length === 0) return { current: null, anchor: null, selection: [] };
+  if (tiles.length === 0) return { current: null, anchor: null, selection: [], view: null };
   const place = new Map(tiles.map((id, index) => [id, index]));
   const find = (id: number): PhotoAt | null => {
     const index = place.get(id);
@@ -163,7 +163,8 @@ function settle(keep: Keep, old: number[] | undefined, tiles: number[]): Kept {
   const anchor = (keep.anchor_id === null ? null : find(keep.anchor_id)) ?? current;
   const selection = [...new Set(keep.selection.filter((id) => place.has(id)))];
   if (current !== null && !selection.includes(current.id)) selection.push(current.id);
-  return { current, anchor, selection };
+  const view = keep.view === null ? null : (find(keep.view.id) ?? inItsPlace(keep.view));
+  return { current, anchor, selection, view };
 }
 
 function row(id: number, p: FakePhoto | undefined): Row {

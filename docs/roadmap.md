@@ -45,6 +45,7 @@ After this milestone Owlbum is a usable photo viewer.
 | 24 | Typed info: description, notes, people (with suggestions), date, place | [Browsing](04-browsing.md#how-typed-fields-save), [Organising](05-organising.md#people-suggestions) |
 | 25 | Country outlines: the Country row and the country search, from bundled Natural Earth data | [Browsing](04-browsing.md#how-typed-fields-save), [Architecture](01-architecture.md#dependencies-chosen) |
 | 26 | Large-album check: 100,000 photos open, scroll, filter and step within the targets | [Browsing](04-browsing.md#tests), [Organising](05-organising.md#performance-targets) |
+| 106 | Show photos as soon as possible when opening a new album: rows from the facts pass at once, the page's thumbnails ahead of the scan, the grid keeping its place (absorbs #91) | [Media and scanning](03-media-and-scanning.md#pixels-pass), [Browsing](04-browsing.md#when-the-result-changes) |
 
 ## Milestone 2: Organise
 

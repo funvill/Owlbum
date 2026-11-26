@@ -50,7 +50,7 @@ describe("rerunFor", () => {
 describe("the query client", () => {
   it("passes keep on every run after the first", async () => {
     const { fake } = setup();
-    const client = new QueryClient(fake, { keep: () => ({ current: { id: 2, index: 1 }, anchor_id: null, selection: [2] }) });
+    const client = new QueryClient(fake, { keep: () => ({ current: { id: 2, index: 1 }, anchor_id: null, selection: [2], view: null }) });
     const first = await client.run(defaultQuery());
     expect(runs(fake)[0]?.args).toEqual({ query: defaultQuery(), keep: null });
     const second = await client.run(defaultQuery());

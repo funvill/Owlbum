@@ -68,6 +68,14 @@ impl<V: Clone + Default> Flights<V> {
         flight.done.notify_all();
         value
     }
+
+    /// Requests waiting on the job for `key` (the map and the job's own
+    /// handle are the other two references), for tests.
+    #[cfg(test)]
+    pub fn joined(&self, key: &str) -> usize {
+        let jobs = self.jobs.lock().unwrap_or_else(|p| p.into_inner());
+        jobs.get(key).map_or(0, |f| Arc::strong_count(f) - 2)
+    }
 }
 
 #[cfg(test)]
@@ -76,11 +84,8 @@ mod tests {
     use std::sync::atomic::{AtomicUsize, Ordering};
     use std::time::Duration;
 
-    /// Requests that joined `key`'s flight and wait on it (the map and the
-    /// job's own handle are the other two references).
     fn joined(flights: &Flights<Option<u32>>, key: &str) -> usize {
-        let jobs = flights.jobs.lock().unwrap();
-        jobs.get(key).map_or(0, |f| Arc::strong_count(f) - 2)
+        flights.joined(key)
     }
 
     #[test]

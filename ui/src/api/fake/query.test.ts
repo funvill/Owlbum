@@ -123,10 +123,21 @@ describe("the fake query commands", () => {
     album.change((list) => list.map((p) => (p.id === 1 ? { ...p, hidden: true } : p)));
     const r = await fake.invoke("query_run", {
       query: defaultQuery(),
-      keep: { token: first.token, current: { id: 1, index: 1 }, anchor_id: 1, selection: [1, 5] },
+      keep: {
+        token: first.token,
+        current: { id: 1, index: 1 },
+        anchor_id: 1,
+        selection: [1, 5],
+        view: { id: 5, index: 0 },
+      },
     });
     expect(r.revision).toBe(1);
-    expect(r.kept).toEqual({ current: { id: 2, index: 1 }, anchor: { id: 2, index: 1 }, selection: [5, 2] });
+    expect(r.kept).toEqual({
+      current: { id: 2, index: 1 },
+      anchor: { id: 2, index: 1 },
+      selection: [5, 2],
+      view: { id: 5, index: 0 },
+    });
   });
 
   it("is fresh for each fake backend", async () => {

@@ -51,10 +51,14 @@ pub fn settle(keep: &Keep, old: Option<&[u32]>, new: &[u32]) -> Kept {
     {
         selection.push(c.id);
     }
+    let view = keep
+        .view
+        .map(|v| find(v.id).unwrap_or_else(|| in_its_place(v, old, new, &place)));
     Kept {
         current,
         anchor,
         selection,
+        view,
     }
 }
 

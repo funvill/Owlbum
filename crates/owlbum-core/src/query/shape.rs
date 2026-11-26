@@ -236,6 +236,12 @@ pub struct Keep {
     pub anchor_id: Option<i64>,
     /// Every selected photo id.
     pub selection: Vec<i64>,
+    /// The photo the grid's place is kept by while rows arrive: the
+    /// current photo when it is in view, else the first photo in view;
+    /// null to keep nothing (docs/04-browsing.md, "When the result
+    /// changes"). May be left out.
+    #[serde(default)]
+    pub view: Option<PhotoAt>,
 }
 
 /// Where the current photo and the selection landed.
@@ -249,6 +255,10 @@ pub struct Kept {
     /// The old selection limited to photos still shown, plus the new
     /// current photo.
     pub selection: Vec<i64>,
+    /// Where `keep.view` is now, or the photo now in its place when it
+    /// left the result (the rule for the current photo); null when none was
+    /// given or the result is empty.
+    pub view: Option<PhotoAt>,
 }
 
 /// One timeline heading.

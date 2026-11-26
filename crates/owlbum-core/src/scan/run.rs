@@ -887,27 +887,36 @@ impl Work<'_, '_> {
     /// analysis from it.
     fn pixels(&self, job: &PixelsJob) {
         let path = walk::absolute(&self.scan.album.location().root, &job.rel_path);
-        let decoded = busy_retry(
-            self.scan,
-            &job.rel_path,
-            |r: &Result<Pixels, MediaError>| r.as_ref().err().map(|e| e.code),
-            || self.scan.env.reader.preview(job.format, &path),
-        );
-        match decoded {
-            Ok(px) => {
-                // One set of buffers feeds the thumbnails and the analysis.
+        let thumbs = self.scan.env.thumbs.as_ref();
+        let decode = || {
+            busy_retry(
+                self.scan,
+                &job.rel_path,
+                |r: &Result<Pixels, MediaError>| r.as_ref().err().map(|e| e.code),
+                || self.scan.env.reader.preview(job.format, &path),
+            )
+        };
+        let done = match thumbs {
+            // One job with the page's requests for the same photo.
+            Some(t) => {
+                let key =
+                    keys::thumb_key(self.scan.album.db().album_id(), &job.file_key, job.mtime_ms);
+                t.scan_pixels(&key, &decode).map(|d| (*d).clone())
+            }
+            None => decode().map(|px| {
                 let buffers = crate::thumbs::make::buffers(&px);
-                if let Some(thumbs) = &self.scan.env.thumbs {
-                    let album_id = self.scan.album.db().album_id();
-                    thumbs.write_from_scan(
-                        &keys::thumb_key(album_id, &job.file_key, job.mtime_ms),
-                        &buffers,
-                    );
+                crate::thumbs::PixelsDone {
+                    analysis: pixels::analysis_of(&buffers, pixels::small_alpha(&px).as_ref()),
+                    full: (px.full_width, px.full_height),
                 }
+            }),
+        };
+        match done {
+            Ok(done) => {
                 self.send(Op::Pixels {
                     rel_path: job.rel_path.clone(),
-                    analysis: pixels::analysis_of(&buffers, pixels::small_alpha(&px).as_ref()),
-                    size: pixels::corrected_size(job.header, &px),
+                    analysis: done.analysis,
+                    size: pixels::corrected(job.header, done.full),
                 });
                 self.scan.progress.done(1, 0);
             }

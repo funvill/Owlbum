@@ -32,7 +32,11 @@ pub fn analysis(px: &Pixels) -> String {
 /// row: the header gave none, or the decode reports a different full size.
 /// The size of a reduced or embedded preview (`full_*` 0) is never stored.
 pub fn corrected_size(header: (u32, u32), pixels: &Pixels) -> Option<(u32, u32)> {
-    let full = (pixels.full_width, pixels.full_height);
+    corrected(header, (pixels.full_width, pixels.full_height))
+}
+
+/// [`corrected_size`] from the decode's full size alone.
+pub fn corrected(header: (u32, u32), full: (u32, u32)) -> Option<(u32, u32)> {
     if full.0 == 0 || full.1 == 0 || full == header {
         None
     } else {

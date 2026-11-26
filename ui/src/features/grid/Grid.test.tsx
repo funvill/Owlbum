@@ -346,6 +346,46 @@ describe("the grid", () => {
     await waitFor(() => expect(gridBox().scrollTop).toBe(l.stride));
   });
 
+  it("keeps the photos in view where they were when a scan adds rows before them", async () => {
+    const album = useAlbum(photos(100));
+    render(<Grid />);
+    const grid = await screen.findByRole("grid");
+    await waitFor(() => expect(grid).toHaveAttribute("aria-colcount", "2"));
+    const l = gridLayout(420, 100, 160);
+    await scrollTo(PAD + 20 * l.stride); // photo 41 first in view
+    await screen.findByRole("gridcell", { name: /IMG_41\.jpg/ });
+    const before = gridBox().scrollTop;
+    // Four photos taken earlier sort before it: two rows.
+    const revision = album.change((ps) => [
+      ...ps,
+      ...Array.from({ length: 4 }, (_, i) => ({ id: 500 + i, rel_path: `old/${i}.jpg`, date: "1999-01-01T00:00:00" })),
+    ]);
+    fake.emit("album_changed", { reason: "scan", revision });
+    await waitFor(() => expect(grid).toHaveAttribute("aria-rowcount", "52"));
+    await waitFor(() => expect(gridBox().scrollTop).toBe(before + 2 * l.stride));
+    // Two more, with nothing scrolled in between: one row further.
+    await screen.findByRole("gridcell", { name: /IMG_41\.jpg/ });
+    const again = album.change((ps) => [
+      ...ps,
+      ...Array.from({ length: 2 }, (_, i) => ({ id: 600 + i, rel_path: `old2/${i}.jpg`, date: "1998-01-01T00:00:00" })),
+    ]);
+    fake.emit("album_changed", { reason: "scan", revision: again });
+    await waitFor(() => expect(grid).toHaveAttribute("aria-rowcount", "53"));
+    await waitFor(() => expect(gridBox().scrollTop).toBe(before + 3 * l.stride));
+    expect(screen.getByRole("gridcell", { name: /IMG_41\.jpg/ })).toBeInTheDocument();
+  });
+
+  it("stays at the top while a scan adds rows, with no current photo", async () => {
+    const album = useAlbum(photos(100));
+    render(<Grid />);
+    const grid = await screen.findByRole("grid");
+    await screen.findByRole("gridcell", { name: /IMG_1\.jpg/ });
+    const revision = album.change((ps) => [...ps, { id: 500, rel_path: "old/0.jpg", date: "1999-01-01T00:00:00" }]);
+    fake.emit("album_changed", { reason: "scan", revision });
+    await waitFor(() => expect(grid).toHaveAttribute("aria-rowcount", "51"));
+    expect(gridBox().scrollTop).toBe(0);
+  });
+
   it("follows the size of its box", async () => {
     useAlbum(photos(100));
     render(<Grid />);

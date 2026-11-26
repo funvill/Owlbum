@@ -610,3 +610,182 @@ fn an_upright_srgb_jpeg_is_recognised() {
     .unwrap();
     assert!(!is_upright_srgb_jpeg(&p3));
 }
+
+// ---- The page's requests and the scan share decodes (#106, #91) ----
+
+/// The scan's reader: counts the scan's decodes by file name, and holds one
+/// decode (of `held`, or the first one when `held` is None) until let go.
+#[derive(Default)]
+struct Gate {
+    held: Mutex<Option<String>>,
+    /// The file the held decode is of, once it is held.
+    holding: Mutex<Option<String>>,
+    open: Mutex<bool>,
+    opened: std::sync::Condvar,
+    decodes: Mutex<Vec<String>>,
+}
+
+impl Gate {
+    fn release(&self) {
+        *self.open.lock().unwrap() = true;
+        self.opened.notify_all();
+    }
+
+    /// Waits until a decode is held, and answers its file name.
+    fn until_holding(&self) -> String {
+        until(|| self.holding.lock().unwrap().clone())
+    }
+}
+
+impl crate::scan::Reader for Gate {
+    fn preview(&self, format: &'static MediaFormat, path: &Path) -> Result<Pixels, MediaError> {
+        let name = path.file_name().unwrap().to_string_lossy().into_owned();
+        self.decodes.lock().unwrap().push(name.clone());
+        let hold = {
+            let held = self.held.lock().unwrap();
+            let mut holding = self.holding.lock().unwrap();
+            let hold = holding.is_none() && held.as_ref().is_none_or(|h| *h == name);
+            if hold {
+                *holding = Some(name.clone());
+            }
+            hold
+        };
+        if hold {
+            let mut open = self.open.lock().unwrap();
+            while !*open {
+                open = self.opened.wait(open).unwrap();
+            }
+        }
+        crate::scan::MediaReader.preview(format, path)
+    }
+}
+
+/// Polls `f` until it answers something, for at most 30 seconds.
+fn until<T>(mut f: impl FnMut() -> Option<T>) -> T {
+    let start = std::time::Instant::now();
+    loop {
+        if let Some(v) = f() {
+            return v;
+        }
+        assert!(start.elapsed() < Duration::from_secs(30), "timed out");
+        std::thread::sleep(Duration::from_millis(5));
+    }
+}
+
+/// An album scanned by one scan thread reading with `gate`, the scan
+/// started but not waited for.
+struct Live {
+    thumbs: Thumbs,
+    source: Arc<Counting>,
+    gate: Arc<Gate>,
+    scanner: Scanner,
+    _tmp: tempfile::TempDir,
+}
+
+impl Live {
+    fn start(held: Option<&str>) -> Self {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("album");
+        make_album(&root);
+        let data = AppData::open(&tmp.path().join("data")).unwrap();
+        let source = Arc::new(Counting::default());
+        let thumbs = Thumbs::with(Cache::open(data).unwrap(), source.clone(), 4);
+        let gate = Arc::new(Gate::default());
+        *gate.held.lock().unwrap() = held.map(str::to_owned);
+        let album = Album::open(&root, &OpenOptions::default()).unwrap();
+        let mut env = ScanEnv::new(Arc::new(Quiet));
+        env.threads = 1;
+        env.reader = gate.clone();
+        env.thumbs = Some(thumbs.clone());
+        let scanner = Scanner::new(Arc::new(album), env);
+        scanner.request(Request::default());
+        Self {
+            thumbs,
+            source,
+            gate,
+            scanner,
+            _tmp: tmp,
+        }
+    }
+
+    /// `(thumb_key, analysis)` of the row of `name`, once it is written.
+    fn row(&self, name: &str) -> Option<(String, Option<String>)> {
+        self.scanner
+            .album()
+            .db()
+            .read(|c| {
+                Ok(c.query_row(
+                    "SELECT thumb_key, analysis FROM photos WHERE file_name = ?1",
+                    [name],
+                    |r| Ok((r.get(0)?, r.get(1)?)),
+                )
+                .ok())
+            })
+            .unwrap()
+    }
+
+    fn get(&self, url: &str) -> Reply {
+        serve::answer(Some(self.scanner.open()), &self.thumbs, url)
+    }
+}
+
+impl Drop for Live {
+    fn drop(&mut self) {
+        self.gate.release();
+        self.scanner.cancel();
+        self.scanner.wait();
+    }
+}
+
+#[test]
+fn a_page_request_makes_a_waiting_photos_pass_and_the_scan_does_not_decode_it_again() {
+    let live = Live::start(None);
+    // The scan's only thread is held in its first decode.
+    let held = live.gate.until_holding();
+    let target = if held == "turned.jpg" {
+        "big.jpg"
+    } else {
+        "turned.jpg"
+    };
+    let (key, analysis) = until(|| live.row(target));
+    assert_eq!(analysis, None, "still waiting for its pixels pass");
+    let reply = live.get(&format!("owlbum://thumb/{key}/s"));
+    assert_eq!(reply.status, 200, "made at once, ahead of the scan");
+    assert_eq!(live.source.previews.load(Ordering::SeqCst), 1);
+    live.gate.release();
+    live.scanner.wait();
+    let decoded = live.gate.decodes.lock().unwrap().clone();
+    assert!(
+        !decoded.iter().any(|n| n == target),
+        "the scan wrote the page's pass without decoding again: {decoded:?}"
+    );
+    assert_eq!(decoded.len(), 5, "every other picture once: {decoded:?}");
+    let (_, analysis) = live.row(target).unwrap();
+    assert!(analysis.is_some_and(|a| a.starts_with('{')));
+    assert!(
+        live.thumbs.inner.stash.lock().unwrap().is_empty(),
+        "nothing left waiting for the scan"
+    );
+}
+
+#[test]
+fn a_page_request_joins_the_scans_decode_of_the_same_photo() {
+    let live = Live::start(Some("turned.jpg"));
+    assert_eq!(live.gate.until_holding(), "turned.jpg");
+    let (key, _) = until(|| live.row("turned.jpg"));
+    std::thread::scope(|s| {
+        let request = s.spawn(|| live.get(&format!("owlbum://thumb/{key}/s")));
+        until(|| (live.thumbs.inner.thumbs.joined(&key) == 1).then_some(()));
+        live.gate.release();
+        let reply = request.join().unwrap();
+        assert_eq!(reply.status, 200);
+        assert_eq!(size_of(&reply.body), (200, 300), "upright");
+    });
+    assert_eq!(
+        live.source.previews.load(Ordering::SeqCst),
+        0,
+        "one decode, the scan's"
+    );
+    live.scanner.wait();
+    assert!(live.row("turned.jpg").unwrap().1.is_some());
+}

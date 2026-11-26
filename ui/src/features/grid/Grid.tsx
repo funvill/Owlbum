@@ -13,17 +13,19 @@ import { useSettingsStore } from "../app";
 import {
   PAD,
   anchorAfterResize,
+  followScroll,
   gridLayout,
   realScroll,
   scrollRatio,
   scrollToShow,
   thumbFor,
   toScrollTop,
+  viewIndex,
   visibleRange,
   type GridLayout,
   type VisibleRange,
 } from "./layout";
-import { animatedLabel, gridBlocks, useGridStore } from "./store";
+import { animatedLabel, gridBlocks, setGridView, useGridStore } from "./store";
 import { Tile, type TileActions } from "./Tile";
 import "./Grid.css";
 
@@ -52,6 +54,7 @@ export function Grid(props: GridProps) {
   const selection = useGridStore((s) => s.selection);
   const pending = useGridStore((s) => s.pending);
   const scroll = useGridStore((s) => s.scroll);
+  const follow = useGridStore((s) => s.follow);
   useGridStore((s) => s.formats);
   const editTarget = useSettingsStore((s) => s.settings?.edit_target ?? "album");
   const count = result?.count ?? 0;
@@ -123,6 +126,19 @@ export function Grid(props: GridProps) {
       anchor: v.anchor?.index ?? null,
     });
   }, [blocks, placeLayer]);
+
+  // The tile the place is kept by while rows arrive, worked out when a re-run
+  // asks: only a row of the result now held counts.
+  useEffect(() => {
+    setGridView(() => {
+      const v = live.current;
+      const index = viewIndex(v.layout, v.real, v.size.height, v.count, v.at);
+      if (index === null || !blocks.fresh(index)) return null;
+      const row = blocks.row(index);
+      return row === undefined ? null : { id: row.id, index };
+    });
+    return () => setGridView(() => null);
+  }, [blocks]);
 
   /** Sets the real scroll position. */
   const scrollReal = useCallback((real: number) => {
@@ -196,6 +212,15 @@ export function Grid(props: GridProps) {
     }
     update();
   }, [layout, size.height, update, scrollReal]);
+
+  // Rows arrived before the tile the place is kept by: scroll by as many rows,
+  // so the photos in view stay where they were (docs/04, "When the result changes").
+  useLayoutEffect(() => {
+    if (follow === null) return;
+    const v = live.current;
+    scrollReal(followScroll(v.layout, v.real, follow.from, follow.to));
+    update();
+  }, [follow, scrollReal, update]);
 
   // Scrolling asked for by the store: to the current photo, or to the top.
   useLayoutEffect(() => {

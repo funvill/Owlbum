@@ -643,6 +643,7 @@ interface Keep {
   current: { id: number; index: number } | null; // the current photo
   anchor_id: number | null;                      // where a Shift range starts
   selection: number[];                           // every selected photo id
+  view: { id: number; index: number } | null;    // the tile the grid's place is kept by after album_changed (Browsing)
 }
 
 interface Filter {

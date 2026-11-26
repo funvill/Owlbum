@@ -18,4 +18,10 @@ anchor: PhotoAt | null,
  * The old selection limited to photos still shown, plus the new
  * current photo.
  */
-selection: Array<number>, };
+selection: Array<number>, 
+/**
+ * Where `keep.view` is now, or the photo now in its place when it
+ * left the result (the rule for the current photo); null when none was
+ * given or the result is empty.
+ */
+view: PhotoAt | null, };

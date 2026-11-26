@@ -13,6 +13,7 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use owlbum_core::album::Album;
 use owlbum_core::error::AppResult;
+use owlbum_core::query::QueryEngine;
 use owlbum_core::scan::watch::{AlbumWatch, WatchEnv};
 use owlbum_core::scan::{Request, ScanEnv, Scanner};
 use owlbum_core::thumbs::Thumbs;
@@ -22,12 +23,14 @@ use tauri::{AppHandle, Manager, Runtime};
 use crate::events::TauriEmitter;
 
 /// An open album: its scanner owns it, and its watch asks the scanner for
-/// rescans.
+/// rescans. Its query results live as long as it does, so a token never
+/// reaches another album's results.
 #[derive(Debug)]
 pub struct OpenAlbum {
     // Dropped first: the watch holds the scanner too.
     watch: AlbumWatch,
     scanner: Arc<Scanner>,
+    queries: Arc<QueryEngine>,
 }
 
 impl OpenAlbum {
@@ -44,6 +47,11 @@ impl OpenAlbum {
     /// Its folder watch.
     pub fn watch(&self) -> &AlbumWatch {
         &self.watch
+    }
+
+    /// Its query results.
+    pub fn queries(&self) -> &Arc<QueryEngine> {
+        &self.queries
     }
 }
 
@@ -71,7 +79,11 @@ impl Session {
         let scanner = Arc::new(Scanner::new(Arc::new(album), env));
         scanner.request(Request::default());
         let watch = AlbumWatch::start(Arc::clone(&scanner), watch);
-        *self.slot() = Some(OpenAlbum { watch, scanner });
+        *self.slot() = Some(OpenAlbum {
+            watch,
+            scanner,
+            queries: Arc::new(QueryEngine::new()),
+        });
     }
 
     /// The window gained focus: an album whose folder is not watched is
@@ -96,6 +108,13 @@ impl Session {
     /// work that takes a while, such as making a picture.
     pub fn scanner(&self) -> Option<Arc<Scanner>> {
         self.slot().as_ref().map(|o| Arc::clone(&o.scanner))
+    }
+
+    /// The open album's scanner and query engine, held apart from the
+    /// session's lock so a query does not hold up other commands.
+    /// `no_album` when there is none.
+    pub fn queries(&self) -> AppResult<(Arc<Scanner>, Arc<QueryEngine>)> {
+        self.with(|open| Ok((Arc::clone(&open.scanner), Arc::clone(&open.queries))))
     }
 
     /// Runs `f` with the open album; `no_album` when there is none.

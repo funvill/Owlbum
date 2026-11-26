@@ -209,7 +209,20 @@ pub fn render<R: Runtime>(modules: &[Module<R>]) -> BTreeMap<String, String> {
         events.join(" &\n  ")
     ));
     files.files.insert("index.ts".to_owned(), index);
+    assert_no_case_clash(&files.files);
     files.files
+}
+
+/// Panics when two files differ only in case (`Query.ts` and `query.ts`):
+/// on Windows and macOS they are one file, and one would overwrite the
+/// other.
+fn assert_no_case_clash(files: &BTreeMap<String, String>) {
+    let mut seen: BTreeMap<String, &str> = BTreeMap::new();
+    for key in files.keys() {
+        if let Some(other) = seen.insert(key.to_lowercase(), key) {
+            panic!("{other} and {key} differ only in case; give one #[ts(export_to = \"...\")]");
+        }
+    }
 }
 
 #[cfg(test)]
@@ -254,6 +267,15 @@ mod tests {
             ],
             events: vec![EventSig::of::<Ping>()],
         }
+    }
+
+    #[test]
+    #[should_panic(expected = "differ only in case")]
+    fn files_that_differ_only_in_case_are_refused() {
+        let mut files = BTreeMap::new();
+        files.insert("Query.ts".to_owned(), String::new());
+        files.insert("query.ts".to_owned(), String::new());
+        assert_no_case_clash(&files);
     }
 
     #[test]

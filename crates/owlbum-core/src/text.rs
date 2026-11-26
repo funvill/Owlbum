@@ -10,4 +10,5 @@ pub mod album;
 pub mod appdata;
 pub mod errors;
 pub mod media;
+pub mod query;
 pub mod scan;

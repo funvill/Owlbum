@@ -57,10 +57,20 @@ impl Ifd {
 }
 
 /// A whole TIFF file (or EXIF block) with `ifd0` as its first IFD.
+/// Every IFD and its values come first and the blobs (image data) last, as
+/// cameras lay files out, so a reader that loads only the start of a file
+/// finds all the metadata.
 pub fn write(ifd0: &Ifd) -> Vec<u8> {
     let mut out = b"II*\0".to_vec();
     out.extend_from_slice(&8u32.to_le_bytes());
-    write_ifd(&mut out, ifd0);
+    let mut blobs = Vec::new();
+    write_ifd(&mut out, ifd0, &mut blobs);
+    for (at, bytes) in blobs {
+        pad(&mut out);
+        let off = offset(&out);
+        out.extend_from_slice(bytes);
+        put_u32(&mut out, at + 8, off);
+    }
     out
 }
 
@@ -112,8 +122,9 @@ fn encode(val: &Val) -> (u16, u32, Vec<u8>) {
     }
 }
 
-/// Writes `ifd` at the end of `out` and returns its offset.
-fn write_ifd(out: &mut Vec<u8>, ifd: &Ifd) -> u32 {
+/// Writes `ifd` at the end of `out` and returns its offset. Blobs are
+/// queued in `blobs` (with the entry that points at them) for the end.
+fn write_ifd<'a>(out: &mut Vec<u8>, ifd: &'a Ifd, blobs: &mut Vec<(usize, &'a [u8])>) -> u32 {
     pad(out);
     let start = out.len();
     let mut entries: Vec<&(u16, Val)> = ifd.entries.iter().collect();
@@ -131,12 +142,12 @@ fn write_ifd(out: &mut Vec<u8>, ifd: &Ifd) -> u32 {
                 out[at + 2..at + 4].copy_from_slice(&4u16.to_le_bytes());
                 let n = u32::try_from(children.len()).expect("count");
                 put_u32(out, at + 4, n);
-                deferred.push((at, val));
+                deferred.push((at, children));
             }
-            Val::Blob(_) => {
+            Val::Blob(bytes) => {
                 out[at + 2..at + 4].copy_from_slice(&4u16.to_le_bytes());
                 put_u32(out, at + 4, 1);
-                deferred.push((at, val));
+                blobs.push((at, bytes));
             }
             _ => {
                 let (ty, n, bytes) = encode(val);
@@ -153,28 +164,17 @@ fn write_ifd(out: &mut Vec<u8>, ifd: &Ifd) -> u32 {
             }
         }
     }
-    for (at, val) in deferred {
-        match val {
-            Val::Blob(bytes) => {
-                pad(out);
-                let off = offset(out);
-                out.extend_from_slice(bytes);
-                put_u32(out, at + 8, off);
+    for (at, children) in deferred {
+        let offs: Vec<u32> = children.iter().map(|c| write_ifd(out, c, blobs)).collect();
+        if offs.len() == 1 {
+            put_u32(out, at + 8, offs[0]);
+        } else {
+            pad(out);
+            let off = offset(out);
+            for o in offs {
+                out.extend_from_slice(&o.to_le_bytes());
             }
-            Val::Ifds(children) => {
-                let offs: Vec<u32> = children.iter().map(|c| write_ifd(out, c)).collect();
-                if offs.len() == 1 {
-                    put_u32(out, at + 8, offs[0]);
-                } else {
-                    pad(out);
-                    let off = offset(out);
-                    for o in offs {
-                        out.extend_from_slice(&o.to_le_bytes());
-                    }
-                    put_u32(out, at + 8, off);
-                }
-            }
-            _ => unreachable!(),
+            put_u32(out, at + 8, off);
         }
     }
     u32::try_from(start).expect("offset")

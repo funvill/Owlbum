@@ -77,7 +77,7 @@ const TRIP_FILES: &[(&str, u64)] = &[
     ("problems/photo.heic", 536),
     ("video/clip.mp4", 30898),
 ];
-const TRIP_DIGEST: u64 = 0x1412_70e4_c636_26c6;
+const TRIP_DIGEST: u64 = 0xa7fd_bc15_971c_3aae;
 
 #[test]
 fn trip_is_pinned() {
@@ -414,4 +414,122 @@ fn rotated_video_is_marked_rotated() {
     let tkhd = bytes.windows(4).position(|w| w == b"tkhd").unwrap();
     let matrix = tkhd + 4 + 4 + 4 * 5 + 8 + 2 * 4;
     assert_eq!(&bytes[matrix..matrix + 8], &[0, 0, 0, 0, 0, 1, 0, 0]);
+}
+
+fn u16_le(b: &[u8], at: usize) -> u16 {
+    u16::from_le_bytes([b[at], b[at + 1]])
+}
+
+fn u32_le(b: &[u8], at: usize) -> u32 {
+    u32::from_le_bytes(b[at..at + 4].try_into().unwrap())
+}
+
+/// The value (or offset) field of `tag` in the TIFF IFD at `ifd`.
+fn tiff_tag(b: &[u8], ifd: usize, tag: u16) -> Option<(u32, usize)> {
+    let n = usize::from(u16_le(b, ifd));
+    (0..n)
+        .map(|i| ifd + 2 + 12 * i)
+        .find_map(|e| (u16_le(b, e) == tag).then(|| (u32_le(b, e + 4), e + 8)))
+}
+
+#[test]
+fn dng_reads_back() {
+    let dir = tempfile::tempdir().unwrap();
+    let album = trip(dir.path()).unwrap();
+    let f = album.of_kind(Kind::Raw).next().unwrap();
+    let b = fs::read(album.path(f)).unwrap();
+
+    // IFD 0 is a plain RGB thumbnail any TIFF reader shows.
+    let thumb = image::load_from_memory_with_format(&b, image::ImageFormat::Tiff).unwrap();
+    assert_eq!((thumb.width(), thumb.height()), (f.width / 4, f.height / 4));
+    let exif = nom_exif::read_exif(album.path(f)).unwrap();
+    assert_eq!(
+        exif.get(nom_exif::ExifTag::Make).and_then(|v| v.as_str()),
+        Some("Owlbum")
+    );
+
+    // Two SubIFDs: the raw data, then the JPEG preview.
+    let ifd0 = u32_le(&b, 4) as usize;
+    let (count, at) = tiff_tag(&b, ifd0, 330).unwrap();
+    assert_eq!(count, 2);
+    let list = u32_le(&b, at) as usize;
+    let raw = u32_le(&b, list) as usize;
+    let preview = u32_le(&b, list + 4) as usize;
+    let field = |ifd, tag| u32_le(&b, tiff_tag(&b, ifd, tag).unwrap().1);
+    assert_eq!(field(raw, 254), 0);
+    assert_eq!(u16_le(&b, tiff_tag(&b, raw, 262).unwrap().1), 32803);
+    assert_eq!(field(raw, 279), f.width * f.height * 2);
+    let (start, len) = (field(preview, 273) as usize, field(preview, 279) as usize);
+    let jpeg = image::load_from_memory(&b[start..start + len]).unwrap();
+    assert_eq!((jpeg.width(), jpeg.height()), (f.width, f.height));
+}
+
+#[test]
+fn video_frames_are_jpegs() {
+    let dir = tempfile::tempdir().unwrap();
+    let album = trip(dir.path()).unwrap();
+    let f = album.of_kind(Kind::Video).next().unwrap();
+    let b = fs::read(album.path(f)).unwrap();
+    let find = |name: &[u8]| b.windows(4).position(|w| w == name).unwrap();
+    let stco = find(b"stco");
+    let first = u32::from_be_bytes(b[stco + 12..stco + 16].try_into().unwrap()) as usize;
+    let stsz = find(b"stsz");
+    let count = u32::from_be_bytes(b[stsz + 12..stsz + 16].try_into().unwrap());
+    assert_eq!(count, 8);
+    let mut at = first;
+    for i in 0..count as usize {
+        let size_at = stsz + 16 + 4 * i;
+        let size = u32::from_be_bytes(b[size_at..size_at + 4].try_into().unwrap()) as usize;
+        let frame = image::load_from_memory(&b[at..at + size]).unwrap();
+        assert_eq!((frame.width(), frame.height()), (f.width, f.height));
+        at += size;
+    }
+}
+
+/// A 9 × 8 difference hash, the shape near-duplicate detection uses.
+fn dhash(img: &image::DynamicImage) -> u64 {
+    let small = img
+        .resize_exact(9, 8, image::imageops::FilterType::Triangle)
+        .to_luma8();
+    let mut h = 0u64;
+    for y in 0..8 {
+        for x in 0..8 {
+            h = h << 1 | u64::from(small.get_pixel(x, y)[0] < small.get_pixel(x + 1, y)[0]);
+        }
+    }
+    h
+}
+
+#[test]
+fn only_the_burst_and_the_duplicate_look_alike() {
+    let dir = tempfile::tempdir().unwrap();
+    let album = trip(dir.path()).unwrap();
+    let mut hashes = Vec::new();
+    for f in &album.files {
+        if let Ok(img) = image::open(album.path(f)) {
+            hashes.push((f, dhash(&img)));
+        }
+    }
+    assert!(hashes.len() >= 18, "{}", hashes.len());
+    let mut closest_other = u32::MAX;
+    for (i, (a, ha)) in hashes.iter().enumerate() {
+        for (b, hb) in &hashes[i + 1..] {
+            let d = (ha ^ hb).count_ones();
+            let same_burst = a.burst.is_some() && a.burst == b.burst;
+            let duplicate = a.kind == Kind::Duplicate || b.kind == Kind::Duplicate;
+            let copies =
+                duplicate && fs::read(album.path(a)).unwrap() == fs::read(album.path(b)).unwrap();
+            if same_burst {
+                assert!(d <= 10, "{} and {}: {d}", a.rel_path, b.rel_path);
+            } else if copies {
+                assert_eq!(d, 0);
+            } else {
+                closest_other = closest_other.min(d);
+                // Organising groups dated photos at a distance of 12 or
+                // less (6 when either is undated).
+                assert!(d > 12, "{} and {} look alike: {d}", a.rel_path, b.rel_path);
+            }
+        }
+    }
+    println!("closest unrelated pair: {closest_other}");
 }

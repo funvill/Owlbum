@@ -3,14 +3,17 @@
 //!
 //! Orientation comes from the codestream and `jxl-oxide` applies it when it
 //! hands out pixels. An animated JPEG XL is shown as a still: frame 1.
+//! EXIF sits in the container's `Exif` box, which [`exif_box`] finds by
+//! walking box headers.
 
 use std::fs::File;
-use std::io::{BufReader, Read};
+use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
 use jxl_oxide::{InitializeResult, JxlImage, PixelFormat, Render};
 
 use super::colour;
+use super::exif::Exif;
 use super::handler::{
     Cost, Layout, MediaError, MediaHandler, Metadata, Pixels, Samples, SourcePixels, VideoInfo,
     check_size,
@@ -70,6 +73,65 @@ fn read_header(file: &Path) -> Result<JxlImage, MediaError> {
     }
 }
 
+/// The signature box that starts a JPEG XL container.
+const CONTAINER: [u8; 12] = [0, 0, 0, 12, b'J', b'X', b'L', b' ', 0x0d, 0x0a, 0x87, 0x0a];
+
+/// Larger `Exif` boxes are taken to be damaged.
+const MAX_EXIF: u64 = 16 * 1024 * 1024;
+
+/// The EXIF block (from the TIFF header on) in a JPEG XL container's `Exif`
+/// box. Box headers are read and every other box is skipped with a seek,
+/// so the codestream is never read. A bare codestream has no box, and a
+/// Brotli-compressed `brob` box is not read. The box body starts with a
+/// 4-byte big-endian offset from its end to the TIFF header.
+pub fn exif_box<R: Read + Seek>(r: &mut R) -> std::io::Result<Option<Vec<u8>>> {
+    let mut sig = [0u8; 12];
+    if r.read_exact(&mut sig).is_err() || sig != CONTAINER {
+        return Ok(None);
+    }
+    loop {
+        let mut head = [0u8; 8];
+        if r.read_exact(&mut head).is_err() {
+            return Ok(None);
+        }
+        let size = u32::from_be_bytes([head[0], head[1], head[2], head[3]]);
+        // The body's length; None runs to the end of the file.
+        let body = match size {
+            0 => None,
+            1 => {
+                let mut big = [0u8; 8];
+                r.read_exact(&mut big)?;
+                match u64::from_be_bytes(big).checked_sub(16) {
+                    Some(n) => Some(n),
+                    None => return Ok(None),
+                }
+            }
+            2..=7 => return Ok(None),
+            n => Some(u64::from(n) - 8),
+        };
+        if &head[4..8] == b"Exif" {
+            let len = body.unwrap_or(MAX_EXIF).min(MAX_EXIF);
+            let mut data = Vec::new();
+            r.take(len).read_to_end(&mut data)?;
+            if data.len() < 4 {
+                return Ok(None);
+            }
+            let offset = u32::from_be_bytes([data[0], data[1], data[2], data[3]]) as usize;
+            return Ok(offset
+                .checked_add(4)
+                .and_then(|start| data.get(start..))
+                .map(<[u8]>::to_vec));
+        }
+        match body {
+            Some(n) => {
+                let n = i64::try_from(n).map_err(|_| std::io::ErrorKind::InvalidData)?;
+                r.seek(SeekFrom::Current(n))?;
+            }
+            None => return Ok(None),
+        }
+    }
+}
+
 /// Reads the whole file, checking the size on the header before any pixel
 /// is decoded, and renders frame 1.
 fn render(file: &Path) -> Result<(JxlImage, Render), MediaError> {
@@ -116,8 +178,12 @@ impl MediaHandler for Jxl {
             width,
             height,
             has_alpha: image.pixel_format().has_alpha(),
-            // The `Exif` box may follow the codestream; reading it is part of
-            // the metadata reader (roadmap #10).
+            // A damaged box leaves the picture without EXIF, never an error.
+            exif: exif_box(&mut open(file)?)
+                .ok()
+                .flatten()
+                .as_deref()
+                .and_then(Exif::parse),
             ..Metadata::default()
         })
     }

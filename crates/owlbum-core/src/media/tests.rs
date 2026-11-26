@@ -915,3 +915,153 @@ fn an_srgb_jpeg_xl_is_not_converted() {
     assert!(moxcms::ColorProfile::new_from_slice(&icc).is_ok());
     assert!(colour::is_srgb(Some(&icc)));
 }
+
+// ---- EXIF from each container (docs/03, "Metadata reading") ----
+
+/// A camera's EXIF block, as the `trip` fixture writes it.
+fn camera_exif() -> Vec<u8> {
+    owlbum_fixtures::encode::Meta {
+        make: Some("Owlbum"),
+        model: Some("Fixture One"),
+        taken: Some("2025:07:14 09:12:00".into()),
+        ..Default::default()
+    }
+    .exif_block()
+    .unwrap()
+}
+
+fn assert_camera_exif(meta: &Metadata, what: &str) {
+    let exif = meta.exif.as_ref().unwrap_or_else(|| panic!("{what}: no EXIF"));
+    assert_eq!(exif.text(exif::Dir::Main, 0x010f), Some("Owlbum"), "{what}");
+    assert_eq!(
+        exif.text(exif::Dir::Exif, 0x9003),
+        Some("2025:07:14 09:12:00"),
+        "{what}"
+    );
+}
+
+fn box_(kind: &[u8; 4], data: &[u8]) -> Vec<u8> {
+    let mut b = (u32::try_from(data.len() + 8).unwrap()).to_be_bytes().to_vec();
+    b.extend_from_slice(kind);
+    b.extend_from_slice(data);
+    b
+}
+
+/// A JPEG XL container: the codestream in `jxlc`, then an `Exif` box.
+fn jxl_container(codestream: &[u8], exif: Option<&[u8]>) -> Vec<u8> {
+    let mut out = vec![0, 0, 0, 12, b'J', b'X', b'L', b' ', 0x0d, 0x0a, 0x87, 0x0a];
+    out.extend(box_(b"ftyp", b"jxl \0\0\0\0jxl "));
+    out.extend(box_(b"jxlc", codestream));
+    if let Some(block) = exif {
+        let mut body = 0u32.to_be_bytes().to_vec();
+        body.extend_from_slice(block);
+        out.extend(box_(b"Exif", &body));
+    }
+    out
+}
+
+#[test]
+fn exif_is_read_from_every_container_that_holds_it() {
+    let dir = TempDir::new().unwrap();
+    let block = camera_exif();
+    let img = quadrants();
+
+    // JPEG: the APP1 segment.
+    let meta = owlbum_fixtures::encode::Meta {
+        make: Some("Owlbum"),
+        model: Some("Fixture One"),
+        taken: Some("2025:07:14 09:12:00".into()),
+        ..Default::default()
+    };
+    let jpeg = owlbum_fixtures::encode::jpeg(&img, 90, &meta);
+
+    // PNG: an `eXIf` chunk before the pixels.
+    let png = encode(&image::DynamicImage::ImageRgb8(img.clone()), ImageFormat::Png);
+    let png = png_with_chunk(&png, &png_chunk(b"eXIf", &block));
+
+    // WebP: the extended form with an `EXIF` chunk.
+    let mut vp8x = vec![0x08, 0, 0, 0]; // EXIF flag
+    vp8x.extend_from_slice(&u24(31));
+    vp8x.extend_from_slice(&u24(15));
+    let rgba = image::DynamicImage::ImageRgb8(img.clone()).to_rgba8();
+    let mut body = b"WEBP".to_vec();
+    body.extend(riff_chunk(b"VP8X", &vp8x));
+    body.extend(riff_chunk(b"VP8L", &vp8l_payload(&rgba)));
+    body.extend(riff_chunk(b"EXIF", &block));
+    let mut webp = b"RIFF".to_vec();
+    webp.extend_from_slice(&(body.len() as u32).to_le_bytes());
+    webp.extend(body);
+
+    // TIFF: the file's own IFDs, written after the pixels.
+    use owlbum_fixtures::tiff::{Ifd, Val};
+    let mut exif_ifd = Ifd::new();
+    exif_ifd.ascii(0x9003, "2025:07:14 09:12:00");
+    let mut ifd0 = Ifd::new();
+    ifd0.long(256, 32).long(257, 16);
+    ifd0.set(258, Val::Short(vec![8, 8, 8]));
+    ifd0.short(259, 1).short(262, 2);
+    ifd0.ascii(0x010f, "Owlbum");
+    ifd0.set(273, Val::Blob(img.as_raw().clone()));
+    ifd0.short(277, 3).long(278, 16).long(279, 32 * 16 * 3);
+    ifd0.set(0x8769, Val::Ifds(vec![exif_ifd]));
+    let tiff = owlbum_fixtures::tiff::write(&ifd0);
+
+    // JPEG XL: the container's `Exif` box after the codestream.
+    let jxl = jxl_container(&owlbum_fixtures::encode::jxl(&img), Some(&block));
+
+    for (name, bytes) in [
+        ("e.jpg", jpeg),
+        ("e.png", png),
+        ("e.webp", webp),
+        ("e.tif", tiff),
+        ("e.jxl", jxl),
+    ] {
+        let path = write(&dir, name, &bytes);
+        let format = handler_for(&path);
+        let meta = format.handler.metadata(&path).unwrap();
+        assert_eq!((meta.width, meta.height), (32, 16), "{name}");
+        assert_camera_exif(&meta, name);
+        // The picture still reads.
+        let px = format.handler.working(&path).unwrap();
+        assert_corners(&px, [RED, GREEN, BLUE, WHITE], name);
+    }
+}
+
+#[test]
+fn files_without_exif_give_none() {
+    let dir = TempDir::new().unwrap();
+    let img = image::DynamicImage::ImageRgb8(quadrants());
+    let bare_jxl = owlbum_fixtures::encode::jxl(&quadrants());
+    for (name, bytes) in [
+        ("n.jpg", jpeg_bytes(&quadrants())),
+        ("n.png", encode(&img, ImageFormat::Png)),
+        ("n.gif", encode(&img, ImageFormat::Gif)),
+        ("n.bmp", encode(&img, ImageFormat::Bmp)),
+        ("n.webp", encode(&img, ImageFormat::WebP)),
+        ("n.jxl", bare_jxl.clone()),
+        ("c.jxl", jxl_container(&bare_jxl, None)),
+    ] {
+        let path = write(&dir, name, &bytes);
+        let meta = handler_for(&path).handler.metadata(&path).unwrap();
+        assert_eq!(meta.exif, None, "{name}");
+    }
+}
+
+#[test]
+fn a_damaged_jpeg_xl_exif_box_is_no_error() {
+    let dir = TempDir::new().unwrap();
+    let mut bytes = jxl_container(&owlbum_fixtures::encode::jxl(&quadrants()), None);
+    // An `Exif` box whose offset points past its end, and a box that claims
+    // more bytes than the file has.
+    bytes.extend(box_(b"Exif", &[0, 0, 0, 99, 1, 2]));
+    let path = write(&dir, "d.jxl", &bytes);
+    let meta = handler_for(&path).handler.metadata(&path).unwrap();
+    assert_eq!(meta.exif, None);
+    assert_eq!(
+        jxl::exif_box(&mut Cursor::new(&bytes[..bytes.len() - 3])).ok().flatten(),
+        None
+    );
+    let mut long = jxl_container(&owlbum_fixtures::encode::jxl(&quadrants()), None);
+    long.extend_from_slice(&[0xff, 0xff, 0xff, 0xff, b'j', b'u', b'n', b'k']);
+    assert!(jxl::exif_box(&mut Cursor::new(&long)).is_ok());
+}

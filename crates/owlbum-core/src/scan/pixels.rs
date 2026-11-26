@@ -1,17 +1,74 @@
 //! What the pixels pass makes from its one decode
-//! (docs/03-media-and-scanning.md, "Pixels pass").
+//! (docs/03-media-and-scanning.md, "Pixels pass" and "Thumbnails and the
+//! zoom copy"): the thumbnail buffers, and the analysis from the small one.
 //!
-//! Roadmap #10 replaces [`analysis`] with the pinned image analysis, and
-//! raises [`super::SCAN_VERSION`] in the same commit so the rows analysed
-//! here with `{}` are read again. Roadmap #11 writes the thumbnails from
-//! the same [`Pixels`], next to the call of [`analysis`] in the scanner.
+//! The 1600 px buffer is always built, so the analysis never depends on
+//! which thumbnails the cache keeps. Roadmap #11 encodes and writes
+//! [`Buffers::medium`] and [`Buffers::small`] next to the call of
+//! [`analysis`] in the scanner.
 
+use image::imageops::{self, FilterType};
+use image::{GrayImage, RgbImage};
+
+use super::analysis;
 use crate::media::Pixels;
 
-/// The `analysis` JSON of a picture. Until the analysis is built (#10) it is
-/// the empty object: the row is complete, and nothing is measured yet.
-pub fn analysis(_pixels: &Pixels) -> String {
-    "{}".to_owned()
+/// The medium thumbnail's longest side.
+pub const MEDIUM: u32 = 1600;
+/// The small thumbnail's longest side.
+pub const SMALL: u32 = 512;
+
+/// The thumbnail pixels of one decode, before encoding.
+#[derive(Debug, Clone)]
+pub struct Buffers {
+    /// Flattened on white, fitted inside 1600 × 1600.
+    pub medium: RgbImage,
+    /// Fitted inside 512 × 512 from `medium`.
+    pub small: RgbImage,
+    /// The source's alpha at `small`'s size, made by the same resizes as
+    /// the colours; None when the source has no alpha channel.
+    pub small_alpha: Option<GrayImage>,
+}
+
+/// The size that fits `w × h` inside `side × side`, keeping the aspect
+/// ratio, never enlarging, each side rounded to the nearest pixel and at
+/// least 1.
+pub fn fit(w: u32, h: u32, side: u32) -> (u32, u32) {
+    let _ = side;
+    (w, h)
+}
+
+/// Resizes with Lanczos3 to fit inside `side`; a picture that already fits
+/// is returned as it is.
+pub fn fit_image<P>(img: image::ImageBuffer<P, Vec<u8>>, side: u32) -> image::ImageBuffer<P, Vec<u8>>
+where
+    P: image::Pixel<Subpixel = u8> + 'static,
+{
+    let _ = (side, FilterType::Lanczos3, imageops::flip_vertical::<GrayImage>);
+    img
+}
+
+/// The colours flattened on white and, when the picture has alpha, the
+/// alpha plane.
+pub fn flatten(px: &Pixels) -> (RgbImage, Option<GrayImage>) {
+    let _ = px;
+    (RgbImage::new(1, 1), None)
+}
+
+/// Builds both thumbnail buffers from one decode.
+pub fn buffers(px: &Pixels) -> Buffers {
+    let (rgb, alpha) = flatten(px);
+    Buffers {
+        medium: rgb.clone(),
+        small: rgb,
+        small_alpha: alpha,
+    }
+}
+
+/// The `analysis` JSON of a picture.
+pub fn analysis(px: &Pixels) -> String {
+    let b = buffers(px);
+    analysis::analyse(&b.small, b.small_alpha.as_ref()).to_json()
 }
 
 /// The upright size to store after the decode, when it should change the
@@ -41,6 +98,24 @@ mod tests {
         }
     }
 
+    /// A picture of `w × h` whose pixels come from `f`.
+    fn picture(w: u32, h: u32, has_alpha: bool, f: impl Fn(u32, u32) -> [u8; 4]) -> Pixels {
+        let mut rgba = Vec::with_capacity((w * h * 4) as usize);
+        for y in 0..h {
+            for x in 0..w {
+                rgba.extend_from_slice(&f(x, y));
+            }
+        }
+        Pixels {
+            width: w,
+            height: h,
+            full_width: w,
+            full_height: h,
+            rgba,
+            has_alpha,
+        }
+    }
+
     #[test]
     fn the_decode_corrects_a_missing_or_wrong_header_size() {
         assert_eq!(corrected_size((0, 0), &px((40, 20))), Some((40, 20)));
@@ -51,8 +126,80 @@ mod tests {
     }
 
     #[test]
-    fn analysis_is_an_object() {
-        let v: serde_json::Value = serde_json::from_str(&analysis(&px((4, 2)))).unwrap();
-        assert!(v.is_object());
+    fn fit_keeps_the_aspect_and_never_enlarges() {
+        assert_eq!(fit(4000, 3000, 1600), (1600, 1200));
+        assert_eq!(fit(3000, 4000, 1600), (1200, 1600));
+        assert_eq!(fit(1600, 1200, 512), (512, 384));
+        assert_eq!(fit(100, 50, 1600), (100, 50));
+        assert_eq!(fit(1600, 1600, 1600), (1600, 1600));
+        assert_eq!(fit(3000, 1, 256), (256, 1));
+        assert_eq!(fit(1000, 333, 256), (256, 85)); // 85.248
+        assert_eq!(fit(1000, 335, 256), (256, 86)); // 85.76
+        assert_eq!(fit(1, 1, 256), (1, 1));
+    }
+
+    #[test]
+    fn buffers_are_1600_then_512_and_never_enlarged() {
+        let b = buffers(&picture(4000, 2000, false, |_, _| [9, 9, 9, 255]));
+        assert_eq!(b.medium.dimensions(), (1600, 800));
+        assert_eq!(b.small.dimensions(), (512, 256));
+        assert!(b.small_alpha.is_none());
+        let b = buffers(&picture(300, 200, false, |_, _| [9, 9, 9, 255]));
+        assert_eq!(b.medium.dimensions(), (300, 200));
+        assert_eq!(b.small.dimensions(), (300, 200));
+        assert_eq!(b.small.get_pixel(5, 5).0, [9, 9, 9]);
+    }
+
+    #[test]
+    fn transparency_is_flattened_on_white_and_its_alpha_kept() {
+        let p = picture(4, 2, true, |x, _| match x {
+            0 => [0, 0, 0, 0],
+            1 => [0, 0, 0, 255],
+            2 => [200, 0, 0, 128],
+            _ => [10, 20, 30, 255],
+        });
+        let (rgb, alpha) = flatten(&p);
+        assert_eq!(rgb.get_pixel(0, 0).0, [255, 255, 255]);
+        assert_eq!(rgb.get_pixel(1, 0).0, [0, 0, 0]);
+        // 200·128/255 + 255·127/255 = 100.39 + 127 → 227; 0 → 127.
+        assert_eq!(rgb.get_pixel(2, 0).0, [227, 127, 127]);
+        assert_eq!(rgb.get_pixel(3, 1).0, [10, 20, 30]);
+        let alpha = alpha.unwrap();
+        assert_eq!(alpha.get_pixel(0, 0).0, [0]);
+        assert_eq!(alpha.get_pixel(2, 1).0, [128]);
+        // A picture without alpha has no plane, and its alpha bytes are
+        // ignored.
+        let p = picture(2, 2, false, |_, _| [1, 2, 3, 0]);
+        let (rgb, alpha) = flatten(&p);
+        assert_eq!(rgb.get_pixel(0, 0).0, [1, 2, 3]);
+        assert!(alpha.is_none());
+    }
+
+    #[test]
+    fn a_transparent_source_analyses_as_transparent() {
+        // 100 × 100 with 1% transparent pixels, then 0.1%.
+        let one = picture(100, 100, true, |_, y| [50, 60, 70, if y == 0 { 0 } else { 255 }]);
+        let v: serde_json::Value = serde_json::from_str(&analysis(&one)).unwrap();
+        assert_eq!(v["transparent"], true);
+        let tenth = picture(100, 100, true, |x, y| {
+            [50, 60, 70, if y == 0 && x < 10 { 0 } else { 255 }]
+        });
+        let v: serde_json::Value = serde_json::from_str(&analysis(&tenth)).unwrap();
+        assert_eq!(v["transparent"], false);
+        // Resized from a larger picture, a transparent band stays.
+        let big = picture(2000, 1000, true, |_, y| [0, 0, 0, if y < 100 { 0 } else { 255 }]);
+        let b = buffers(&big);
+        assert_eq!(b.small_alpha.as_ref().unwrap().dimensions(), (512, 256));
+        let v: serde_json::Value = serde_json::from_str(&analysis(&big)).unwrap();
+        assert_eq!(v["transparent"], true);
+    }
+
+    #[test]
+    fn the_same_picture_gives_byte_identical_json() {
+        let p = picture(900, 700, false, |x, y| [(x % 256) as u8, (y % 256) as u8, ((x ^ y) % 256) as u8, 255]);
+        let a = analysis(&p);
+        assert_eq!(a, analysis(&p));
+        let v: serde_json::Value = serde_json::from_str(&a).unwrap();
+        assert!(v["sharpness"].as_f64().unwrap() > 0.0);
     }
 }

@@ -8,8 +8,10 @@
 //!    waiting, changed, new and gone, from one query.
 //! 3. Match moves: `file_key` ([`keys`]) for new files, paired with gone
 //!    and missing rows.
-//! 4. Facts pass: headers only, for new and changed files.
-//! 5. Pixels pass: one decode per waiting row ([`pixels`]).
+//! 4. Facts pass: headers only, for new and changed files, with the
+//!    metadata reader ([`metadata`]).
+//! 5. Pixels pass: one decode per waiting row, the thumbnail buffers and
+//!    the image analysis ([`pixels`], [`analysis`]).
 //! 6. Finish: mark missing rows, the last events.
 //!
 //! [`run`] does one scan on the calling thread. [`Scanner`] owns an open
@@ -23,13 +25,14 @@
 //! What the walk left out, and the files not shown, are answered from the
 //! last whole walk and the error rows by [`report`].
 //!
-//! Left for other issues, with their seams here: metadata reading (#10,
-//! the facts pass in [`run`]) and image analysis (#10, [`pixels`]);
-//! thumbnails and on-demand priority (#11, [`pixels`]); targeted rescans
+//! Left for other issues, with their seams here: thumbnails and on-demand
+//! priority (#11, [`pixels`]); targeted rescans
 //! from the folder watcher (#14, [`Request`]).
 
+pub mod analysis;
 pub mod keys;
 pub mod memory;
+pub mod metadata;
 pub mod order;
 pub mod pixels;
 pub mod progress;
@@ -52,4 +55,4 @@ pub use scanner::{ScanStatus, Scanner};
 /// Raised in the same commit as any change to the metadata rules, the
 /// analysis formulas or the error placeholders: every row with an older
 /// value is read again by the next scan.
-pub const SCAN_VERSION: i64 = 1;
+pub const SCAN_VERSION: i64 = 2;

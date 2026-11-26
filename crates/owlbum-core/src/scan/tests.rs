@@ -431,7 +431,8 @@ fn a_first_scan_gives_every_supported_trip_file_a_row() {
                     "{}",
                     f.rel_path
                 );
-                assert_eq!(p.analysis.as_deref(), Some("{}"), "{}", f.rel_path);
+                let a: Value = serde_json::from_str(p.analysis.as_deref().unwrap()).unwrap();
+                assert_eq!(a["dhash"].as_str().map(str::len), Some(16), "{}", f.rel_path);
             }
         }
     }
@@ -1768,4 +1769,120 @@ fn the_album_index_follows_a_view_only_scan_in_memory() {
         live.iter().any(|r| r.starts_with(&format!("{c} /c.png"))),
         "{live:#?}"
     );
+}
+
+// ---- Metadata and analysis (#10) ----
+
+/// The metadata facts of one row.
+fn meta_facts(fx: &Fx, rel: &str) -> (Option<String>, Option<f64>, Option<f64>, Option<String>, Option<String>) {
+    let rel = rel.to_owned();
+    fx.album()
+        .db()
+        .read(move |c| {
+            Ok(c.query_row(
+                "SELECT captured_at, gps_lat, gps_lon, camera, exif FROM photos WHERE rel_path = ?1",
+                [rel],
+                |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?, r.get(3)?, r.get(4)?)),
+            )
+            .unwrap())
+        })
+        .unwrap()
+}
+
+fn analysis_of(fx: &Fx, rel: &str) -> Value {
+    serde_json::from_str(fx.photo(rel).unwrap().analysis.as_deref().unwrap()).unwrap()
+}
+
+#[test]
+fn the_facts_pass_reads_date_place_camera_and_exif() {
+    let fx = Fx::trip();
+    fx.scan();
+    for f in expected_rows(&fx.manifest) {
+        let p = fx.photo(&f.rel_path).unwrap();
+        if p.scan_error.is_some() {
+            // Error rows keep every metadata fact NULL.
+            assert_eq!(meta_facts(&fx, &f.rel_path), (None, None, None, None, None));
+            continue;
+        }
+        let (taken, lat, lon, camera, exif) = meta_facts(&fx, &f.rel_path);
+        assert_eq!(taken, f.taken, "{}", f.rel_path);
+        match f.gps {
+            Some((want_lat, want_lon)) => {
+                let (lat, lon) = (lat.unwrap(), lon.unwrap());
+                assert!((lat - want_lat).abs() < 1e-5, "{}: {lat}", f.rel_path);
+                assert!((lon - want_lon).abs() < 1e-5, "{}: {lon}", f.rel_path);
+            }
+            None => assert_eq!((lat, lon), (None, None), "{}", f.rel_path),
+        }
+        // Every trip photo with a date was written by one of its two
+        // cameras; the others have no metadata at all.
+        if f.taken.is_some() {
+            let camera = camera.unwrap();
+            assert!(
+                camera == "Owlbum Fixture One" || camera == "Owlbum Pocket 2",
+                "{}: {camera}",
+                f.rel_path
+            );
+            let exif: Value = serde_json::from_str(&exif.unwrap()).unwrap();
+            assert_eq!(exif["iso"], 100, "{}", f.rel_path);
+            assert_eq!(exif["exposure_time"], 0.004, "{}", f.rel_path);
+            assert_eq!(exif["flash"], false, "{}", f.rel_path);
+        } else {
+            assert_eq!((camera, exif), (None, None), "{}", f.rel_path);
+        }
+    }
+    let (_, _, _, camera, exif) = meta_facts(&fx, "day1/lake.jpg");
+    assert_eq!(camera.as_deref(), Some("Owlbum Fixture One"));
+    assert_eq!(
+        exif.as_deref(),
+        Some(
+            r#"{"lens":"Fixture 24-70mm F2.8","focal_length":35.0,"aperture":5.6,"exposure_time":0.004,"iso":100,"flash":false}"#
+        )
+    );
+}
+
+#[test]
+fn animated_pictures_store_their_frame_count() {
+    let fx = Fx::extras();
+    fx.scan();
+    let animated: Vec<_> = fx.manifest.of_kind(Kind::Animated).collect();
+    assert_eq!(animated.len(), 3);
+    for f in animated {
+        let (.., exif) = meta_facts(&fx, &f.rel_path);
+        let exif: Value = serde_json::from_str(exif.as_deref().unwrap()).unwrap();
+        assert_eq!(exif["frames"], 3, "{}", f.rel_path);
+    }
+}
+
+#[test]
+fn the_pixels_pass_stores_the_analysis() {
+    let fx = Fx::trip();
+    fx.scan();
+    let blurred = analysis_of(&fx, "day2/blurred.jpg")["sharpness"].as_f64().unwrap();
+    for f in fx.manifest.files.iter().filter(|f| {
+        // Photos painted by the same scene generator as the blurred one.
+        matches!(f.kind, Kind::Burst | Kind::Portrait | Kind::Square)
+    }) {
+        let s = analysis_of(&fx, &f.rel_path)["sharpness"].as_f64().unwrap();
+        assert!(blurred < s, "{} {s} vs blurred {blurred}", f.rel_path);
+    }
+    // An exact copy analyses the same.
+    assert_eq!(analysis_of(&fx, "copies/lake.jpg"), analysis_of(&fx, "day1/lake.jpg"));
+    // The transparent PNG of the extras is transparent; an opaque one is not.
+    let fx = Fx::extras();
+    fx.scan();
+    let t = fx.manifest.of_kind(Kind::Transparent).next().unwrap();
+    assert_eq!(analysis_of(&fx, &t.rel_path)["transparent"], true);
+    let o = fx.manifest.of_kind(Kind::Orientation).next().unwrap();
+    assert_eq!(analysis_of(&fx, &o.rel_path)["transparent"], false);
+}
+
+#[test]
+fn the_same_file_gives_byte_identical_analysis_twice() {
+    let fx = Fx::trip();
+    fx.scan();
+    let first = fx.photo("day1/lake.jpg").unwrap().analysis;
+    fx.sql("UPDATE photos SET analysis = NULL WHERE rel_path = 'day1/lake.jpg'");
+    fx.scan();
+    assert_eq!(fx.photo("day1/lake.jpg").unwrap().analysis, first);
 }

@@ -7,6 +7,7 @@ use std::path::Path;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use super::exif::Exif;
 use crate::text;
 
 /// The largest picture a handler opens, in pixels.
@@ -157,7 +158,7 @@ pub struct SourcePixels {
 /// Facts a handler reads from a file's headers, without decoding pixels.
 ///
 /// The EXIF-derived scan facts (capture date, camera, GPS, the `exif` JSON)
-/// are parsed from `exif` by the metadata reader (roadmap #10), not here.
+/// are worked out from `exif` by the metadata reader (`scan::metadata`).
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Metadata {
     /// Upright width; 0 when the headers cannot tell.
@@ -173,9 +174,9 @@ pub struct Metadata {
     /// (`photos.duration_ms`). None for a still, and for an animated PNG,
     /// which Owlbum shows as a still.
     pub duration_ms: Option<u64>,
-    /// The raw EXIF block, from the TIFF header on, when the container has
-    /// one.
-    pub exif: Option<Vec<u8>>,
+    /// The EXIF tags, when the file has them: read from the container's
+    /// EXIF block, or from a TIFF file's own IFDs.
+    pub exif: Option<Exif>,
 }
 
 /// Facts about a video from its container and streams.

@@ -10,6 +10,7 @@
 //! (#7).
 
 pub mod colour;
+pub mod exif;
 pub mod handler;
 mod headers;
 pub mod jxl;
@@ -21,6 +22,7 @@ pub mod still;
 #[cfg(test)]
 mod tests;
 
+pub use exif::Exif;
 pub use handler::{
     Cost, Layout, MAX_PIXELS, MediaError, MediaErrorCode, MediaHandler, Metadata, Pixels, Samples,
     SourcePixels, VideoInfo,

@@ -14,6 +14,7 @@ use image::metadata::Orientation;
 use image::{DynamicImage, ImageDecoder, ImageFormat, ImageReader};
 
 use super::colour;
+use super::exif::Exif;
 use super::handler::{
     Cost, Layout, MediaError, MediaHandler, Metadata, Pixels, Samples, SourcePixels, VideoInfo,
     check_size,
@@ -134,7 +135,7 @@ impl Still {
             } else {
                 (h.width, h.height)
             };
-            meta.exif = h.exif;
+            meta.exif = h.exif.as_deref().and_then(Exif::parse);
             return Ok(meta);
         }
 
@@ -144,7 +145,17 @@ impl Still {
         let (w, h) = decoder.dimensions();
         check_size(w, h)?;
         meta.has_alpha = decoder.color_type().has_alpha();
-        meta.exif = decoder.exif_metadata().ok().flatten();
+        meta.exif = match self.format {
+            // A TIFF file is itself the TIFF structure EXIF uses: its tags
+            // are read from the file, by seeking to its IFDs.
+            StillFormat::Tiff => Exif::read(&mut Self::open(file)?),
+            _ => decoder
+                .exif_metadata()
+                .ok()
+                .flatten()
+                .as_deref()
+                .and_then(Exif::parse),
+        };
         let turned = decoder.orientation().is_ok_and(swaps_sides);
         (meta.width, meta.height) = if turned { (h, w) } else { (w, h) };
         drop(decoder);

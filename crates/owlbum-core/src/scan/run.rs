@@ -7,6 +7,7 @@ use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Condvar, Mutex};
 use std::time::{Duration, Instant, SystemTime};
 
+use super::folders::{Folders, MAX_FOLDERS};
 use super::keys::{self, Sample};
 use super::memory::Overlay;
 use super::order::natural_cmp;
@@ -16,7 +17,7 @@ use super::rows::{self, Facts, Known, Op};
 use super::walk::{self, Listed, Walk};
 use super::{metadata, pixels};
 use crate::AppError;
-use crate::album::Album;
+use crate::album::{Album, ChangeReason};
 use crate::error::AppResult;
 use crate::events::Emitter;
 use crate::media::{
@@ -24,21 +25,61 @@ use crate::media::{
 };
 
 /// What asked for a scan. Requests that arrive while a scan runs are
-/// merged into one more scan. The folder watcher's targeted rescans (#14)
-/// add the folders to scan here.
-#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+/// merged into one more scan.
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
 pub struct Request {
     /// A manual Rescan: rows with a `decode`, `unsupported` or `too_large`
     /// error are read again too.
     pub manual: bool,
+    /// Only these folders: the folder watcher's targeted rescan
+    /// (docs/03-media-and-scanning.md, "Debounce"). `None` is the whole
+    /// scope.
+    pub folders: Option<Folders>,
+    /// The folder watcher asked: `album_changed` has reason `watch`.
+    pub watch: bool,
 }
 
 impl Request {
-    /// One request that does what both ask.
+    /// A manual Rescan of the whole scope.
+    pub fn manual() -> Self {
+        Self {
+            manual: true,
+            ..Self::default()
+        }
+    }
+
+    /// The folder watcher's rescan of `folders` (`None`: the whole scope).
+    pub fn watch(folders: Option<Folders>) -> Self {
+        Self {
+            manual: false,
+            folders,
+            watch: true,
+        }
+    }
+
+    /// One request that does what both ask. A whole-scope request takes in
+    /// a targeted one; two targeted ones scan both sets, or the whole scope
+    /// when that comes to more than [`MAX_FOLDERS`] folders. It is a watch
+    /// scan only when both are.
     #[must_use]
     pub fn merge(self, other: Self) -> Self {
+        let folders = match (self.folders, other.folders) {
+            (Some(a), Some(b)) => Some(a.union(&b)).filter(|f| f.len() <= MAX_FOLDERS),
+            _ => None,
+        };
         Self {
             manual: self.manual || other.manual,
+            folders,
+            watch: self.watch && other.watch,
+        }
+    }
+
+    /// Why the scan's `album_changed` events are sent.
+    pub fn reason(&self) -> ChangeReason {
+        if self.watch {
+            ChangeReason::Watch
+        } else {
+            ChangeReason::Scan
         }
     }
 }
@@ -159,11 +200,21 @@ pub fn run_with(scan: &Scan<'_>, request: Request, walked: impl FnOnce(&Walk)) -
     scan.progress.start();
     let mut summary = ScanSummary::default();
     let location = scan.album.location();
-    match walk::walk(&location.root, &location.scope, scan.cancel, |n| {
-        scan.progress.found(n);
-    }) {
+    let found = |n| scan.progress.found(n);
+    let walked_now = match &request.folders {
+        None => walk::walk(&location.root, &location.scope, scan.cancel, found),
+        Some(folders) => walk::walk_folders(
+            &location.root,
+            &location.scope,
+            &folders.normalised(),
+            scan.cancel,
+            found,
+        ),
+    };
+    match walked_now {
         Ok(walk) => {
-            if walk.complete {
+            // Only a whole walk describes the scope for the report.
+            if walk.complete && request.folders.is_none() {
                 walked(&walk);
             }
             summary.walk = walk;
@@ -176,7 +227,12 @@ pub fn run_with(scan: &Scan<'_>, request: Request, walked: impl FnOnce(&Walk)) -
             return summary;
         }
     }
-    let changes = Changes::new(scan.album, &*scan.env.emitter, scan.env.changed_every);
+    let changes = Changes::new(
+        scan.album,
+        &*scan.env.emitter,
+        scan.env.changed_every,
+        request.reason(),
+    );
     let stats = Stats::default();
     std::thread::scope(|threads| {
         let (sink, batcher) = if scan.album.is_view_only() {
@@ -462,6 +518,15 @@ impl Work<'_, '_> {
             }
         };
         let walk = &summary.walk;
+        // A targeted scan compares only the rows in its folders, and offers
+        // every row in scope already missing as a move candidate.
+        let known: Vec<Known> = match &self.request.folders {
+            None => known,
+            Some(folders) => known
+                .into_iter()
+                .filter(|k| k.missing || folders.holds(&k.rel_path))
+                .collect(),
+        };
         let mut by_path: HashMap<&str, &Known> =
             known.iter().map(|k| (k.rel_path.as_str(), k)).collect();
 

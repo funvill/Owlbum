@@ -254,56 +254,177 @@ pub fn walk(
     root: &Path,
     scope: &str,
     cancel: &AtomicBool,
-    mut found: impl FnMut(usize),
+    found: impl FnMut(usize),
 ) -> AppResult<Walk> {
-    let start = absolute(root, scope);
-    let shown = start.display().to_string();
-    match std::fs::metadata(&start) {
-        Ok(m) if m.is_dir() => {}
-        Ok(_) => {
-            return Err(AppError::new(
-                ErrorCode::NotAFolder,
-                text::album::not_a_folder(&shown),
-            ));
-        }
-        Err(e) if e.kind() == std::io::ErrorKind::NotFound => {
-            return Err(AppError::new(
-                ErrorCode::NotAFolder,
-                text::album::not_a_folder(&shown),
-            ));
-        }
-        Err(e) => {
-            return Err(AppError::new(
-                ErrorCode::FolderUnreadable,
-                text::album::folder_unreadable(&shown, &e),
-            ));
-        }
-    }
+    check_scope(root, scope)?;
+    let out = Walk {
+        complete: true,
+        ..Walk::default()
+    };
+    walk_from(
+        root,
+        scope,
+        vec![(scope.to_owned(), true)],
+        out,
+        cancel,
+        found,
+    )
+}
 
+/// Walks only `folders` of `scope`: each a folder relative to `root` and
+/// whether to walk the folders under it too (a targeted rescan,
+/// docs/03-media-and-scanning.md, "Debounce"). Folders outside the scope are
+/// ignored.
+///
+/// The walker's rules hold for the path down to each folder as they would
+/// in a whole walk: a folder reached through a dot name, a system folder or
+/// a link is not walked, and one inside a nested album root is not walked
+/// (the nested root is listed). A folder that no longer exists is walked as
+/// empty, so its rows are gone; a folder that cannot be read is listed as
+/// unreadable, so its rows are kept.
+///
+/// Fails like [`walk`] when the scope's own folder cannot be listed, before
+/// or after: a drive unplugged part-way must not make every folder look
+/// empty.
+pub fn walk_folders(
+    root: &Path,
+    scope: &str,
+    folders: &[(String, bool)],
+    cancel: &AtomicBool,
+    found: impl FnMut(usize),
+) -> AppResult<Walk> {
+    check_scope(root, scope)?;
     let mut out = Walk {
         complete: true,
         ..Walk::default()
     };
-    let mut folders = vec![scope.to_owned()];
-    let mut first = true;
-    while let Some(rel_dir) = folders.pop() {
+    let mut starts = Vec::new();
+    for (dir, recursive) in folders {
+        if !is_under(dir, scope) {
+            continue;
+        }
+        match reach(root, scope, dir) {
+            Reach::Walk => starts.push((dir.clone(), *recursive)),
+            Reach::Gone | Reach::Skip => {}
+            Reach::Nested(n) => {
+                if !out.nested.contains(&n) {
+                    out.nested.push(n);
+                }
+            }
+            Reach::Unreadable(f) => out.unreadable.push(f),
+        }
+    }
+    let out = walk_from(root, scope, starts, out, cancel, found)?;
+    check_scope(root, scope)?;
+    Ok(out)
+}
+
+/// What stands between the scope and one folder of a targeted walk.
+enum Reach {
+    /// Nothing: walk it.
+    Walk,
+    /// It, or a folder on the way, no longer exists.
+    Gone,
+    /// A folder on the way is one the walker leaves out (a dot name, a
+    /// system folder, a link).
+    Skip,
+    /// A folder on the way (or it) is an album root of its own.
+    Nested(String),
+    /// A folder on the way could not be looked at.
+    Unreadable(UnreadableFolder),
+}
+
+/// Checks the path from `scope` down to `dir` by the walker's rules, one
+/// component at a time, without following links.
+fn reach(root: &Path, scope: &str, dir: &str) -> Reach {
+    let below = dir.get(scope.len()..).unwrap_or("");
+    let mut current = scope.to_owned();
+    for name in below.split('/').filter(|c| !c.is_empty()) {
+        if !current.is_empty() {
+            current.push('/');
+        }
+        current.push_str(name);
+        let abs = absolute(root, &current);
+        let meta = match std::fs::symlink_metadata(&abs) {
+            Ok(m) => m,
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Reach::Gone,
+            Err(e) => {
+                return Reach::Unreadable(UnreadableFolder {
+                    rel_path: current,
+                    message: e.to_string(),
+                });
+            }
+        };
+        match classify(name, Entry::from(meta.file_type())) {
+            Rule::Descend if is_album_root(&abs) => return Reach::Nested(current),
+            Rule::Descend => {}
+            // A file where the folder was: it holds nothing.
+            Rule::List | Rule::Unsupported(_) => return Reach::Gone,
+            Rule::Skip | Rule::Link => return Reach::Skip,
+        }
+    }
+    Reach::Walk
+}
+
+/// Fails with `not_a_folder` or `folder_unreadable` unless the scope's own
+/// folder is a folder that can be looked at.
+fn check_scope(root: &Path, scope: &str) -> AppResult<()> {
+    let start = absolute(root, scope);
+    let shown = start.display().to_string();
+    match std::fs::metadata(&start) {
+        Ok(m) if m.is_dir() => Ok(()),
+        Ok(_) => Err(AppError::new(
+            ErrorCode::NotAFolder,
+            text::album::not_a_folder(&shown),
+        )),
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => Err(AppError::new(
+            ErrorCode::NotAFolder,
+            text::album::not_a_folder(&shown),
+        )),
+        Err(e) => Err(AppError::new(
+            ErrorCode::FolderUnreadable,
+            text::album::folder_unreadable(&shown, &e),
+        )),
+    }
+}
+
+/// Walks from each of `starts` (a folder, and whether to go into its
+/// subfolders), adding to `out`. The scope's own folder failing to list
+/// fails the walk; any other start folder that no longer exists is empty.
+fn walk_from(
+    root: &Path,
+    scope: &str,
+    starts: Vec<(String, bool)>,
+    mut out: Walk,
+    cancel: &AtomicBool,
+    mut found: impl FnMut(usize),
+) -> AppResult<Walk> {
+    let starts_at: HashSet<String> = starts.iter().map(|(d, _)| d.clone()).collect();
+    let mut folders = starts;
+    while let Some((rel_dir, recursive)) = folders.pop() {
         if cancel.load(Ordering::Relaxed) {
             out.complete = false;
             break;
         }
         let dir = absolute(root, &rel_dir);
+        let is_scope = rel_dir == scope;
         // The walk's own folder is never nested.
-        if !first && is_album_root(&dir) {
+        if !is_scope && is_album_root(&dir) {
             out.nested.push(rel_dir);
             continue;
         }
         let entries = match read_folder(&dir) {
             Ok(entries) => entries,
-            Err(e) if first => {
+            Err(e) if is_scope => {
+                let shown = dir.display().to_string();
                 return Err(AppError::new(
                     ErrorCode::FolderUnreadable,
                     text::album::folder_unreadable(&shown, &e),
                 ));
+            }
+            // A start folder of a targeted walk that has gone since: empty.
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound && starts_at.contains(&rel_dir) => {
+                continue;
             }
             Err(e) => {
                 out.unreadable.push(UnreadableFolder {
@@ -313,7 +434,6 @@ pub fn walk(
                 continue;
             }
         };
-        first = false;
         for entry in entries {
             let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
                 out.unreadable_names += 1;
@@ -330,7 +450,11 @@ pub fn walk(
             match classify(&name, Entry::from(kind)) {
                 Rule::Skip => {}
                 Rule::Link => out.links += 1,
-                Rule::Descend => folders.push(rel_path),
+                Rule::Descend => {
+                    if recursive {
+                        folders.push((rel_path, true));
+                    }
+                }
                 Rule::List => {
                     // On Windows this comes from the directory listing and
                     // opens nothing. A file that vanished between listing
@@ -365,7 +489,7 @@ pub fn walk(
     Ok(out)
 }
 
-/// Every entry of one folder. A failure part-way counts as the folder
+// Every entry of one folder. A failure part-way counts as the folder
 /// being unreadable.
 fn read_folder(dir: &Path) -> std::io::Result<Vec<std::fs::DirEntry>> {
     std::fs::read_dir(dir)?.collect()
@@ -859,5 +983,114 @@ pub(crate) mod tests {
     fn symlink_file(target: &Path, link: &Path) -> bool {
         // Needs developer mode or elevation.
         std::os::windows::fs::symlink_file(target, link).is_ok()
+    }
+
+    // ---- Targeted walks (the folder watcher's rescans) ----
+
+    fn run_folders(root: &Path, scope: &str, folders: &[(&str, bool)]) -> AppResult<Walk> {
+        let folders: Vec<(String, bool)> =
+            folders.iter().map(|(d, r)| ((*d).to_owned(), *r)).collect();
+        walk_folders(root, scope, &folders, &AtomicBool::new(false), |_| {})
+    }
+
+    #[test]
+    fn a_targeted_walk_lists_only_its_folders() {
+        let tmp = tempfile::tempdir().unwrap();
+        for rel in [
+            "top.jpg",
+            "a/1.jpg",
+            "a/sub/2.jpg",
+            "b/3.jpg",
+            "b/deep/er/4.jpg",
+            "c/5.jpg",
+        ] {
+            touch(tmp.path(), rel);
+        }
+        let w = run_folders(tmp.path(), "", &[("a", false), ("b", true)]).unwrap();
+        assert_eq!(listed(&w), ["a/1.jpg", "b/3.jpg", "b/deep/er/4.jpg"]);
+        assert!(w.complete);
+        let w = run_folders(tmp.path(), "", &[("", false)]).unwrap();
+        assert_eq!(listed(&w), ["top.jpg"]);
+    }
+
+    #[test]
+    fn a_targeted_walk_keeps_the_walkers_rules_on_the_way_down() {
+        let tmp = tempfile::tempdir().unwrap();
+        for rel in [
+            ".hidden/a.jpg",
+            "$RECYCLE.BIN/x/b.jpg",
+            "@eaDir/c.jpg",
+            "nested/.owlbum/owlbum.sqlite",
+            "nested/d.jpg",
+            "nested/inner/e.jpg",
+            "ok/f.jpg",
+        ] {
+            touch(tmp.path(), rel);
+        }
+        let w = run_folders(
+            tmp.path(),
+            "",
+            &[
+                (".hidden", true),
+                ("$RECYCLE.BIN/x", false),
+                ("@eaDir", false),
+                ("nested", false),
+                ("nested/inner", true),
+                ("ok", false),
+            ],
+        )
+        .unwrap();
+        assert_eq!(listed(&w), ["ok/f.jpg"]);
+        assert_eq!(w.nested, ["nested"]);
+    }
+
+    #[test]
+    fn a_targeted_walk_does_not_follow_a_link_to_its_folder() {
+        let tmp = tempfile::tempdir().unwrap();
+        touch(tmp.path(), "real/a.jpg");
+        if !symlink_dir(&tmp.path().join("real"), &tmp.path().join("link")) {
+            eprintln!("skipped: cannot make a link here");
+            return;
+        }
+        let w = run_folders(tmp.path(), "", &[("link", true), ("link/x", false)]).unwrap();
+        assert!(w.files.is_empty(), "{:?}", listed(&w));
+    }
+
+    #[test]
+    fn a_targeted_folder_that_is_gone_is_empty_not_unreadable() {
+        let tmp = tempfile::tempdir().unwrap();
+        touch(tmp.path(), "a/1.jpg");
+        let w = run_folders(
+            tmp.path(),
+            "",
+            &[("gone", true), ("gone/deeper", false), ("a", false)],
+        )
+        .unwrap();
+        assert_eq!(listed(&w), ["a/1.jpg"]);
+        assert!(w.unreadable.is_empty());
+        assert!(w.complete);
+    }
+
+    #[test]
+    fn a_targeted_walk_fails_when_the_scope_is_gone() {
+        let tmp = tempfile::tempdir().unwrap();
+        let root = tmp.path().join("album");
+        touch(&root, "a/1.jpg");
+        let gone = tmp.path().join("unplugged");
+        let err = run_folders(&gone, "", &[("a", false)]).unwrap_err();
+        assert_eq!(err.code, ErrorCode::NotAFolder);
+        // A scoped walk whose scope went away fails the same way.
+        let err = run_folders(&root, "b", &[("b/c", false)]).unwrap_err();
+        assert_eq!(err.code, ErrorCode::NotAFolder);
+    }
+
+    #[test]
+    fn a_targeted_walk_ignores_folders_outside_its_scope() {
+        let tmp = tempfile::tempdir().unwrap();
+        for rel in ["s/a.jpg", "t/b.jpg"] {
+            touch(tmp.path(), rel);
+        }
+        let w = run_folders(tmp.path(), "s", &[("t", false), ("s", false)]).unwrap();
+        assert_eq!(listed(&w), ["s/a.jpg"]);
     }
 }

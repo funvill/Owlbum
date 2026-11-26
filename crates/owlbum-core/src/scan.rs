@@ -26,10 +26,13 @@
 //! last whole walk and the error rows by [`report`].
 //!
 //! Left for other issues, with their seams here: thumbnails and on-demand
-//! priority (#11, [`pixels`]); targeted rescans
-//! from the folder watcher (#14, [`Request`]).
+//! priority (#11, [`pixels`]).
+//!
+//! The folder watcher ([`watch`]) asks for targeted rescans of the folders
+//! it saw change ([`Request::folders`]).
 
 pub mod analysis;
+pub mod folders;
 pub mod keys;
 pub mod memory;
 pub mod metadata;
@@ -42,10 +45,12 @@ pub mod rows;
 mod run;
 mod scanner;
 pub mod walk;
+pub mod watch;
 
 #[cfg(test)]
 mod tests;
 
+pub use folders::Folders;
 pub use order::{natural_cmp, natural_cmp_name, natural_cmp_text};
 pub use progress::{ScanPhase, ScanProgress};
 pub use reader::{MediaReader, Reader};

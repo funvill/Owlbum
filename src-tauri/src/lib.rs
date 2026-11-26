@@ -17,13 +17,18 @@ use std::sync::Arc;
 use owlbum_core::appdata::log::{self, LogFile, Logger};
 use owlbum_core::appdata::{self, AppData};
 use owlbum_core::thumbs::Thumbs;
-use tauri::Runtime;
+use tauri::{Manager, Runtime};
 
 /// Adds Owlbum's commands and the `owlbum://` protocol to a Tauri builder.
 /// `run` uses it, and shell tests use it with Tauri's mock runtime.
 pub fn setup<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     protocol::register(builder)
         .manage(session::Session::default())
+        .on_window_event(|window, event| {
+            if let tauri::WindowEvent::Focused(true) = event {
+                window.state::<session::Session>().focused();
+            }
+        })
         .invoke_handler(commands::registry::invoke_handler(commands::modules()))
 }
 

@@ -25,7 +25,7 @@ command! {
     /// "Manual Rescan"). `no_album` when no album is open.
     pub fn album_rescan(; session: State<'_, Session>) -> () {
         session.with(|open| {
-            open.scanner().request(Request { manual: true });
+            open.scanner().request(Request::manual());
             Ok(())
         })
     }

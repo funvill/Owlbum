@@ -151,12 +151,14 @@ impl Progress {
     }
 }
 
-/// Tells the page the album changed (`album_changed`, reason `scan`), at
-/// most once per `every` while a scan writes, and once at the end.
+/// Tells the page the album changed (`album_changed`, reason `scan`, or
+/// `watch` for the folder watcher's scans), at most once per `every` while
+/// a scan writes, and once at the end.
 pub struct Changes<'a> {
     album: &'a Album,
     emitter: &'a dyn Emitter,
     every: Duration,
+    reason: ChangeReason,
     state: Mutex<ChangesState>,
 }
 
@@ -168,11 +170,17 @@ struct ChangesState {
 }
 
 impl<'a> Changes<'a> {
-    pub fn new(album: &'a Album, emitter: &'a dyn Emitter, every: Duration) -> Self {
+    pub fn new(
+        album: &'a Album,
+        emitter: &'a dyn Emitter,
+        every: Duration,
+        reason: ChangeReason,
+    ) -> Self {
         Self {
             album,
             emitter,
             every,
+            reason,
             state: Mutex::new(ChangesState::default()),
         }
     }
@@ -199,7 +207,7 @@ impl<'a> Changes<'a> {
     fn send(&self, s: &mut ChangesState, now: Instant) {
         let event = AlbumChanged {
             revision: self.album.next_revision(),
-            reason: ChangeReason::Scan,
+            reason: self.reason,
             rekeyed: std::mem::take(&mut s.rekeyed),
         };
         s.dirty = false;

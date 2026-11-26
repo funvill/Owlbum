@@ -703,7 +703,7 @@ While an album is open, Owlbum watches the scope with `notify` so that photos ad
 
 ### What is watched
 
-One recursive watch on the scope's folder. Events are dropped at once when any path component starts with `.` (this covers `.owlbum`, whose database journal changes on every write and must never cause a rescan), or when the path is a file that is neither supported nor recognised-but-unsupported and is not a folder.
+One recursive watch on the scope's folder, set on a thread of its own (a recursive inotify watch walks the whole tree), not following links and not asking for access events, so the scanner's own reads never look like changes. Events are dropped at once when any path component below the scope starts with `.` (this covers `.owlbum`, whose database journal changes on every write and must never cause a rescan) or is one of the walker's system folders, when the path is a link, or when the path is a file that is neither supported nor recognised-but-unsupported and is not a folder.
 
 ### Debounce
 
@@ -717,7 +717,9 @@ Events are collected into a set of **folders to rescan**. The set is acted on wh
 | A path removed that can no longer be told apart (it is gone, so file or folder is unknown) | If any row has that path as its `rel_dir` or under it, treat it as a folder; otherwise as a file. |
 | The watcher reports an overflow or "rescan needed", or more than 500 folders are in the set | The whole scope. |
 
-A targeted rescan runs the normal scanner stages with the walk limited to the set. The compare stage looks only at rows in those folders, and move matching works across all folders in the set, so a file moved from one watched folder to another keeps its row. A file moved out of the scope becomes a missing row.
+A targeted rescan runs the normal scanner stages with the walk limited to the set. The compare stage looks only at rows in those folders, and move matching works across all folders in the set, so a file moved from one watched folder to another keeps its row. Rows already missing anywhere in the scope are candidates too, as in Match moves, so a move whose two halves land in two targeted rescans keeps its row. A file moved out of the scope becomes a missing row.
+
+The walker's rules hold for the path down to each folder of the set, as in a whole walk: a folder reached through a dot name, a system folder or a link is not walked, and a folder inside a nested album root is not walked. The scope's own folder is checked before and after the walk; if it cannot be read, the scan fails as a whole walk does and nothing is marked missing. A folder of the set that no longer exists (while the scope does) is walked as empty, so its rows are gone. A targeted walk does not replace the last whole walk that the scan report and the `unsupported` and `skipped` counts come from. A whole-scope request merged with a targeted one scans the whole scope; two targeted ones scan both sets (the whole scope above 500 folders). The merged scan's reason is `watch` only when every request in it came from the watcher.
 
 `album_changed` for a watch-driven scan has reason `watch`.
 
@@ -729,9 +731,12 @@ Owlbum's own file actions (Save into the file, Save as…, moving to the Recycle
 |---|---|---|
 | Network share | Windows: a UNC path or a drive of type remote. Linux: the mount's file system is `nfs`, `nfs4`, `cifs`, `smb3`, `fuse.sshfs`, `davfs` or `9p`. | No watch is set. |
 | Watch limit reached (Linux inotify), or the watch fails to start | `notify` returns an error. | No watch. |
-| The watcher reports an error later | An error event. | The watch is dropped. |
+| The watcher reports an error later | An error event, except "path not found" for a folder that vanished while the watch was being added to it while the scope is still there. | The watch is dropped. Folders already collected are still scanned. |
+| The watched folder goes away (an unplugged drive, a share that dropped, the folder renamed) | An event for the folder itself, or the check every 5 seconds that it is still a folder (not every system tells a watch that its own folder went away). | The watch is dropped. No scan is asked for, so nothing is marked missing. |
 
-In all three cases Owlbum falls back to **rescan on window focus**: when the window gains focus and the last scan ended more than 5 minutes ago, a whole-scope scan starts. The status line says once per session: "Owlbum can't watch this folder for changes. It checks when you come back to the window; use Rescan to check now."
+In all these cases Owlbum falls back to **rescan on window focus**: when the window gains focus and the last scan ended more than 5 minutes ago, a whole-scope scan starts. The status line says once per session: "Owlbum can't watch this folder for changes. It checks when you come back to the window; use Rescan to check now."
+
+A watch that was dropped (the last two rows) is started again on window focus once its folder is back, followed by a whole-scope scan, since changes made meanwhile were not seen. A network share is never watched, and a watch that would not start is not tried again while the album is open: the inotify limit does not go away by itself.
 
 ### Manual Rescan
 
@@ -798,6 +803,7 @@ Every URL resolves only to a photo of the open album that is in scope, whose row
 | Still-being-written retry | file modified under 2 s ago; retry after 2 s, up to 5 times |
 | Watch debounce | 2 s quiet, 10 s at most, whole-scope rescan above 500 folders |
 | Rescan on focus (no watch) | when the last scan ended over 5 minutes ago |
+| Watched folder check | every 5 s |
 | Video range chunk | 4 MiB |
 | Linux blob playback limit (fallback 2) | 256 MB |
 | Poster time | `min(1000 ms, duration / 10)` |
@@ -821,7 +827,7 @@ Rust tests in `owlbum-core`, using albums made by `owlbum-fixtures` in a tempora
 | Metadata | Table tests: date strings (both separators, the `T` form, year `0000`, month 13, the order of the three tags); the camera rule's five cases; the lens rule; numeric fields (zero, negative, zero denominator, several ISO values, flash bit); GPS (signs, out of range, 0, 0); a video date with its own offset. |
 | Analysis | Hand-made images with known answers: flat grey (sharpness 0, saliency 0.5), black and white (clipping 1.0), a ramp (a known dHash), an off-centre bright spot. 1% transparent pixels is `transparent`, 0.1% is not. The same file gives byte-identical JSON twice, and the same JSON with the cache above and below 70% of its limit (the 1600 px buffer is always built; the cache test comes with the thumbnail cache, #11). |
 | Thumbnails and URLs | Sizes 512 and 1600; no enlarging; opaque JPEG with no metadata. Concurrent requests for a missing thumbnail decode once. A file cut short is remade. The zoom copy is made once; an upright sRGB JPEG is served as its own bytes. `owlbum://video` range replies (206, `Content-Range`, the 4 MiB cap, 416). `owlbum://original` refuses a still that is not animated. Every URL answers 404 for an unknown id, a missing row, and a key from another album. |
-| Watcher | Pure parts with a fake clock: event to folder set, debounce, the 500-folder limit, paths under `.owlbum` ignored. With a real temporary folder: add, change, delete and rename each change the right row. |
+| Watcher | Pure parts with a fake clock: event to folder set, debounce, the 500-folder limit, paths under `.owlbum` ignored. With a real temporary folder: add, change, delete and rename each change the right row; a scan the watch asked for starts no other; a watch that will not start falls back to rescan on focus; a watched folder that goes away loses no rows and is watched again when back. Targeted walks keep the walker's rules on the way down to each folder. |
 
 ## Open questions
 

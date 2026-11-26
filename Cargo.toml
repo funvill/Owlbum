@@ -33,6 +33,9 @@ muda = { version = "0.20", default-features = false }
 tempfile = "3"
 uuid = { version = "1", features = ["v4"] }
 windows-sys = "0.61"
+# Folder watching (docs/03-media-and-scanning.md, "Folder watching").
+# Without macOS FSEvents: Owlbum ships for Windows and Linux.
+notify = { version = "9", default-features = false }
 # Media decoders and encoders: owlbum-core's handlers
 # (docs/03-media-and-scanning.md, "Media handlers") and owlbum-fixtures'
 # synthetic albums. Each crate turns on the image features it needs.

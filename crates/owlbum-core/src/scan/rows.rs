@@ -155,6 +155,17 @@ pub fn load_known(conn: &Connection, scope: &str) -> AppResult<Vec<Known>> {
     Ok(rows)
 }
 
+/// True when any row's path lies under the folder `rel_dir` (not `""`).
+pub fn has_rows_under(conn: &Connection, rel_dir: &str) -> AppResult<bool> {
+    conn.query_row(
+        "SELECT EXISTS(SELECT 1 FROM photos
+                       WHERE substr(rel_path, 1, length(?1) + 1) = ?1 || '/')",
+        [rel_dir],
+        |r| r.get(0),
+    )
+    .map_err(sqlite_error(text::album::READING_DATABASE))
+}
+
 /// The largest id in the database, 0 when there are no rows.
 pub fn max_id(conn: &Connection) -> AppResult<i64> {
     conn.query_row("SELECT coalesce(max(id), 0) FROM photos", [], |r| r.get(0))

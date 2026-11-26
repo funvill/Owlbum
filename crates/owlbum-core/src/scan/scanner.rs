@@ -4,6 +4,7 @@
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::thread::JoinHandle;
+use std::time::{Duration, Instant};
 
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
@@ -23,7 +24,7 @@ pub struct ScanStatus {
     pub found: u32,
     pub done: u32,
     pub failed: u32,
-    /// False when the folder cannot be watched (#14 sets it).
+    /// False when the folder cannot be watched ([`super::watch`]).
     pub watching: bool,
     /// Recognised but unsupported files in the last whole walk.
     pub unsupported: u32,
@@ -45,6 +46,8 @@ struct Shared {
     overlay: Mutex<Overlay>,
     progress: Progress,
     cancel: AtomicBool,
+    /// The folder watcher has a watch on the scope.
+    watching: AtomicBool,
     state: Mutex<State>,
     idle: Condvar,
 }
@@ -54,6 +57,8 @@ struct State {
     running: bool,
     pending: Option<Request>,
     last: Option<ScanSummary>,
+    /// When the last scan ended.
+    ended_at: Option<Instant>,
     /// The last walk that ended, for the report, kept from the moment it
     /// ends: a walk that failed or was cancelled does not replace it.
     walk: Option<Walk>,
@@ -85,6 +90,7 @@ impl Scanner {
                 overlay: Mutex::new(Overlay::default()),
                 progress,
                 cancel: AtomicBool::new(false),
+                watching: AtomicBool::new(false),
                 state: Mutex::new(State::default()),
                 idle: Condvar::new(),
             }),
@@ -104,7 +110,10 @@ impl Scanner {
         if state.closed {
             return;
         }
-        state.pending = Some(state.pending.map_or(request, |p| p.merge(request)));
+        state.pending = Some(match state.pending.take() {
+            Some(p) => p.merge(request),
+            None => request,
+        });
         if state.running {
             return;
         }
@@ -182,12 +191,48 @@ impl Scanner {
             found: now.found,
             done: now.done,
             failed: now.failed,
-            watching: false,
+            watching: self.shared.watching.load(Ordering::SeqCst),
             unsupported: walk.map_or(0, |w| {
                 u32::try_from(w.unsupported.len()).unwrap_or(u32::MAX)
             }),
             skipped: walk.map_or(0, Walk::skipped),
         }
+    }
+
+    /// The folder watcher has, or has lost, its watch on the scope.
+    pub fn set_watching(&self, watching: bool) {
+        self.shared.watching.store(watching, Ordering::SeqCst);
+    }
+
+    /// True when no scan runs or waits and the last one ended at least
+    /// `after` before `now`: the rule for rescanning on window focus when
+    /// the folder is not watched.
+    pub fn idle_for(&self, after: Duration, now: Instant) -> bool {
+        let state = self.shared.state();
+        !state.running
+            && state
+                .ended_at
+                .is_some_and(|t| now.saturating_duration_since(t) >= after)
+    }
+
+    /// True when any row (in the database, or held in memory for a
+    /// view-only album) lies under the folder `rel_dir`: the folder
+    /// watcher's test for a gone path that was a folder.
+    pub fn has_rows_under(&self, rel_dir: &str) -> bool {
+        if rel_dir.is_empty() {
+            return true;
+        }
+        let in_memory = self
+            .overlay()
+            .rows()
+            .any(|r| r.rel_path != rel_dir && super::walk::is_under(&r.rel_path, rel_dir));
+        in_memory
+            || self
+                .shared
+                .album
+                .db()
+                .read(|conn| super::rows::has_rows_under(conn, rel_dir))
+                .unwrap_or(false)
     }
 
     /// `album_scan_report`: what the last whole walk left out.
@@ -254,7 +299,11 @@ fn scan_loop(shared: &Shared) {
             |walk| shared.state().walk = Some(walk.clone()),
         );
         let cancelled = summary.cancelled;
-        shared.state().last = Some(summary);
+        {
+            let mut state = shared.state();
+            state.last = Some(summary);
+            state.ended_at = Some(Instant::now());
+        }
         if !cancelled {
             warm(shared);
         }

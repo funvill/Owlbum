@@ -505,7 +505,7 @@ When more than one photo is selected, the caption starts with "N selected ·" be
 
 | Step | Rule |
 |---|---|
-| 1 | If the medium (1600px) picture is ready in the image cache, show it at once. |
+| 1 | If the medium (1600px) picture is ready in the image cache, show it at once. The small one is then not loaded (the mini map still loads it when zoomed in). |
 | 2 | Otherwise show this photo's small (512px) thumbnail and ask the cache for the medium one. |
 | 3 | Swap to the medium picture when it is decoded. The view does not move. |
 | 4 | Never show another photo's picture under this photo's name. If neither picture of this photo is ready, the stage is empty for that moment. |
@@ -578,13 +578,13 @@ One cache is shared by the preview and the viewer. It holds decoded medium pictu
 
 - **Wanting.** On every change of the current photo (preview) or the shown photo (viewer), the page calls `want([current, ...preloadOrder])`, mapped to medium addresses. Rows needed to build those addresses are fetched as blocks first; an index whose row has not arrived is skipped and picked up when it does.
 - **Cancelling.** A `want` call replaces the wanted list. A load that is running but no longer wanted is cancelled. Holding an arrow key therefore never leaves stale loads queued ahead of the photo on screen.
-- **Priority.** The first wanted picture, the one on screen, starts at once with high priority even when `MAX_IN_FLIGHT` loads are running. Every other picture starts only while fewer than `MAX_IN_FLIGHT` are running, with low priority, in order.
+- **Priority.** The first wanted picture, the one on screen, starts at once with high priority even when `MAX_IN_FLIGHT` loads are running. Every other picture starts only while fewer than `MAX_IN_FLIGHT` loads for pictures other than the one on screen are running, with low priority, in order.
 - **Ready** means loaded and decoded. A picture that loaded but would not decode ahead of time still counts as ready if it has a size.
 - **Eviction.** After each success, ready pictures beyond `CAPACITY` are dropped, least recently wanted first. A wanted picture is never dropped.
 - **Failures.** A failed load is remembered for `FAILED_FOR_MS`, so a broken file is not asked for on every step.
 - **Edited photos.** The cached picture is the plain medium thumbnail. The edit is drawn over it from the row's `edit_plan` when the picture is shown, so a change to the edit needs no new load and no new address (see 06).
 - **Videos.** The cached picture is the video's poster frame. The video file itself is never preloaded.
-- **Letting go.** Closing the album empties the cache.
+- **Letting go.** Closing the album empties the cache. An `album_changed` with `rekeyed` drops the cached pictures of those photos (the cache keeps each picture's photo id for this).
 
 Lookups from id to index are by map, never by walking a list.
 

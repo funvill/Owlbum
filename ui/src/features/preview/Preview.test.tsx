@@ -12,6 +12,7 @@ import { seriousFindings } from "../../test/axe";
 import { Review } from "../album/Review";
 import { Caption } from "./Caption";
 import { ZOOM_KEY_IDS, zoomKeyHandlers, type ZoomHandle } from "./ZoomStage";
+import { resetImageCache, type ImageCache, type Load } from "./cache";
 
 // jsdom has no layout: the stage measures 800 × 600 and everything else
 // 1000 × 800. ResizeObserver, which jsdom lacks, is a stub the test fires.
@@ -44,6 +45,19 @@ function photos(n: number, change: (p: FakePhoto) => FakePhoto = (p) => p): Fake
 
 let album: ReturnType<typeof createQueryFake>;
 
+// The image cache's loads, finished by hand: jsdom never loads a picture.
+let loads: Map<string, { resolve: () => void; priority: string }>;
+let started: string[];
+let cache: ImageCache;
+function fakeLoader(url: string, priority: "high" | "low"): Load {
+  started.push(url);
+  let resolve = () => {};
+  const done = new Promise<void>((r) => (resolve = r));
+  loads.set(url, { resolve, priority });
+  return { done, cancel: () => {} };
+}
+const key = (url: string) => /thumb\/(tk-\d+)\/m$/.exec(url)?.[1];
+
 function setup(list: FakePhoto[] = photos(5), detail = (id: number) => fakeDetail(id, { width: 4000, height: 2000 })) {
   album = createQueryFake(list);
   fake = createFakeApi({
@@ -72,6 +86,9 @@ const zoomOf = () => Number(/scale\(([\d.]+)\)/.exec(picture().style.transform)?
 
 beforeEach(() => {
   resetGrid();
+  loads = new Map();
+  started = [];
+  cache = resetImageCache(fakeLoader);
   useSettingsStore.setState({ settings: null, error: null });
   stageSize = { width: 800, height: 600 };
   observers = [];
@@ -234,6 +251,61 @@ describe("Preview", () => {
     // The top-left corner: clamped to x = 0; the height fits, so centred.
     expect(picture().style.transform).toBe("translate(0px, 12px) scale(1.44)");
     expect(stage()).not.toHaveClass("ow-zoom--grabbing");
+  });
+});
+
+describe("Preloading", () => {
+  it("asks for the photo on screen first, then the next 20 and the previous 5, the next one first", async () => {
+    setup(photos(40));
+    const want = vi.spyOn(cache, "want");
+    await show(10);
+    await waitFor(() => expect(want).toHaveBeenCalled());
+    const keys = want.mock.lastCall![0].map((w) => key(w.url));
+    expect(keys[0]).toBe("tk-10");
+    expect(keys.slice(1, 5)).toEqual(["tk-11", "tk-12", "tk-13", "tk-9"]);
+    expect(keys).toHaveLength(26);
+    expect(keys).toContain("tk-30");
+    expect(keys).toContain("tk-5");
+    expect(keys).not.toContain("tk-31");
+    expect(keys).not.toContain("tk-4");
+    expect(loads.get(want.mock.lastCall![0][0]!.url)!.priority).toBe("high");
+  });
+
+  it("shows a preloaded photo's medium picture at once when stepping to it, asking for nothing new for it", async () => {
+    setup(photos(40));
+    await show(10);
+    await waitFor(() => expect(started.length).toBeGreaterThan(0));
+    // Finish every load until the whole window is decoded.
+    for (let round = 0; round < 10; round++) {
+      await act(async () => {
+        for (const l of loads.values()) l.resolve();
+        await new Promise((r) => setTimeout(r, 0));
+      });
+    }
+    expect(cache.held()).toHaveLength(26);
+    const asked = started.length;
+    act(() => grid().setSelection({ current: { id: 11, index: 10 }, anchor: { id: 11, index: 10 }, selection: [11] }));
+    await waitFor(() => expect(images().some((s) => s!.includes("tk-11"))).toBe(true));
+    // The medium picture is ready without a load event, and the small one is not even asked for.
+    expect(images()).toHaveLength(1);
+    expect(images()[0]).toMatch(/thumb\/tk-11\/m$/);
+    expect(stage().querySelector(".ow-zoom__picture img")).toHaveClass("ow-zoom__img--ready");
+    // Only the new edge of the window is loaded.
+    expect(started.slice(asked).map(key)).toEqual(["tk-31"]);
+  });
+
+  it("empties when the album's photos are rekeyed", async () => {
+    setup(photos(5));
+    await show(2);
+    await act(async () => {
+      for (const l of loads.values()) l.resolve();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(cache.ready(started.find((u) => key(u) === "tk-3")!)).toBe(true);
+    const revision = album.change((list) => list);
+    await act(async () => fake.emit("album_changed", { revision, reason: "info", rekeyed: [3] }));
+    expect(cache.ready(started.find((u) => key(u) === "tk-3")!)).toBe(false);
+    expect(cache.ready(started.find((u) => key(u) === "tk-2")!)).toBe(true);
   });
 });
 

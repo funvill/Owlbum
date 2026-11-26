@@ -62,6 +62,11 @@ export interface ZoomStageProps {
   ready?: boolean;
   /** False for a video: no zoom, pan, mini map or full-size swap. */
   zoomable: boolean;
+  /**
+   * The medium picture is already decoded in the image cache: it shows at
+   * once, and when it was so from the start the small one is not loaded.
+   */
+  mediumCached?: boolean;
   /** Double-click at fit: the preview opens the viewer. */
   onOpenAtFit?: () => void;
   /** Right-click: the photo menu (#38). */
@@ -90,12 +95,24 @@ function dpr(): number {
   return typeof r === "number" && r > 0 ? r : 1;
 }
 
-export function ZoomStage({ pictures, ready = true, aspect, original, zoomable, onOpenAtFit, onMenu, handle }: ZoomStageProps) {
+export function ZoomStage({
+  pictures,
+  ready = true,
+  aspect,
+  original,
+  zoomable,
+  mediumCached = false,
+  onOpenAtFit,
+  onMenu,
+  handle,
+}: ZoomStageProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const [stage, setStage] = useState<Box>({ width: 0, height: 0 });
   /** Null is the fit view, which follows the stage's size. */
   const [view, setView] = useState<View | null>(null);
-  const [mediumReady, setMediumReady] = useState(false);
+  const [mediumLoaded, setMediumLoaded] = useState(false);
+  const [cachedFromStart] = useState(mediumCached);
+  const mediumReady = mediumLoaded || mediumCached;
   const [fullWanted, setFullWanted] = useState(false);
   const [fullReady, setFullReady] = useState(false);
   const [grabbing, setGrabbing] = useState(false);
@@ -216,14 +233,16 @@ export function ZoomStage({ pictures, ready = true, aspect, original, zoomable, 
           transform: `translate(${round(shown.x, 3)}px, ${round(shown.y, 3)}px) scale(${round(shown.zoom, 4)})`,
         }}
       >
-        {ready && <img className="ow-zoom__img ow-zoom__img--ready" src={pictures.small} alt="" draggable={false} />}
+        {ready && !cachedFromStart && (
+          <img className="ow-zoom__img ow-zoom__img--ready" src={pictures.small} alt="" draggable={false} />
+        )}
         {ready && (
           <img
             className={`ow-zoom__img${mediumReady ? " ow-zoom__img--ready" : ""}`}
             src={pictures.medium}
             alt=""
             draggable={false}
-            onLoad={() => setMediumReady(true)}
+            onLoad={() => setMediumLoaded(true)}
           />
         )}
         {ready && fullWanted && (

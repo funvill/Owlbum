@@ -3,10 +3,11 @@
 //
 // It reads the page's one current photo from the grid store, like the
 // details panel, so the two never disagree. Which picture is shown follows
-// "Which picture is shown": this photo's small thumbnail at once, the
-// medium one swapped in when it is decoded. The decoded-image cache and
-// preloading (#21) replace that order with a cache lookup; the stage takes
-// its pictures as addresses, so the cache only changes what is passed in.
+// "Which picture is shown": the medium picture at once when the image cache
+// has it decoded, else this photo's small thumbnail with the medium one
+// swapped in when it is decoded. The preview wants the photo and its
+// preload window from the cache on every step ("Image cache and
+// preloading").
 
 import { useCallback, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type Ref } from "react";
 import { fullUrl, thumbUrl } from "../../api";
@@ -17,7 +18,8 @@ import { previewText as t } from "../../text/preview";
 import { useSettingsStore } from "../app";
 import { gridBlocks, useGridStore } from "../grid";
 import { Caption } from "./Caption";
-import { ZoomStage, type ZoomHandle } from "./ZoomStage";
+import { useCachedReady, usePreload } from "./preload";
+import { ZoomStage, type ZoomHandle, type ZoomStageProps } from "./ZoomStage";
 import "./Preview.css";
 
 export interface PreviewProps {
@@ -44,6 +46,7 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
   // The last row seen for the current photo: a re-run that moves it, or a
   // scroll that lets its block go, must not blank the preview.
   const [held, setHeld] = useState<Row | null>(null);
+  usePreload(pending?.index ?? current?.index ?? null);
 
   if (current === null && pending === null) {
     return (
@@ -74,7 +77,7 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
   return (
     <section className="ow-preview" aria-label={t.region}>
       <div className="ow-preview__stage">
-        <ZoomStage
+        <CachedZoomStage
           key={`${row.id}:${row.thumb_key}`}
           ready={row.thumb_key !== ""}
           pictures={{
@@ -93,4 +96,10 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
       <Caption row={row} selected={selected} fullPath={own?.abs_path ?? null} editTarget={editTarget} />
     </section>
   );
+}
+
+/** The zoom component, showing the medium picture at once when the image cache has it decoded. */
+export function CachedZoomStage(props: Omit<ZoomStageProps, "mediumCached">) {
+  const cached = useCachedReady(props.pictures.medium);
+  return <ZoomStage {...props} mediumCached={cached} />;
 }

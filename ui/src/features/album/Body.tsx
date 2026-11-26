@@ -1,6 +1,7 @@
 import { useEffect } from "react";
 import { albumText } from "../../text/album";
 import { useGridStore } from "../grid";
+import { imageCache } from "../preview";
 import { Review } from "./Review";
 import { useAlbumStore } from "./session";
 import { StartScreen } from "./StartScreen";
@@ -37,10 +38,12 @@ export function Body() {
   const dropOver = useAlbumStore((s) => s.dropOver);
   const albumOpen = useAlbumStore((s) => s.status !== null);
 
-  // The grid's result belongs to the open album: it goes when the album closes
-  // (opening another album closes this one first).
+  // The grid's result and the decoded pictures belong to the open album: they
+  // go when the album closes (opening another album closes this one first).
   useEffect(() => {
-    if (!albumOpen) useGridStore.getState().stop();
+    if (albumOpen) return;
+    useGridStore.getState().stop();
+    imageCache().clear();
   }, [albumOpen]);
 
   return (

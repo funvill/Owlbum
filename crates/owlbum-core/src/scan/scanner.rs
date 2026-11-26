@@ -11,7 +11,7 @@ use ts_rs::TS;
 use super::memory::Overlay;
 use super::progress::{Progress, ScanPhase};
 use super::report::{self, ScanErrors, ScanReport, UnsupportedFiles};
-use super::run::{Request, Scan, ScanEnv, ScanSummary, run};
+use super::run::{Request, Scan, ScanEnv, ScanSummary, run_with};
 use super::walk::Walk;
 use crate::album::Album;
 use crate::error::AppResult;
@@ -54,8 +54,8 @@ struct State {
     running: bool,
     pending: Option<Request>,
     last: Option<ScanSummary>,
-    /// The last walk that ended, for the report: a walk that failed or was
-    /// cancelled does not replace it.
+    /// The last walk that ended, for the report, kept from the moment it
+    /// ends: a walk that failed or was cancelled does not replace it.
     walk: Option<Walk>,
     closed: bool,
 }
@@ -233,7 +233,7 @@ fn scan_loop(shared: &Shared) {
                 }
             }
         };
-        let summary = run(
+        let summary = run_with(
             &Scan {
                 album: &shared.album,
                 overlay: &shared.overlay,
@@ -242,12 +242,10 @@ fn scan_loop(shared: &Shared) {
                 progress: &shared.progress,
             },
             request,
+            // The report answers from this walk while the passes run.
+            |walk| shared.state().walk = Some(walk.clone()),
         );
-        let mut state = shared.state();
-        if summary.walk.complete {
-            state.walk = Some(summary.walk.clone());
-        }
-        state.last = Some(summary);
+        shared.state().last = Some(summary);
     }
 }
 

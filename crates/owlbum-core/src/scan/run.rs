@@ -146,13 +146,24 @@ pub struct ScanSummary {
 /// Runs one scan of the album's scope (docs/03-media-and-scanning.md, "The
 /// scanner"). Always ends with a finished `scan_progress`.
 pub fn run(scan: &Scan<'_>, request: Request) -> ScanSummary {
+    run_with(scan, request, |_| {})
+}
+
+/// [`run`], calling `walked` with the walk as soon as a whole walk ends,
+/// before the passes, so the scan report can answer while they run.
+pub fn run_with(scan: &Scan<'_>, request: Request, walked: impl FnOnce(&Walk)) -> ScanSummary {
     scan.progress.start();
     let mut summary = ScanSummary::default();
     let location = scan.album.location();
     match walk::walk(&location.root, &location.scope, scan.cancel, |n| {
         scan.progress.found(n);
     }) {
-        Ok(walk) => summary.walk = walk,
+        Ok(walk) => {
+            if walk.complete {
+                walked(&walk);
+            }
+            summary.walk = walk;
+        }
         Err(e) => {
             // Nothing in the database is changed: an unplugged drive must
             // not mark an album missing.

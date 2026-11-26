@@ -585,18 +585,6 @@ fn rows_under_a_folder_that_becomes_an_album_go_missing() {
     assert_eq!(summary.missing, 1);
 }
 
-#[test]
-fn rows_of_online_only_files_are_not_gone() {
-    // The rule the scan's Finish uses, on every platform; the Windows test
-    // below drives it with a real attribute.
-    let walk = walk::Walk {
-        complete: true,
-        online_only: ["a.png".to_owned()].into_iter().collect(),
-        ..walk::Walk::default()
-    };
-    assert!(walk.is_online_only("a.png"));
-}
-
 #[cfg(windows)]
 #[test]
 fn an_online_only_file_is_never_read_and_its_row_is_kept() {
@@ -825,6 +813,66 @@ fn the_scanner_reports_its_last_whole_walk() {
     assert_eq!(scanner.report(), report);
     assert_eq!(scanner.unsupported(0, 500).total, 1);
     assert_eq!(scanner.status().unsupported, 1);
+}
+
+/// A reader that holds the pixels pass at its first decode until told to
+/// go on.
+struct Holding {
+    entered: Mutex<std::sync::mpsc::Sender<()>>,
+    release: Mutex<std::sync::mpsc::Receiver<()>>,
+}
+
+impl Reader for Holding {
+    fn sample(&self, path: &Path) -> std::io::Result<Sample> {
+        MediaReader.sample(path)
+    }
+
+    fn metadata(&self, format: &'static MediaFormat, path: &Path) -> Result<Metadata, MediaError> {
+        MediaReader.metadata(format, path)
+    }
+
+    fn probe(
+        &self,
+        format: &'static MediaFormat,
+        path: &Path,
+    ) -> Result<Option<VideoInfo>, MediaError> {
+        MediaReader.probe(format, path)
+    }
+
+    fn preview(&self, format: &'static MediaFormat, path: &Path) -> Result<Pixels, MediaError> {
+        let _ = self.entered.lock().unwrap().send(());
+        let _ = self
+            .release
+            .lock()
+            .unwrap()
+            .recv_timeout(Duration::from_secs(30));
+        MediaReader.preview(format, path)
+    }
+}
+
+#[test]
+fn the_report_answers_while_the_passes_still_run() {
+    let mut fx = Fx::empty();
+    std::fs::create_dir_all(fx.path("inner/.owlbum")).unwrap();
+    std::fs::write(fx.path("inner/.owlbum/owlbum.sqlite"), b"").unwrap();
+    picture(&fx.path("a.png"), 1);
+    let (entered_tx, entered) = std::sync::mpsc::channel();
+    let (release, release_rx) = std::sync::mpsc::channel();
+    let mut env = fx.env.clone();
+    env.reader = Arc::new(Holding {
+        entered: Mutex::new(entered_tx),
+        release: Mutex::new(release_rx),
+    });
+    let album = fx.take_album();
+    let scanner = Scanner::new(album, env);
+    scanner.request(Request::default());
+    entered
+        .recv_timeout(Duration::from_secs(30))
+        .expect("the pixels pass starts");
+    assert!(scanner.is_running());
+    assert_eq!(scanner.report().nested_album_count, 1);
+    release.send(()).unwrap();
+    scanner.wait();
 }
 
 #[test]

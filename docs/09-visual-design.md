@@ -72,6 +72,7 @@ These were fixed colours in the old program. They are tokens now. Surfaces that 
 | `--viewer-text` | `#ffffff` | `#ffffff` | Viewer file name, counter and close button. |
 | `--viewer-muted` | `#b8b5ad` | `#b8b5ad` | Viewer key hints. |
 | `--viewer-panel` | `rgba(20,20,22,0.88)` | `rgba(20,20,22,0.88)` | The details box drawn over the viewer. |
+| `--viewer-bar` | `rgba(0,0,0,0.7)` | `rgba(0,0,0,0.7)` | The viewer's top bar, a gradient from this to clear. |
 | `--badge-bg` | `rgba(0,0,0,0.65)` | `rgba(0,0,0,0.65)` | Pills and buttons drawn on a thumbnail: score, stack count, star, duration. |
 | `--badge-text` | `#ffffff` | `#ffffff` | Text and icons on a badge. |
 | `--crop-line` | `rgba(255,255,255,0.9)` | `rgba(255,255,255,0.9)` | Crop frame, thirds lines and handles. |

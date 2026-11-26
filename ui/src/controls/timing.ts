@@ -10,3 +10,6 @@ export const toastMs = {
   plain: 4000,
   withAction: 8000,
 } as const;
+
+/** The viewer's top bar fades out after this long without pointer movement or a key. */
+export const viewerBarMs = 3000;

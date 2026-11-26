@@ -9,16 +9,16 @@
 // preload window from the cache on every step ("Image cache and
 // preloading").
 
-import { useCallback, useState, useSyncExternalStore, type MouseEvent as ReactMouseEvent, type Ref } from "react";
+import type { MouseEvent as ReactMouseEvent, Ref } from "react";
 import { fullUrl, thumbUrl } from "../../api";
 import type { PhotoAt } from "../../api/bindings/PhotoAt";
 import type { PhotoDetail } from "../../api/bindings/PhotoDetail";
-import type { Row } from "../../api/bindings/Row";
 import { previewText as t } from "../../text/preview";
 import { useSettingsStore } from "../app";
-import { gridBlocks, useGridStore } from "../grid";
+import { useGridStore } from "../grid";
 import { Caption } from "./Caption";
 import { useCachedReady, usePreload } from "./preload";
+import { useShownRow } from "./shownRow";
 import { ZoomStage, type ZoomHandle, type ZoomStageProps } from "./ZoomStage";
 import "./Preview.css";
 
@@ -34,18 +34,9 @@ export interface PreviewProps {
 }
 
 export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
-  const current = useGridStore((s) => s.current);
-  const pending = useGridStore((s) => s.pending);
+  const { current, pending, row } = useShownRow();
   const selected = useGridStore((s) => s.selection.length);
   const editTarget = useSettingsStore((s) => s.settings?.edit_target ?? "album");
-  const blocks = gridBlocks();
-  useSyncExternalStore(
-    useCallback((listener: () => void) => gridBlocks().subscribe(listener), []),
-    () => gridBlocks().version,
-  );
-  // The last row seen for the current photo: a re-run that moves it, or a
-  // scroll that lets its block go, must not blank the preview.
-  const [held, setHeld] = useState<Row | null>(null);
   usePreload(pending?.index ?? current?.index ?? null);
 
   if (current === null && pending === null) {
@@ -58,12 +49,6 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
     );
   }
 
-  // Only a row that is this photo's: the index may be an old result's. A
-  // step waiting for its row shows a placeholder, never the photo it left.
-  const candidate = current === null || pending !== null ? undefined : blocks.row(current.index);
-  const found = candidate !== undefined && candidate.id === current?.id ? candidate : undefined;
-  if (found !== undefined && found !== held) setHeld(found);
-  const row = found ?? (pending === null && held !== null && held.id === current?.id ? held : undefined);
   if (current === null || row === undefined) {
     return (
       <section className="ow-preview" aria-label={t.region} aria-busy="true">

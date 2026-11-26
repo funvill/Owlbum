@@ -1,0 +1,138 @@
+/* docs/04-browsing.md, "Full-screen viewer". */
+
+.ow-viewer {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-viewer);
+  background: var(--viewer-bg);
+  color: var(--viewer-text);
+  animation: ow-viewer-in var(--motion-slow) var(--ease);
+}
+
+@keyframes ow-viewer-in {
+  from {
+    opacity: 0;
+  }
+}
+
+.ow-viewer__stage {
+  position: absolute;
+  inset: 0;
+  /* The mini map sits below the top bar. */
+  --_minimap-top: 56px;
+}
+
+.ow-viewer__bar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+  padding: var(--space-3) var(--space-5);
+  background: linear-gradient(to bottom, var(--viewer-bar), transparent);
+  font: var(--text-md);
+  transition: opacity var(--motion-slow) var(--ease);
+}
+
+.ow-viewer__bar--away {
+  opacity: 0;
+}
+
+.ow-viewer__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.ow-viewer__mark {
+  display: inline-flex;
+  flex: none;
+}
+
+.ow-viewer__mark--star {
+  color: var(--accent);
+}
+
+.ow-viewer__badge {
+  flex: none;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-full);
+  color: var(--marker-ink);
+  background: var(--marker-edited);
+}
+
+.ow-viewer__badge--file {
+  background: var(--marker-unsaved);
+}
+
+.ow-viewer__position {
+  flex: none;
+}
+
+.ow-viewer__hint {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-align: right;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--viewer-muted);
+  font: var(--text-sm);
+}
+
+@media (max-width: 899px) {
+  .ow-viewer__hint {
+    visibility: hidden;
+  }
+}
+
+.ow-viewer__close {
+  flex: none;
+  color: var(--viewer-text);
+}
+
+.ow-viewer__details {
+  position: absolute;
+  right: 16px;
+  bottom: 16px;
+  box-sizing: border-box;
+  width: 320px;
+  max-height: calc(100% - 80px);
+  overflow: auto;
+  padding: var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--viewer-panel);
+  font: var(--text-md);
+}
+
+.ow-viewer__details-name {
+  margin: 0 0 var(--space-3);
+  font: inherit;
+  font-weight: 600;
+  overflow-wrap: anywhere;
+}
+
+.ow-viewer__details dl {
+  margin: 0;
+}
+
+.ow-viewer__fact {
+  display: grid;
+  grid-template-columns: 96px 1fr;
+  gap: var(--space-3);
+  padding: var(--space-1) 0;
+}
+
+.ow-viewer__fact dt {
+  color: var(--viewer-muted);
+}
+
+.ow-viewer__fact dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+}

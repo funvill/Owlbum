@@ -6,6 +6,7 @@ import type { PhotoAt } from "../bindings/PhotoAt";
 import type { QueryCommands } from "../bindings/query";
 import type { Query } from "../bindings/QueryShape";
 import type { Row } from "../bindings/Row";
+import type { JsonValue } from "../bindings/serde_json/JsonValue";
 import type { AppError } from "../bindings/AppError";
 import type { AreaHandlers } from "./types";
 
@@ -32,6 +33,8 @@ export interface FakePhoto {
   height?: number;
   duration_ms?: number | null;
   score?: number | null;
+  /** The plan for the stored edit; null (no edit) when absent. */
+  edit_plan?: JsonValue | null;
 }
 
 /** The fake album behind the `query_` commands, with what a test needs to change it. */
@@ -182,7 +185,7 @@ function row(id: number, p: FakePhoto | undefined): Row {
     hidden: p?.hidden ?? false,
     score: p?.score ?? null,
     stack: null,
-    edit_plan: null,
+    edit_plan: p?.edit_plan ?? null,
   };
 }
 

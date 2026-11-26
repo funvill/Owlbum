@@ -69,6 +69,11 @@ export interface ZoomStageProps {
   mediumCached?: boolean;
   /** Double-click at fit: the preview opens the viewer. */
   onOpenAtFit?: () => void;
+  /**
+   * Double-click at fit zooms to actual size (one picture pixel to one
+   * screen pixel) at the pointer instead: the viewer. Needs `original`.
+   */
+  actualSizeAtFit?: boolean;
   /** Right-click: the photo menu (#38). */
   onMenu?: (event: ReactMouseEvent) => void;
   handle?: Ref<ZoomHandle>;
@@ -103,6 +108,7 @@ export function ZoomStage({
   zoomable,
   mediumCached = false,
   onOpenAtFit,
+  actualSizeAtFit = false,
   onMenu,
   handle,
 }: ZoomStageProps) {
@@ -202,9 +208,18 @@ export function ZoomStage({
     setGrabbing(false);
   };
 
-  const onDoubleClick = () => {
-    if (shown.zoom > 1) setView(null);
-    else onOpenAtFit?.();
+  const onDoubleClick = (e: ReactMouseEvent<HTMLDivElement>) => {
+    if (shown.zoom > 1) {
+      setView(null);
+      return;
+    }
+    if (!actualSizeAtFit) {
+      onOpenAtFit?.();
+      return;
+    }
+    if (original === null || fitted.width <= 0) return;
+    const rect = e.currentTarget.getBoundingClientRect();
+    zoomBy(original.width / (fitted.width * dpr()), { x: e.clientX - rect.left, y: e.clientY - rect.top });
   };
 
   const classes = ["ow-zoom"];

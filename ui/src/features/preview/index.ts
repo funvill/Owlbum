@@ -30,3 +30,4 @@ export {
   type Wanted,
 } from "./cache";
 export { useCachedReady, usePreload } from "./preload";
+export { useShownRow, type ShownRow } from "./shownRow";

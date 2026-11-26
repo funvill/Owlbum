@@ -15,6 +15,7 @@
 
 pub mod arg;
 mod engine;
+mod filter;
 mod keep;
 pub mod shape;
 pub mod sort;

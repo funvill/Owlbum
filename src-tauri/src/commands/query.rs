@@ -2,13 +2,13 @@
 
 use crate::session::Session;
 use crate::{area, command};
-use owlbum_core::query::{Arg, Keep, Located, Query, QueryResult, Row};
+use owlbum_core::query::{Arg, Facets, Keep, Located, Query, QueryResult, Row};
 use owlbum_core::{AppError, text};
 use tauri::State;
 
 area! {
     prefix: "query",
-    commands: [query_ids, query_locate, query_run, query_window],
+    commands: [query_facets, query_ids, query_locate, query_run, query_window],
     events: [],
 }
 
@@ -23,6 +23,15 @@ command! {
         let keep = keep.map(Arg::get).transpose()?;
         let (scanner, queries) = session.queries()?;
         blocking(move || queries.run(scanner.album(), &query, keep.as_ref())).await
+    }
+}
+
+command! {
+    /// The counts beside the filter panel's options for the query `token`
+    /// was made from. `query_expired` for a token that was dropped.
+    pub async fn query_facets(token: String; session: State<'_, Session>) -> Facets {
+        let (scanner, queries) = session.queries()?;
+        blocking(move || queries.facets(scanner.album(), &token)).await
     }
 }
 

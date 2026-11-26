@@ -12,6 +12,8 @@ use crate::scan::memory::Overlay;
 use crate::scan::{Request, ScanEnv, Scanner};
 use crate::text;
 
+mod filters;
+
 // ---- Helpers ----
 
 struct Quiet;
@@ -268,10 +270,6 @@ fn parts_not_built_yet_answer_bad_query() {
     let album = album(tmp.path());
     small(&album);
     let engine = QueryEngine::new();
-    let with_filter = |filter: Filter| Query {
-        filter,
-        ..default_query()
-    };
     let refused = [
         Query {
             view: QueryView::Timeline,
@@ -281,61 +279,6 @@ fn parts_not_built_yet_answer_bad_query() {
             search: Some("lake".to_owned()),
             ..default_query()
         },
-        Query {
-            want_facets: true,
-            ..default_query()
-        },
-        with_filter(Filter {
-            star: Some(StarFilter::Yes),
-            ..Filter::default()
-        }),
-        with_filter(Filter {
-            shape: Some(ShapeFilter::Portrait),
-            ..Filter::default()
-        }),
-        with_filter(Filter {
-            hidden: Some(HiddenFilter::Show),
-            ..Filter::default()
-        }),
-        with_filter(Filter {
-            from: Some("2024-06-01".to_owned()),
-            ..Filter::default()
-        }),
-        with_filter(Filter {
-            to: Some("2024-06-01".to_owned()),
-            ..Filter::default()
-        }),
-        with_filter(Filter {
-            folder: Some(String::new()),
-            ..Filter::default()
-        }),
-        with_filter(Filter {
-            has_location: Some(true),
-            ..Filter::default()
-        }),
-        with_filter(Filter {
-            has_people: Some(true),
-            ..Filter::default()
-        }),
-        with_filter(Filter {
-            people: Some(vec!["Ann".to_owned()]),
-            ..Filter::default()
-        }),
-        with_filter(Filter {
-            tags: Some(vec![TagFilter {
-                kind: TagKind::Keyword,
-                value: "lake".to_owned(),
-            }]),
-            ..Filter::default()
-        }),
-        with_filter(Filter {
-            low_quality: Some(true),
-            ..Filter::default()
-        }),
-        with_filter(Filter {
-            near_duplicates: Some(true),
-            ..Filter::default()
-        }),
     ];
     for q in refused {
         let err = engine.run(&album, &q, None).unwrap_err();

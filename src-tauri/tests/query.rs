@@ -7,7 +7,7 @@ use std::time::Duration;
 
 use common::invoke;
 use owlbum_core::album::{Album, OpenOptions};
-use owlbum_core::query::{QueryResult, Row};
+use owlbum_core::query::{Facets, QueryResult, Row};
 use owlbum_core::scan::ScanProgress;
 use serde_json::{Value, json};
 use tauri::test::{MockRuntime, mock_builder};
@@ -88,6 +88,36 @@ fn a_query_with_a_value_not_allowed_answers_bad_query() {
     later["view"] = json!("timeline");
     let err = invoke(&window, "query_run", json!({ "query": later })).unwrap_err();
     assert_eq!(err["code"], "bad_query");
+    let mut not_a_day = default_query();
+    not_a_day["filter"] = json!({ "from": "2024-02-30" });
+    let err = invoke(&window, "query_run", json!({ "query": not_a_day })).unwrap_err();
+    assert_eq!(err["code"], "bad_query");
+    app.state::<owlbum_lib::session::Session>().close();
+}
+
+#[test]
+fn a_filtered_query_answers_chips_and_query_facets_its_counts() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (app, window) = app_window();
+    open_trip(&app, tmp.path());
+    let all = run(&window, json!({ "query": default_query() }));
+    let mut starred = default_query();
+    starred["filter"] = json!({ "star": "yes" });
+    starred["want_facets"] = json!(true);
+    let r = run(&window, json!({ "query": starred }));
+    assert!(r.filtered);
+    assert_eq!(r.panel_count, 1);
+    assert_eq!(r.chips[0].text, "Starred");
+    assert!(r.chips[0].remove.is_empty());
+    assert_eq!(r.total, all.total);
+    let facets: Facets = invoke(&window, "query_facets", json!({ "token": r.token }))
+        .unwrap()
+        .deserialize()
+        .unwrap();
+    assert_eq!(Some(&facets), r.facets.as_ref());
+    assert_eq!(facets.star.yes + facets.star.no, all.total);
+    let err = invoke(&window, "query_facets", json!({ "token": "q-gone" })).unwrap_err();
+    assert_eq!(err["code"], "query_expired");
     app.state::<owlbum_lib::session::Session>().close();
 }
 

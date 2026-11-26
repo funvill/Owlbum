@@ -7,12 +7,13 @@ use std::sync::{Arc, Mutex, MutexGuard};
 
 use rusqlite::OptionalExtension;
 
+use super::filter::{self, Content, Matcher};
 use super::keep::settle;
-use super::shape::{Keep, Located, Query, QueryResult, Row};
+use super::shape::{Facets, Filter, Keep, Located, Query, QueryResult, Row};
 use super::{sort, support};
 use crate::album::{Album, sqlite_error};
 use crate::error::{AppError, AppResult, ErrorCode};
-use crate::index::{Kind, Photo};
+use crate::index::Kind;
 use crate::media::MediaKind;
 use crate::scan::memory::Overlay;
 use crate::text;
@@ -37,6 +38,10 @@ struct Held {
     /// Photos folded inside a closed stack, to the stack's id. Empty until
     /// stacks are built (#30).
     folded: HashMap<u32, i64>,
+    /// The normalised filter the result was made with, and its people and
+    /// tag ids, for `query_facets`.
+    filter: Filter,
+    content: Content,
 }
 
 /// Runs queries for one open album and keeps the last [`TOKENS_KEPT`]
@@ -80,6 +85,9 @@ impl QueryEngine {
     /// under a new token, and settles `keep` against them.
     pub fn run(&self, album: &Album, query: &Query, keep: Option<&Keep>) -> AppResult<QueryResult> {
         support::check(query)?;
+        let filter = query.filter.normalised();
+        filter::validate(&filter)?;
+        let content = filter::content(album, &filter)?;
         // Read before the index: a change landing in between makes this
         // result newer than its revision says, never older, so the page's
         // "is the event newer" test can only re-run once too often.
@@ -87,10 +95,19 @@ impl QueryEngine {
         // The old result is looked up before the new one is stored, which
         // may drop it.
         let old = keep.and_then(|k| self.find(&k.token));
-        let (tiles, album_photos) = album.index().read(|v| {
-            let shown: Vec<&Photo> = v.photos().iter().filter(|p| !p.hidden()).collect();
-            (sort::order(v, &shown, query.sort), v.len())
+        let (tiles, album_photos, total, facets, chips) = album.index().read(|v| {
+            let matcher = Matcher::new(v, &filter, &content);
+            let passed = filter::pass(v, &matcher, query.want_facets);
+            (
+                sort::order(v, &passed.shown, query.sort),
+                v.len(),
+                passed.total,
+                passed.facets,
+                filter::chips(&filter, v.scope()),
+            )
         });
+        // Every photo that passes; stacks unfolded once they exist (#30).
+        let photos = count(tiles.len());
         let kept = keep.map(|k| settle(k, old.as_deref().map(|h| h.tiles.as_slice()), &tiles));
         let count = count(tiles.len());
         let token = format!("q{}", NEXT_TOKEN.fetch_add(1, Ordering::Relaxed));
@@ -98,17 +115,33 @@ impl QueryEngine {
             token: token.clone(),
             tiles,
             folded: HashMap::new(),
+            filter,
+            content,
         });
         Ok(QueryResult {
             token,
             revision,
             count,
-            photos: count,
-            total: count,
+            photos,
+            total: self::count(total),
             album_photos: self::count(album_photos),
+            filtered: !query.filter.is_empty() || support::is_search(query.search.as_deref()),
+            panel_count: self::count(chips.len()),
+            chips,
             kept,
+            facets,
             ..QueryResult::default()
         })
+    }
+
+    /// `query_facets`: the counts beside the filter panel's options for the
+    /// query `token` was made from, over the album index as it is now.
+    pub fn facets(&self, album: &Album, token: &str) -> AppResult<Facets> {
+        let held = self.held(token)?;
+        Ok(album.index().read(|v| {
+            let matcher = Matcher::new(v, &held.filter, &held.content);
+            filter::pass(v, &matcher, true).facets.unwrap_or_default()
+        }))
     }
 
     /// `query_window`: the rows at `offset`, at most `limit` and at most

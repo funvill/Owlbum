@@ -19,6 +19,16 @@ fi
 step "Prune the shared target directory"
 bash scripts/prune-target.sh
 
+step "Mark this checkout's sources as newest"
+# Every worktree shares one target directory, and Cargo decides whether a
+# workspace crate is up to date by comparing file times with its last build,
+# not by which checkout it came from. A worktree whose files are older than
+# another worktree's last build would silently test that other code. Touching
+# the workspace sources makes this checkout's build the newest, so Cargo
+# rebuilds the workspace crates from these files. Dependencies are unaffected.
+find crates src-tauri -type f \( -name '*.rs' -o -name '*.sql' -o -name '*.json' -o -name 'Cargo.toml' -o -name 'build.rs' \) \
+  -not -path '*/target/*' -not -path '*/gen/*' -print0 | xargs -0 touch
+
 step "Rust format"
 cargo fmt --all --check
 

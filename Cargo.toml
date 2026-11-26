@@ -42,6 +42,9 @@ png = "0.18"
 zune-core = "0.5"
 zune-jpegxl = "0.5"
 nom-exif = "3.8"
+# Thumbnail and analysis resizing (docs/03-media-and-scanning.md, "Image
+# analysis"): Lanczos3 with SIMD, in fixed point.
+fast_image_resize = { version = "6.2", default-features = false, features = ["std"] }
 # Colour profiles to sRGB (docs/03-media-and-scanning.md, "Media handlers":
 # the sRGB rule). The same version `image` already depends on.
 moxcms = "0.8.1"

@@ -187,11 +187,11 @@ struct Ifds<'a, R> {
 /// The byte size of one value of a TIFF field type, for the types kept.
 fn type_size(kind: u16) -> Option<u32> {
     match kind {
-        1 | 2 | 6 => Some(1),  // BYTE, ASCII, SBYTE
-        3 | 8 => Some(2),      // SHORT, SSHORT
-        4 | 9 => Some(4),      // LONG, SLONG
-        5 | 10 => Some(8),     // RATIONAL, SRATIONAL
-        _ => None,             // UNDEFINED, FLOAT, DOUBLE, IFD: not used
+        1 | 2 | 6 => Some(1), // BYTE, ASCII, SBYTE
+        3 | 8 => Some(2),     // SHORT, SSHORT
+        4 | 9 => Some(4),     // LONG, SLONG
+        5 | 10 => Some(8),    // RATIONAL, SRATIONAL
+        _ => None,            // UNDEFINED, FLOAT, DOUBLE, IFD: not used
     }
 }
 
@@ -204,7 +204,7 @@ impl<R: Read + Seek> Ifds<'_, R> {
         let Some(entries) = self.entries(at) else {
             return pointers;
         };
-        for e in entries.chunks_exact(12) {
+        for e in entries.as_chunks::<12>().0.iter() {
             let o = self.order;
             let (tag, kind, count) = (o.u16(&e[0..2]), o.u16(&e[2..4]), o.u32(&e[4..8]));
             if dir == Dir::Main && (tag == 0x8769 || tag == 0x8825) {
@@ -268,25 +268,45 @@ impl<R: Read + Seek> Ifds<'_, R> {
                 let end = b.iter().position(|&c| c == 0).unwrap_or(b.len());
                 Value::Text(String::from_utf8_lossy(&b[..end]).into_owned())
             }
-            3 => Value::Ints(b.chunks_exact(2).map(|c| i64::from(o.u16(c))).collect()),
+            3 => Value::Ints(
+                b.as_chunks::<2>()
+                    .0
+                    .iter()
+                    .map(|c| i64::from(o.u16(c)))
+                    .collect(),
+            ),
             8 => Value::Ints(
-                b.chunks_exact(2)
+                b.as_chunks::<2>()
+                    .0
+                    .iter()
                     .map(|c| i64::from(o.u16(c).cast_signed()))
                     .collect(),
             ),
-            4 => Value::Ints(b.chunks_exact(4).map(|c| i64::from(o.u32(c))).collect()),
+            4 => Value::Ints(
+                b.as_chunks::<4>()
+                    .0
+                    .iter()
+                    .map(|c| i64::from(o.u32(c)))
+                    .collect(),
+            ),
             9 => Value::Ints(
-                b.chunks_exact(4)
+                b.as_chunks::<4>()
+                    .0
+                    .iter()
                     .map(|c| i64::from(o.u32(c).cast_signed()))
                     .collect(),
             ),
             5 => Value::Ratios(
-                b.chunks_exact(8)
+                b.as_chunks::<8>()
+                    .0
+                    .iter()
                     .map(|c| (i64::from(o.u32(&c[..4])), i64::from(o.u32(&c[4..]))))
                     .collect(),
             ),
             10 => Value::Ratios(
-                b.chunks_exact(8)
+                b.as_chunks::<8>()
+                    .0
+                    .iter()
                     .map(|c| {
                         (
                             i64::from(o.u32(&c[..4]).cast_signed()),

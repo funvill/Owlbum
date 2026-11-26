@@ -931,7 +931,10 @@ fn camera_exif() -> Vec<u8> {
 }
 
 fn assert_camera_exif(meta: &Metadata, what: &str) {
-    let exif = meta.exif.as_ref().unwrap_or_else(|| panic!("{what}: no EXIF"));
+    let exif = meta
+        .exif
+        .as_ref()
+        .unwrap_or_else(|| panic!("{what}: no EXIF"));
     assert_eq!(exif.text(exif::Dir::Main, 0x010f), Some("Owlbum"), "{what}");
     assert_eq!(
         exif.text(exif::Dir::Exif, 0x9003),
@@ -941,7 +944,9 @@ fn assert_camera_exif(meta: &Metadata, what: &str) {
 }
 
 fn box_(kind: &[u8; 4], data: &[u8]) -> Vec<u8> {
-    let mut b = (u32::try_from(data.len() + 8).unwrap()).to_be_bytes().to_vec();
+    let mut b = (u32::try_from(data.len() + 8).unwrap())
+        .to_be_bytes()
+        .to_vec();
     b.extend_from_slice(kind);
     b.extend_from_slice(data);
     b
@@ -976,7 +981,10 @@ fn exif_is_read_from_every_container_that_holds_it() {
     let jpeg = owlbum_fixtures::encode::jpeg(&img, 90, &meta);
 
     // PNG: an `eXIf` chunk before the pixels.
-    let png = encode(&image::DynamicImage::ImageRgb8(img.clone()), ImageFormat::Png);
+    let png = encode(
+        &image::DynamicImage::ImageRgb8(img.clone()),
+        ImageFormat::Png,
+    );
     let png = png_with_chunk(&png, &png_chunk(b"eXIf", &block));
 
     // WebP: the extended form with an `EXIF` chunk.
@@ -1058,7 +1066,9 @@ fn a_damaged_jpeg_xl_exif_box_is_no_error() {
     let meta = handler_for(&path).handler.metadata(&path).unwrap();
     assert_eq!(meta.exif, None);
     assert_eq!(
-        jxl::exif_box(&mut Cursor::new(&bytes[..bytes.len() - 3])).ok().flatten(),
+        jxl::exif_box(&mut Cursor::new(&bytes[..bytes.len() - 3]))
+            .ok()
+            .flatten(),
         None
     );
     let mut long = jxl_container(&owlbum_fixtures::encode::jxl(&quadrants()), None);

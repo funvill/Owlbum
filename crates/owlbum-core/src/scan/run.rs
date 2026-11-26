@@ -10,11 +10,11 @@ use std::time::{Duration, Instant, SystemTime};
 use super::keys::{self, Sample};
 use super::memory::Overlay;
 use super::order::natural_cmp;
-use super::pixels;
 use super::progress::{Changes, Progress};
 use super::reader::{MediaReader, Reader};
 use super::rows::{self, Facts, Known, Op};
 use super::walk::{self, Listed, Walk};
+use super::{metadata, pixels};
 use crate::AppError;
 use crate::album::Album;
 use crate::error::AppResult;
@@ -697,7 +697,7 @@ impl Work<'_, '_> {
 
     /// Reads one file's facts. `sample` is its two ends when already read.
     /// The scan facts that come from metadata (date, place, camera, the
-    /// `exif` JSON) are read here by #10.
+    /// `exif` JSON) are worked out by [`metadata::read`].
     fn read_facts(&self, file: &Listed, sample: Option<std::io::Result<Sample>>) -> Read {
         let env = self.scan.env;
         let rel = &file.rel_path;
@@ -728,15 +728,18 @@ impl Work<'_, '_> {
         };
         let read = env.reader.metadata(format, &path).and_then(|m| {
             let mut facts = (m.width, m.height, m.duration_ms);
-            if format.kind == MediaKind::Video
-                && let Some(v) = env.reader.probe(format, &path)?
-            {
+            let video = if format.kind == MediaKind::Video {
+                env.reader.probe(format, &path)?
+            } else {
+                None
+            };
+            if let Some(v) = &video {
                 facts = (v.width, v.height, Some(v.duration_ms));
             }
-            Ok(facts)
+            Ok((facts, metadata::read(&m, video.as_ref())))
         });
         match read {
-            Ok((width, height, duration_ms)) => Read {
+            Ok(((width, height, duration_ms), meta)) => Read {
                 facts: Facts {
                     size: sample.size,
                     mtime_ms,
@@ -751,11 +754,11 @@ impl Work<'_, '_> {
                     width,
                     height,
                     duration_ms,
-                    captured_at: None,
-                    gps_lat: None,
-                    gps_lon: None,
-                    camera: None,
-                    exif: None,
+                    captured_at: meta.captured_at,
+                    gps_lat: meta.gps.map(|g| g.0),
+                    gps_lon: meta.gps.map(|g| g.1),
+                    camera: meta.camera,
+                    exif: meta.exif,
                     analysis: None,
                     scan_version: env.scan_version,
                     scan_error: None,

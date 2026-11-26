@@ -79,24 +79,38 @@ struct ExifJson {
 pub fn read(meta: &Metadata, video: Option<&VideoInfo>) -> MetaFacts {
     let exif = meta.exif.as_ref();
     let json = ExifJson {
-        lens: exif.and_then(|e| lens(e.text(Dir::Exif, tag::LENS_MAKE), e.text(Dir::Exif, tag::LENS_MODEL))),
+        lens: exif.and_then(|e| {
+            lens(
+                e.text(Dir::Exif, tag::LENS_MAKE),
+                e.text(Dir::Exif, tag::LENS_MODEL),
+            )
+        }),
         focal_length: exif.and_then(|e| positive(e.number(Dir::Exif, tag::FOCAL_LENGTH))),
         focal_length_35: exif.and_then(|e| positive(e.number(Dir::Exif, tag::FOCAL_LENGTH_35))),
         aperture: exif.and_then(|e| positive(e.number(Dir::Exif, tag::F_NUMBER))),
         exposure_time: exif.and_then(|e| positive(e.number(Dir::Exif, tag::EXPOSURE_TIME))),
-        iso: exif.and_then(|e| e.int(Dir::Exif, tag::ISO)).filter(|&n| n > 0),
+        iso: exif
+            .and_then(|e| e.int(Dir::Exif, tag::ISO))
+            .filter(|&n| n > 0),
         exposure_bias: exif
             .and_then(|e| e.number(Dir::Exif, tag::EXPOSURE_BIAS))
             .filter(|n| n.is_finite()),
-        flash: exif.and_then(|e| e.int(Dir::Exif, tag::FLASH)).map(|f| f & 1 == 1),
-        video_codec: video.and_then(|v| v.video_codec.clone()).filter(|s| !s.is_empty()),
-        audio_codec: video.and_then(|v| v.audio_codec.clone()).filter(|s| !s.is_empty()),
+        flash: exif
+            .and_then(|e| e.int(Dir::Exif, tag::FLASH))
+            .map(|f| f & 1 == 1),
+        video_codec: video
+            .and_then(|v| v.video_codec.clone())
+            .filter(|s| !s.is_empty()),
+        audio_codec: video
+            .and_then(|v| v.audio_codec.clone())
+            .filter(|s| !s.is_empty()),
         frames: meta.frames.filter(|&n| n > 1),
     };
     MetaFacts {
         captured_at: exif.and_then(captured_at),
         gps: exif.and_then(gps_of),
-        camera: exif.and_then(|e| camera(e.text(Dir::Main, tag::MAKE), e.text(Dir::Main, tag::MODEL))),
+        camera: exif
+            .and_then(|e| camera(e.text(Dir::Main, tag::MAKE), e.text(Dir::Main, tag::MODEL))),
         exif: exif_json(&json),
     }
 }
@@ -128,35 +142,101 @@ fn captured_at(exif: &Exif) -> Option<String> {
 /// not 0000 and the numbers are a real date and time. What follows
 /// (sub-seconds, an offset) is ignored.
 pub fn parse_date(value: &str) -> Option<String> {
-    let _ = value;
-    None
+    let b = value.as_bytes();
+    if b.len() < 19 {
+        return None;
+    }
+    let num = |from: usize, len: usize| -> Option<u32> {
+        let digits = &b[from..from + len];
+        digits.iter().all(u8::is_ascii_digit).then(|| {
+            digits
+                .iter()
+                .fold(0u32, |n, d| n * 10 + u32::from(d - b'0'))
+        })
+    };
+    let date_sep = |c: u8| c == b':' || c == b'-';
+    if !(date_sep(b[4]) && date_sep(b[7]) && (b[10] == b' ' || b[10] == b'T'))
+        || b[13] != b':'
+        || b[16] != b':'
+    {
+        return None;
+    }
+    let year = num(0, 4)?;
+    let (month, day) = (num(5, 2)?, num(8, 2)?);
+    let (hour, minute, second) = (num(11, 2)?, num(14, 2)?, num(17, 2)?);
+    if year == 0 {
+        return None;
+    }
+    let at: NaiveDateTime = NaiveDate::from_ymd_opt(i32::try_from(year).ok()?, month, day)?
+        .and_hms_opt(hour, minute, second)?;
+    Some(at.format("%Y-%m-%dT%H:%M:%S").to_string())
 }
 
 /// The `camera` rule: Make and Model, trimmed.
 pub fn camera(make: Option<&str>, model: Option<&str>) -> Option<String> {
-    let _ = (make, model);
-    None
+    joined(make, model)
+}
+
+/// A make and a model, trimmed: the model alone when it already starts
+/// with the make (ignoring case), else both, else whichever is not empty.
+fn joined(make: Option<&str>, model: Option<&str>) -> Option<String> {
+    let make = make.map(str::trim).filter(|s| !s.is_empty());
+    let model = model.map(str::trim).filter(|s| !s.is_empty());
+    match (make, model) {
+        (None, None) => None,
+        (None, Some(m)) | (Some(m), None) => Some(m.to_owned()),
+        (Some(make), Some(model)) => {
+            if model.to_lowercase().starts_with(&make.to_lowercase()) {
+                Some(model.to_owned())
+            } else {
+                Some(format!("{make} {model}"))
+            }
+        }
+    }
 }
 
 /// The `lens` rule: LensModel, prefixed with LensMake and a space unless
 /// the model already starts with the make.
 pub fn lens(make: Option<&str>, model: Option<&str>) -> Option<String> {
-    let _ = (make, model);
-    None
+    let model = model.map(str::trim).filter(|s| !s.is_empty())?;
+    joined(make, Some(model))
 }
 
 /// A latitude and longitude kept only when both are finite, in range, and
 /// not both exactly 0.
 pub fn gps(lat: Option<f64>, lon: Option<f64>) -> Option<(f64, f64)> {
-    let _ = (lat, lon);
-    None
+    let (lat, lon) = (lat?, lon?);
+    let ok = lat.is_finite()
+        && lon.is_finite()
+        && (-90.0..=90.0).contains(&lat)
+        && (-180.0..=180.0).contains(&lon)
+        && !(lat == 0.0 && lon == 0.0);
+    ok.then_some((lat, lon))
 }
 
 /// GPSLatitude and GPSLongitude (degrees, minutes, seconds) with their
 /// reference tags.
 fn gps_of(exif: &Exif) -> Option<(f64, f64)> {
-    let _ = exif;
-    None
+    let coordinate = |value: u16, reference: u16, negative: char| -> Option<f64> {
+        // Degrees, minutes, seconds; cameras sometimes write fewer parts.
+        let parts = exif.get(Dir::Gps, value)?.numbers();
+        if parts.is_empty() || parts.len() > 3 {
+            return None;
+        }
+        let mut degrees = 0.0;
+        for (part, scale) in parts.iter().zip([1.0, 60.0, 3600.0]) {
+            degrees += (*part)? / scale;
+        }
+        let sign = match exif.text(Dir::Gps, reference) {
+            Some(r) if r.to_ascii_uppercase().starts_with(negative) => -1.0,
+            _ => 1.0,
+        };
+        Some(sign * degrees)
+    };
+    gps(
+        coordinate(tag::GPS_LAT, tag::GPS_LAT_REF, 'S'),
+        coordinate(tag::GPS_LON, tag::GPS_LON_REF, 'W'),
+    )
 }
 
 /// A video's `captured_at` (docs/03, "Video"): a creation date written with
@@ -169,12 +249,15 @@ pub fn video_captured_at<Tz: TimeZone>(
     utc_seconds: Option<i64>,
     zone: &Tz,
 ) -> Option<String> {
-    let _ = (local, utc_seconds, zone);
-    None
+    if let Some(wall) = local.and_then(parse_date) {
+        return Some(wall);
+    }
+    /// 1904-01-01 00:00:00 UTC, the QuickTime epoch, in Unix seconds.
+    const EPOCH_1904: i64 = -2_082_844_800;
+    let secs = utc_seconds.filter(|&s| s != 0 && s != EPOCH_1904)?;
+    let at = zone.timestamp_opt(secs, 0).single()?;
+    Some(at.naive_local().format("%Y-%m-%dT%H:%M:%S").to_string())
 }
-
-#[allow(dead_code)]
-fn unused(_: NaiveDate, _: NaiveDateTime) {}
 
 #[cfg(test)]
 mod tests {
@@ -213,7 +296,10 @@ mod tests {
         assert_eq!(date("25:07:14 09:12:00"), None);
         assert_eq!(date("    :  :     :  :  "), None);
         assert_eq!(date(""), None);
-        assert_eq!(date("2024:02:29 23:59:59"), Some("2024-02-29T23:59:59".into()));
+        assert_eq!(
+            date("2024:02:29 23:59:59"),
+            Some("2024-02-29T23:59:59".into())
+        );
         assert_eq!(date("２025:07:14 09:12:00"), None, "non-ASCII digits");
     }
 
@@ -241,9 +327,18 @@ mod tests {
         let b = "2022:02:02 02:02:02";
         let c = "2023:03:03 03:03:03";
         let at = |m: Metadata| read(&m, None).captured_at;
-        assert_eq!(at(dated(Some(a), Some(b), Some(c))), Some("2021-01-01T01:01:01".into()));
-        assert_eq!(at(dated(None, Some(b), Some(c))), Some("2022-02-02T02:02:02".into()));
-        assert_eq!(at(dated(None, None, Some(c))), Some("2023-03-03T03:03:03".into()));
+        assert_eq!(
+            at(dated(Some(a), Some(b), Some(c))),
+            Some("2021-01-01T01:01:01".into())
+        );
+        assert_eq!(
+            at(dated(None, Some(b), Some(c))),
+            Some("2022-02-02T02:02:02".into())
+        );
+        assert_eq!(
+            at(dated(None, None, Some(c))),
+            Some("2023-03-03T03:03:03".into())
+        );
         assert_eq!(
             at(dated(Some("0000:00:00 00:00:00"), Some("garbage"), Some(c))),
             Some("2023-03-03T03:03:03".into())
@@ -266,7 +361,10 @@ mod tests {
             camera(Some("NIKON CORPORATION"), Some("NIKON Z 6")),
             Some("NIKON CORPORATION NIKON Z 6".into())
         );
-        assert_eq!(camera(Some("SONY"), Some("sony a7")), Some("sony a7".into()));
+        assert_eq!(
+            camera(Some("SONY"), Some("sony a7")),
+            Some("sony a7".into())
+        );
         assert_eq!(
             camera(Some(" Owlbum "), Some(" Fixture One ")),
             Some("Owlbum Fixture One".into())
@@ -279,15 +377,21 @@ mod tests {
         assert_eq!(lens(Some("Canon"), None), None);
         assert_eq!(lens(Some("Canon"), Some("  ")), None);
         assert_eq!(lens(None, Some("24-70mm")), Some("24-70mm".into()));
-        assert_eq!(lens(Some("Sigma"), Some("24-70mm F2.8")), Some("Sigma 24-70mm F2.8".into()));
-        assert_eq!(lens(Some("sigma"), Some("SIGMA 24-70mm")), Some("SIGMA 24-70mm".into()));
+        assert_eq!(
+            lens(Some("Sigma"), Some("24-70mm F2.8")),
+            Some("Sigma 24-70mm F2.8".into())
+        );
+        assert_eq!(
+            lens(Some("sigma"), Some("SIGMA 24-70mm")),
+            Some("SIGMA 24-70mm".into())
+        );
         assert_eq!(lens(Some(" "), Some(" 50mm ")), Some("50mm".into()));
     }
 
     fn json(m: &Metadata, v: Option<&VideoInfo>) -> serde_json::Value {
-        read(m, v)
-            .exif
-            .map_or(serde_json::Value::Null, |s| serde_json::from_str(&s).unwrap())
+        read(m, v).exif.map_or(serde_json::Value::Null, |s| {
+            serde_json::from_str(&s).unwrap()
+        })
     }
 
     /// Metadata whose Exif IFD holds `tags`.
@@ -416,17 +520,31 @@ mod tests {
 
     fn near(got: Option<(f64, f64)>, want: (f64, f64)) {
         let (a, b) = got.unwrap_or_else(|| panic!("no place, want {want:?}"));
-        assert!((a - want.0).abs() < 1e-9 && (b - want.1).abs() < 1e-9, "{a}, {b}");
+        assert!(
+            (a - want.0).abs() < 1e-9 && (b - want.1).abs() < 1e-9,
+            "{a}, {b}"
+        );
     }
 
     #[test]
     fn gps_signs_and_checks() {
-        near(located(dms(49, 30, 0), "N", dms(123, 15, 0), "W"), (49.5, -123.25));
-        near(located(dms(33, 52, 0), "S", dms(151, 12, 36_00), "E"), (-(33.0 + 52.0 / 60.0), 151.21));
+        near(
+            located(dms(49, 30, 0), "N", dms(123, 15, 0), "W"),
+            (49.5, -123.25),
+        );
+        near(
+            located(dms(33, 52, 0), "S", dms(151, 12, 36_00), "E"),
+            (-(33.0 + 52.0 / 60.0), 151.21),
+        );
         // 0, 0 means no fix; a zero denominator is nonsense.
         assert_eq!(located(dms(0, 0, 0), "N", dms(0, 0, 0), "E"), None);
         assert_eq!(
-            located(Val::Rational(vec![[1, 0], [0, 1], [0, 1]]), "N", dms(1, 0, 0), "E"),
+            located(
+                Val::Rational(vec![[1, 0], [0, 1], [0, 1]]),
+                "N",
+                dms(1, 0, 0),
+                "E"
+            ),
             None
         );
         // Out of range.
@@ -474,7 +592,11 @@ mod tests {
         let pacific = FixedOffset::west_opt(7 * 3600).unwrap();
         // Its own local time wins, offset dropped.
         assert_eq!(
-            video_captured_at(Some("2025-07-14T09:12:00+0200"), Some(1_752_480_000), &pacific),
+            video_captured_at(
+                Some("2025-07-14T09:12:00+0200"),
+                Some(1_752_480_000),
+                &pacific
+            ),
             Some("2025-07-14T09:12:00".into())
         );
         // Otherwise UTC shown in the computer's zone: 2025-07-14 08:00 UTC.
@@ -483,12 +605,19 @@ mod tests {
             Some("2025-07-14T01:00:00".into())
         );
         assert_eq!(
-            video_captured_at(Some("nonsense"), Some(1_752_480_000), &FixedOffset::east_opt(0).unwrap()),
+            video_captured_at(
+                Some("nonsense"),
+                Some(1_752_480_000),
+                &FixedOffset::east_opt(0).unwrap()
+            ),
             Some("2025-07-14T08:00:00".into())
         );
         // Zero and the 1904 epoch mean none.
         assert_eq!(video_captured_at(None, Some(0), &pacific), None);
-        assert_eq!(video_captured_at(None, Some(-2_082_844_800), &pacific), None);
+        assert_eq!(
+            video_captured_at(None, Some(-2_082_844_800), &pacific),
+            None
+        );
         assert_eq!(video_captured_at(None, None, &pacific), None);
     }
 }

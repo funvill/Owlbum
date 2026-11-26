@@ -8,8 +8,7 @@
 //! sRGB, flattened on white, at most 512 px) and, when the source has
 //! alpha, its alpha plane at the same size ([`super::pixels::Buffers`]).
 
-use image::imageops::{self, FilterType};
-use image::{GrayImage, RgbImage};
+use image::{GrayImage, ImageBuffer, Pixel, RgbImage};
 use serde::Serialize;
 
 /// The analysis image fits inside this many pixels a side.
@@ -49,19 +48,191 @@ impl Analysis {
 /// Analyses the small thumbnail's pixels (`small`) and, when the source has
 /// alpha, its alpha plane (`alpha`, the same size).
 pub fn analyse(small: &RgbImage, alpha: Option<&GrayImage>) -> Analysis {
-    let _ = (small, alpha, imageops::flip_horizontal::<RgbImage>, FilterType::Lanczos3);
+    let (w, h) = super::pixels::fit(small.width(), small.height(), SIDE);
+    let colour = resized(small, w, h);
+    let transparent = alpha.is_some_and(|a| transparent(&resized(a, w, h)));
+    let grey = grey_of(&colour);
+    let (w, h) = (w as usize, h as usize);
+    let n = (w * h) as f64;
+
+    let total: u64 = grey.iter().map(|&p| u64::from(p)).sum();
+    let shadows = grey.iter().filter(|&&p| p <= SHADOWS).count();
+    let highlights = grey.iter().filter(|&&p| p >= HIGHLIGHTS).count();
+    let (saliency_x, saliency_y) = saliency(&grey, w, h);
+
+    let planes: Vec<Vec<u8>> = (0..3)
+        .map(|c| colour.pixels().map(|p| p.0[c]).collect())
+        .collect();
+    let avg_colour = [0, 1, 2].map(|c| {
+        let sum: u64 = planes[c].iter().map(|&v| u64::from(v)).sum();
+        level(sum as f64 / n)
+    });
+    let cells: Vec<Vec<f64>> = planes.iter().map(|p| box_resize(p, w, h, 3, 3)).collect();
+    let colour_grid = (0..9)
+        .flat_map(|cell| cells.iter().map(move |plane| level(plane[cell])))
+        .collect();
+
     Analysis {
-        sharpness: 0.0,
-        mean_luma: 0.0,
-        clipped_shadows: 0.0,
-        clipped_highlights: 0.0,
-        saliency_x: 0.0,
-        saliency_y: 0.0,
-        dhash: String::new(),
-        avg_colour: [0; 3],
-        colour_grid: Vec::new(),
-        transparent: false,
+        sharpness: round(sharpness(&grey, w, h), 2),
+        mean_luma: round(total as f64 / 255.0 / n, 3),
+        clipped_shadows: round(shadows as f64 / n, 3),
+        clipped_highlights: round(highlights as f64 / n, 3),
+        saliency_x: round(saliency_x, 3),
+        saliency_y: round(saliency_y, 3),
+        dhash: dhash(&grey, w, h),
+        avg_colour,
+        colour_grid,
+        transparent,
     }
+}
+
+/// `img` resized to `w × h` with Lanczos3; unchanged when it is that size.
+fn resized<P>(img: &ImageBuffer<P, Vec<u8>>, w: u32, h: u32) -> ImageBuffer<P, Vec<u8>>
+where
+    P: Pixel<Subpixel = u8> + 'static,
+{
+    if img.dimensions() == (w, h) {
+        img.clone()
+    } else {
+        super::pixels::lanczos(img, w, h)
+    }
+}
+
+/// `round(0.299·R + 0.587·G + 0.114·B)`, worked in integers so no
+/// floating-point error can move a level.
+fn grey_of(img: &RgbImage) -> Vec<u8> {
+    img.pixels()
+        .map(|p| {
+            let [r, g, b] = p.0.map(u32::from);
+            ((299 * r + 587 * g + 114 * b + 500) / 1000) as u8
+        })
+        .collect()
+}
+
+/// `x` rounded to `decimals`, with no negative zero.
+fn round(x: f64, decimals: i32) -> f64 {
+    let scale = 10f64.powi(decimals);
+    let r = (x * scale).round() / scale;
+    if r == 0.0 { 0.0 } else { r }
+}
+
+/// A mean as a 0..255 level, rounded half up.
+fn level(x: f64) -> u8 {
+    x.round().clamp(0.0, 255.0) as u8
+}
+
+/// The variance of the 4-neighbour Laplacian over the interior pixels,
+/// summed in integers.
+fn sharpness(grey: &[u8], w: usize, h: usize) -> f64 {
+    if w < 3 || h < 3 {
+        return 0.0;
+    }
+    let p = |x: usize, y: usize| i64::from(grey[y * w + x]);
+    let (mut sum, mut squares) = (0i128, 0i128);
+    for y in 1..h - 1 {
+        for x in 1..w - 1 {
+            let v = 4 * p(x, y) - p(x - 1, y) - p(x + 1, y) - p(x, y - 1) - p(x, y + 1);
+            sum += i128::from(v);
+            squares += i128::from(v * v);
+        }
+    }
+    let n = ((w - 2) * (h - 2)) as i128;
+    // mean(v²) − mean(v)² = (n·Σv² − (Σv)²) / n²
+    (n * squares - sum * sum) as f64 / (n * n) as f64
+}
+
+/// The gradient-weighted centre of the picture, pulled toward the middle by
+/// a Gaussian of σ = 0.3. (0.5, 0.5) when nothing has a gradient.
+fn saliency(grey: &[u8], w: usize, h: usize) -> (f64, f64) {
+    if w < 3 || h < 3 {
+        return (0.5, 0.5);
+    }
+    let p = |x: usize, y: usize| i64::from(grey[y * w + x]);
+    let (wf, hf) = (w as f64, h as f64);
+    let two_sigma_sq = 2.0 * SALIENCY_SIGMA * SALIENCY_SIGMA;
+    let (mut sum, mut sum_x, mut sum_y) = (0.0, 0.0, 0.0);
+    for y in 1..h - 1 {
+        for x in 1..w - 1 {
+            let g = (p(x + 1, y) - p(x - 1, y)).abs() + (p(x, y + 1) - p(x, y - 1)).abs();
+            if g == 0 {
+                continue;
+            }
+            let (fx, fy) = (x as f64 / wf, y as f64 / hf);
+            let (nx, ny) = (fx - 0.5, fy - 0.5);
+            let e = (g * g) as f64 * (-(nx * nx + ny * ny) / two_sigma_sq).exp();
+            sum += e;
+            sum_x += e * fx;
+            sum_y += e * fy;
+        }
+    }
+    if sum == 0.0 {
+        (0.5, 0.5)
+    } else {
+        (sum_x / sum, sum_y / sum)
+    }
+}
+
+/// The 9 × 8 difference hash: one bit per neighbour pair, 1 when the right
+/// one is brighter; rows top to bottom, most significant bit first. The
+/// box-filtered means are compared unrounded.
+fn dhash(grey: &[u8], w: usize, h: usize) -> String {
+    let small = box_resize(grey, w, h, 9, 8);
+    let mut bits = 0u64;
+    for y in 0..8 {
+        for x in 0..8 {
+            bits <<= 1;
+            if small[y * 9 + x] < small[y * 9 + x + 1] {
+                bits |= 1;
+            }
+        }
+    }
+    format!("{bits:016x}")
+}
+
+/// More than 0.5% of the pixels have alpha below 250.
+fn transparent(alpha: &GrayImage) -> bool {
+    let n = alpha.pixels().filter(|p| p.0[0] < ALPHA_OPAQUE).count() as u64;
+    n * 200 > u64::from(alpha.width()) * u64::from(alpha.height())
+}
+
+/// For each output index along one side, the source indices it covers and
+/// by how much (in source pixels), for an area average from `src` pixels to
+/// `dst`. Enlarging works too: an output inside one source pixel takes it.
+fn box_weights(src: usize, dst: usize) -> Vec<Vec<(usize, f64)>> {
+    let scale = src as f64 / dst as f64;
+    (0..dst)
+        .map(|o| {
+            let (lo, hi) = (o as f64 * scale, (o + 1) as f64 * scale);
+            let first = lo.floor() as usize;
+            let last = (hi.ceil() as usize).min(src);
+            (first..last)
+                .filter_map(|i| {
+                    let cover = hi.min((i + 1) as f64) - lo.max(i as f64);
+                    (cover > 0.0).then_some((i, cover))
+                })
+                .collect()
+        })
+        .collect()
+}
+
+/// One `w × h` plane resized to `dw × dh` by area average (a box filter):
+/// each output is the mean of the source area it covers, unrounded.
+fn box_resize(plane: &[u8], w: usize, h: usize, dw: usize, dh: usize) -> Vec<f64> {
+    let (wx, wy) = (box_weights(w, dw), box_weights(h, dh));
+    let mut out = Vec::with_capacity(dw * dh);
+    for row in &wy {
+        for col in &wx {
+            let (mut sum, mut area) = (0.0, 0.0);
+            for &(y, fy) in row {
+                for &(x, fx) in col {
+                    sum += f64::from(plane[y * w + x]) * fx * fy;
+                    area += fx * fy;
+                }
+            }
+            out.push(if area > 0.0 { sum / area } else { 0.0 });
+        }
+    }
+    out
 }
 
 #[cfg(test)]
@@ -97,16 +268,25 @@ mod tests {
     #[test]
     fn black_and_white_clip() {
         let a = analyse(&flat(40, 30, 0), None);
-        assert_eq!((a.mean_luma, a.clipped_shadows, a.clipped_highlights), (0.0, 1.0, 0.0));
+        assert_eq!(
+            (a.mean_luma, a.clipped_shadows, a.clipped_highlights),
+            (0.0, 1.0, 0.0)
+        );
         let a = analyse(&flat(40, 30, 255), None);
-        assert_eq!((a.mean_luma, a.clipped_shadows, a.clipped_highlights), (1.0, 0.0, 1.0));
+        assert_eq!(
+            (a.mean_luma, a.clipped_shadows, a.clipped_highlights),
+            (1.0, 0.0, 1.0)
+        );
         // The thresholds are inclusive.
         assert_eq!(analyse(&flat(4, 4, 8), None).clipped_shadows, 1.0);
         assert_eq!(analyse(&flat(4, 4, 9), None).clipped_shadows, 0.0);
         assert_eq!(analyse(&flat(4, 4, 247), None).clipped_highlights, 1.0);
         assert_eq!(analyse(&flat(4, 4, 246), None).clipped_highlights, 0.0);
         // A quarter black: 0.25.
-        let a = analyse(&grey_image(8, 8, |x, y| if x < 4 && y < 4 { 0 } else { 128 }), None);
+        let a = analyse(
+            &grey_image(8, 8, |x, y| if x < 4 && y < 4 { 0 } else { 128 }),
+            None,
+        );
         assert_eq!(a.clipped_shadows, 0.25);
     }
 
@@ -129,7 +309,10 @@ mod tests {
         let img = grey_image(4, 3, |x, y| if (x, y) == (1, 1) { 10 } else { 0 });
         assert_eq!(analyse(&img, None).sharpness, 625.0);
         // No interior pixels: 0.
-        assert_eq!(analyse(&grey_image(2, 5, |x, _| x as u8 * 200), None).sharpness, 0.0);
+        assert_eq!(
+            analyse(&grey_image(2, 5, |x, _| x as u8 * 200), None).sharpness,
+            0.0
+        );
         assert_eq!(analyse(&grey_image(1, 1, |_, _| 7), None).sharpness, 0.0);
         // A sharp edge measures higher than the same edge blurred.
         let sharp = grey_image(64, 64, |x, _| if x < 32 { 0 } else { 255 });
@@ -189,7 +372,13 @@ mod tests {
         assert_eq!(a.avg_colour, [80, 175, 28]);
         // 6 × 6: each cell averages a 2 × 2 block; 0 and 255 give 127.5,
         // which rounds to 128.
-        let img = RgbImage::from_fn(6, 6, |x, _| Rgb(if x % 2 == 0 { [0, 0, 0] } else { [255, 255, 255] }));
+        let img = RgbImage::from_fn(6, 6, |x, _| {
+            Rgb(if x % 2 == 0 {
+                [0, 0, 0]
+            } else {
+                [255, 255, 255]
+            })
+        });
         let a = analyse(&img, None);
         assert_eq!(a.colour_grid, vec![128; 27]);
         assert_eq!(a.avg_colour, [128, 128, 128]);

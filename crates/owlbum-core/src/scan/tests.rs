@@ -432,7 +432,12 @@ fn a_first_scan_gives_every_supported_trip_file_a_row() {
                     f.rel_path
                 );
                 let a: Value = serde_json::from_str(p.analysis.as_deref().unwrap()).unwrap();
-                assert_eq!(a["dhash"].as_str().map(str::len), Some(16), "{}", f.rel_path);
+                assert_eq!(
+                    a["dhash"].as_str().map(str::len),
+                    Some(16),
+                    "{}",
+                    f.rel_path
+                );
             }
         }
     }
@@ -940,7 +945,7 @@ fn only_a_changed_file_is_read_again_and_keeps_its_id_and_typed_info() {
     assert_eq!(after.star, 1, "typed info is kept");
     assert_ne!(after.file_key, a.file_key);
     assert_ne!(after.thumb_key, a.thumb_key);
-    assert_eq!(after.analysis.as_deref(), Some("{}"));
+    assert!(analysed(after.analysis.as_deref()));
     assert_eq!(summary.changed, 1);
     assert_eq!(summary.rekeyed, [a.id]);
     let left: i64 = fx
@@ -1022,7 +1027,7 @@ fn a_waiting_row_goes_to_the_pixels_pass_only() {
     let summary = fx.scan();
     assert_eq!(fx.read("metadata"), Vec::<String>::new(), "no facts pass");
     assert_eq!(fx.read("preview"), ["a.png"]);
-    assert_eq!(fx.photo("a.png").unwrap().analysis.as_deref(), Some("{}"));
+    assert!(analysed(fx.photo("a.png").unwrap().analysis.as_deref()));
     assert_eq!(summary.done, 1);
 }
 
@@ -1262,7 +1267,7 @@ fn an_io_error_is_retried_by_every_scan() {
     assert_eq!(fx.read("sample"), ["a.png"]);
     let p = fx.photo("a.png").unwrap();
     assert_eq!(p.scan_error, None);
-    assert_eq!(p.analysis.as_deref(), Some("{}"));
+    assert!(analysed(p.analysis.as_deref()));
 }
 
 #[test]
@@ -1454,7 +1459,7 @@ fn a_view_only_album_scans_into_memory_and_writes_nothing_in_the_album() {
     let max_db = db_rows.iter().map(|p| p.id).max().unwrap();
     let c = overlay.rows().find(|r| r.rel_path == "c.png").unwrap();
     assert!(c.id > max_db, "a new file gets an id above the database's");
-    assert_eq!(c.facts.analysis.as_deref(), Some("{}"));
+    assert!(analysed(c.facts.analysis.as_deref()));
     let a = db_rows.iter().find(|p| p.rel_path == "a.png").unwrap();
     assert_eq!(overlay.get(a.id).unwrap().rel_path, "moved/a.png");
     let b = db_rows.iter().find(|p| p.rel_path == "b.png").unwrap();
@@ -1773,8 +1778,17 @@ fn the_album_index_follows_a_view_only_scan_in_memory() {
 
 // ---- Metadata and analysis (#10) ----
 
+/// `captured_at`, `gps_lat`, `gps_lon`, `camera` and `exif` of one row.
+type MetaRow = (
+    Option<String>,
+    Option<f64>,
+    Option<f64>,
+    Option<String>,
+    Option<String>,
+);
+
 /// The metadata facts of one row.
-fn meta_facts(fx: &Fx, rel: &str) -> (Option<String>, Option<f64>, Option<f64>, Option<String>, Option<String>) {
+fn meta_facts(fx: &Fx, rel: &str) -> MetaRow {
     let rel = rel.to_owned();
     fx.album()
         .db()
@@ -1858,7 +1872,9 @@ fn animated_pictures_store_their_frame_count() {
 fn the_pixels_pass_stores_the_analysis() {
     let fx = Fx::trip();
     fx.scan();
-    let blurred = analysis_of(&fx, "day2/blurred.jpg")["sharpness"].as_f64().unwrap();
+    let blurred = analysis_of(&fx, "day2/blurred.jpg")["sharpness"]
+        .as_f64()
+        .unwrap();
     for f in fx.manifest.files.iter().filter(|f| {
         // Photos painted by the same scene generator as the blurred one.
         matches!(f.kind, Kind::Burst | Kind::Portrait | Kind::Square)
@@ -1867,7 +1883,10 @@ fn the_pixels_pass_stores_the_analysis() {
         assert!(blurred < s, "{} {s} vs blurred {blurred}", f.rel_path);
     }
     // An exact copy analyses the same.
-    assert_eq!(analysis_of(&fx, "copies/lake.jpg"), analysis_of(&fx, "day1/lake.jpg"));
+    assert_eq!(
+        analysis_of(&fx, "copies/lake.jpg"),
+        analysis_of(&fx, "day1/lake.jpg")
+    );
     // The transparent PNG of the extras is transparent; an opaque one is not.
     let fx = Fx::extras();
     fx.scan();
@@ -1885,4 +1904,11 @@ fn the_same_file_gives_byte_identical_analysis_twice() {
     fx.sql("UPDATE photos SET analysis = NULL WHERE rel_path = 'day1/lake.jpg'");
     fx.scan();
     assert_eq!(fx.photo("day1/lake.jpg").unwrap().analysis, first);
+}
+
+/// True when `analysis` holds the measures (not NULL and not `{}`).
+fn analysed(analysis: Option<&str>) -> bool {
+    analysis
+        .and_then(|a| serde_json::from_str::<Value>(a).ok())
+        .is_some_and(|v| v.get("dhash").is_some())
 }

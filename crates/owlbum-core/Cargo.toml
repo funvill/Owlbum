@@ -11,6 +11,7 @@ publish = false
 
 [dependencies]
 chrono.workspace = true
+fast_image_resize.workspace = true
 image = { workspace = true, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
 jpeg-encoder.workspace = true
 jxl-oxide.workspace = true

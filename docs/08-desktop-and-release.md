@@ -18,7 +18,7 @@ Behaviour of the grid, viewer, filters, edits and tagging belongs to parts 4 to 
 
 **The version has one source.** It is `version` under `[workspace.package]` in the root `Cargo.toml`. Both crates inherit it. `src-tauri/tauri.conf.json` has no `version` key, so Tauri reads it from the crate. `ui/package.json` is private and its version is never shown; the page learns the version from `app_startup`.
 
-**A development build** is one compiled with debug assertions. It uses the identifier `com.funvill.owlbum.dev`, the name `Owlbum Dev` and the `Owlbum Dev` / `owlbum-dev` app data folder (see [Data](02-data.md)), so it runs beside an installed copy and never touches its data. These come from `src-tauri/tauri.dev.conf.json`, merged by the `dev` script.
+**A development build** is one compiled with debug assertions. It uses the identifier `com.funvill.owlbum.dev`, the name `Owlbum Dev` and the `Owlbum Dev` / `owlbum-dev` app data folder (see [Data](02-data.md)), so it runs beside an installed copy and never touches its data. These come from `src-tauri/tauri.dev.conf.json`, merged by the page's `app:dev` script (`npm --prefix ui run app:dev`).
 
 ## Starting
 
@@ -879,19 +879,26 @@ Tests run locally, on Windows and on Linux under WSL. There are no CI test jobs 
 
 | What | Command |
 |---|---|
-| Everything that must pass | `scripts/check.ps1` (Windows) or `scripts/check.sh` (WSL) |
+| Everything that must pass | `./scripts/check.sh` (Git Bash on Windows, bash on Linux) |
 | Rust format | `cargo fmt --all --check` |
 | Rust lint | `cargo clippy --workspace --all-targets -- -D warnings` |
+| TypeScript bindings are current | `cargo test -p owlbum --test bindings` |
 | Rust tests, all crates | `cargo test --workspace` |
-| Core tests only | `cargo test -p owlbum-core` |
-| Page lint | `npm --prefix ui run lint` (ESLint) |
 | Page types | `npm --prefix ui run typecheck` (`tsc --noEmit`) |
+| Page lint | `npm --prefix ui run lint` (ESLint) |
 | Page tests | `npm --prefix ui test` (Vitest, one run) |
+| Page build | `npm --prefix ui run build` |
+| Core tests only | `cargo test -p owlbum-core` |
+| Rewrite the TypeScript bindings | `./scripts/bindings.sh` |
 | Smoke test | `npm --prefix e2e test` after `npm --prefix ui run tauri build -- --debug` |
 
-`scripts/check.*` runs the first seven rows after it, in that order, and stops at the first failure. The two scripts are kept the same line for line.
+`scripts/check.sh` installs the page's packages when `ui/node_modules` is missing or older than `ui/package-lock.json`, then runs the eight rows after it, in that order, and stops at the first failure. There is one script for both systems; on Windows it runs under Git Bash. It points `CARGO_TARGET_DIR` at the main checkout's `target/` when the variable is not set, so every git worktree of a clone shares one build directory.
 
-**WSL.** Use a second clone inside the Linux file system (for example `~/src/Owlbum`), not the Windows folder through `/mnt/c`. A shared folder is slow, and `node_modules` and `target` hold platform-specific files that must not be mixed. Install Tauri's Linux build packages once. Layers 1 to 4 need no display. The smoke test needs `webkit2gtk-driver` and either WSLg or `xvfb-run`.
+**Bindings.** The page's types for commands, events and their payloads are generated from Rust into `ui/src/api/bindings/` (with ts-rs) and committed. The command registry in `src-tauri/src/commands/` is the one source: `command!` declares a command, each area module lists its commands and events, and `src-tauri/src/bindings.rs` writes one file per type, one per area and an index. The bindings check fails when the committed files differ from what Rust would write; `scripts/bindings.sh` rewrites them. On a merge conflict inside `ui/src/api/bindings/`, take either side and run the script.
+
+**Windows test binaries.** `src-tauri/build.rs` links `src-tauri/windows-app-manifest.xml` into every binary of the shell crate, tests included, instead of letting Tauri add it to the program only. Without it, shell test binaries fail to start (`STATUS_ENTRYPOINT_NOT_FOUND`).
+
+**WSL.** Use a second clone inside the Linux file system (for example `~/owlbum`), not the Windows folder through `/mnt/c`. A shared folder is slow, and `node_modules` and `target` hold platform-specific files that must not be mixed. Install Tauri's Linux build packages once. Layers 1 to 4 need no display. The smoke test needs `webkit2gtk-driver` and either WSLg or `xvfb-run`.
 
 ### Fixtures
 
@@ -910,7 +917,7 @@ An issue is done when all of these are true:
 
 1. **Tests were written first.** The first commit on the issue adds tests that fail for the right reason. The commits after make them pass. The issue's closing comment names the test files.
 2. The behaviour matches these documents. Where it could not, the document is changed in the same piece of work and the reason is a comment on the issue.
-3. `scripts/check.ps1` passes on Windows and `scripts/check.sh` passes in WSL. Both results are stated in the closing comment.
+3. `scripts/check.sh` passes on Windows (Git Bash) and in WSL. Both results are stated in the closing comment.
 4. Every new interface string is in the text module, and every new key is in the key table.
 5. Nothing new uses the network. If it must, [Architecture](01-architecture.md)'s network table and the About statement change with it.
 6. A feature that cannot be made reliable on Linux ships disabled there with an issue open, as the README allows.
@@ -920,7 +927,7 @@ An issue is done when all of these are true:
 
 Versions follow `major.minor.patch` and start at `0.1.0`. The version is not bumped on every commit. It is bumped when a release is made.
 
-1. Run `scripts/check.*` on Windows and in WSL. Run the smoke test on both.
+1. Run `scripts/check.sh` on Windows and in WSL. Run the smoke test on both.
 2. Set the new version in the root `Cargo.toml` and run `cargo check` so `Cargo.lock` follows.
 3. Add the version's entry to `src-tauri/whats-new.json`.
 4. Commit as `chore: version <version>`.

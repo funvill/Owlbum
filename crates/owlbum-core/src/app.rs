@@ -11,7 +11,9 @@ pub struct AppVersion {
 
 /// The program's version. Its one source is the workspace `Cargo.toml`.
 pub fn version() -> AppVersion {
-    todo!("issue #1: return the workspace version")
+    AppVersion {
+        version: env!("CARGO_PKG_VERSION").to_owned(),
+    }
 }
 
 #[cfg(test)]

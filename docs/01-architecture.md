@@ -32,20 +32,26 @@ There is one operating-system process plus the webview's own helper processes. L
 
 ```text
 Owlbum/
-  Cargo.toml              workspace
+  Cargo.toml              workspace; the one version number
+  rust-toolchain.toml     the pinned Rust version, so rustfmt and clippy agree everywhere
+  .cargo/config.toml      Cargo settings (build output in target/)
   crates/
-    owlbum-core/          all logic; testable without a window
+    owlbum-core/          all logic; testable without a window; one module per feature area
     owlbum-fixtures/      generates the synthetic test album (no personal photos in the repo)
   src-tauri/              the shell crate `owlbum`: Tauri builder, commands, protocol, plugins
+    src/commands/         one module per command prefix, and the registry that collects them
+    src/bindings.rs       writes the page's TypeScript types from the registry
     capabilities/         what the window is allowed to call
     whats-new.json        release notes bundled with the program
   ui/                     the React page (Vite, TypeScript, Vitest)
     src/api/              the only module that calls Tauri; everything else imports from here
-    src/api/fake/         the in-memory backend used by page tests
-    src/text/             every interface string shown by the page
+    src/api/bindings/     generated from Rust and committed: command, event and payload types
+    src/api/fake/         the in-memory backend used by page tests, one file per command prefix
+    src/features/         one folder per feature area, each with its own zustand store
+    src/text/             every interface string shown by the page, one file per area
     src/keys/keymap.json  the one table of keyboard shortcuts
   e2e/                    the thin WebdriverIO smoke test, run by hand before a release
-  scripts/                check scripts (Windows and Linux) and the notices generator
+  scripts/                check.sh (the gate, on Windows under Git Bash and on Linux), bindings.sh, and the notices generator
   site/                   the marketing page (static HTML), deployed to GitHub Pages by a workflow
   docs/                   these documents; docs/archive holds the old program's
   .github/workflows/      release.yml (installers on a tag), pages.yml (site)
@@ -110,6 +116,9 @@ A command is a request with a reply (`invoke`). Names are `snake_case`, grouped 
 | `album_unreachable` | The album folder cannot be reached (an unplugged drive). |
 | `not_a_folder`, `folder_unreadable` | The path given to `album_open` cannot be used. |
 | `setting_out_of_range` | `app_settings_set` was given a value outside the setting's range. |
+| `internal` | Something failed that the user cannot act on (an unexpected failure inside Owlbum or Tauri). The message says what was being done. |
+
+**One source for types.** Commands, events and every type they carry are declared once, in Rust. A command is written with the shell's `command!` macro in the module for its prefix (`src-tauri/src/commands/<prefix>.rs`) and listed in that module's `area!` call, which also lists the events the area sends; an event is a payload type in `owlbum-core` that implements `Event` (its `NAME` is the event name). The shell routes each `invoke` to the module that lists the command, so adding a command never edits a shared list. `scripts/bindings.sh` writes the TypeScript types to `ui/src/api/bindings/` with ts-rs; the page's `invoke` and `listen` and the fake backend are typed from them, and a test fails while they are stale. Arguments are passed by their Rust names in `snake_case`. 64-bit integers are TypeScript `number`s.
 
 **Photo identity.** The page refers to a photo by its integer `id` from the album database, never by a path. Rust resolves ids to paths. A command given an unknown id answers `photo_not_found`. Because the page cannot name a path, it cannot ask Rust to touch a file outside the open album. The only command that takes a path is `album_open`. Rust does send paths to the page for display (the album root, a photo's full path in the details panel); the page never sends one back.
 

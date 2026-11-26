@@ -19,10 +19,12 @@ use tauri::test::{MockRuntime, mock_builder};
 use tauri::{Listener, Manager};
 
 struct Fixture {
-    _tmp: tempfile::TempDir,
     fixture: owlbum_fixtures::Album,
-    app: tauri::App<MockRuntime>,
+    app: common::TestApp,
     window: tauri::WebviewWindow<MockRuntime>,
+    /// Last, so it is dropped last: fields drop in order, and on Windows
+    /// the folder cannot be deleted while a database in it is still open.
+    _tmp: tempfile::TempDir,
 }
 
 fn fixture() -> Fixture {

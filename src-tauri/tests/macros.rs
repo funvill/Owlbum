@@ -52,7 +52,7 @@ mod demo {
     }
 }
 
-fn demo_window() -> (tauri::App<MockRuntime>, tauri::WebviewWindow<MockRuntime>) {
+fn demo_window() -> (common::TestApp, tauri::WebviewWindow<MockRuntime>) {
     common::window(
         mock_builder().invoke_handler(owlbum_lib::commands::registry::invoke_handler(vec![
             demo::module(),

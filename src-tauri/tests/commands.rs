@@ -9,7 +9,7 @@ use owlbum_core::app::AppVersion;
 use owlbum_core::media::FormatInfo;
 use tauri::test::{MockRuntime, mock_builder};
 
-fn app_window() -> (tauri::App<MockRuntime>, tauri::WebviewWindow<MockRuntime>) {
+fn app_window() -> (common::TestApp, tauri::WebviewWindow<MockRuntime>) {
     common::window(owlbum_lib::setup(mock_builder()))
 }
 

@@ -143,7 +143,6 @@ struct Photo {
 
 /// An album on disk, open, with a scan environment that records.
 struct Fx {
-    _tmp: tempfile::TempDir,
     root: PathBuf,
     manifest: owlbum_fixtures::Album,
     album: Option<Album>,
@@ -153,6 +152,9 @@ struct Fx {
     env: ScanEnv,
     progress: Progress,
     cancel: Arc<AtomicBool>,
+    /// Last, so it is dropped last: fields drop in order, and on Windows
+    /// the folder cannot be deleted while a database in it is still open.
+    _tmp: tempfile::TempDir,
 }
 
 impl Fx {

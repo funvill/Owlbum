@@ -485,10 +485,12 @@ mod tests {
     const C: &str = "cccccccccccccccccccccccccccccccccccccccc";
 
     struct Fixture {
-        _tmp: tempfile::TempDir,
         data: AppData,
         now: Arc<AtomicI64>,
         cache: Cache,
+        /// Last, so it is dropped last: fields drop in order, and on Windows
+        /// the folder cannot be deleted while a database in it is still open.
+        _tmp: tempfile::TempDir,
     }
 
     fn fixture() -> Fixture {

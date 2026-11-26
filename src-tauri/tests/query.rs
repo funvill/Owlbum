@@ -13,7 +13,7 @@ use serde_json::{Value, json};
 use tauri::test::{MockRuntime, mock_builder};
 use tauri::{Listener, Manager};
 
-fn app_window() -> (tauri::App<MockRuntime>, tauri::WebviewWindow<MockRuntime>) {
+fn app_window() -> (common::TestApp, tauri::WebviewWindow<MockRuntime>) {
     common::window(owlbum_lib::setup(mock_builder()))
 }
 

@@ -107,12 +107,14 @@ fn make_album(root: &Path) {
 }
 
 struct Fx {
-    _tmp: tempfile::TempDir,
     root: PathBuf,
     data: AppData,
     thumbs: Thumbs,
     source: Arc<Counting>,
     scanner: Option<Scanner>,
+    /// Last, so it is dropped last: fields drop in order, and on Windows
+    /// the folder cannot be deleted while a database in it is still open.
+    _tmp: tempfile::TempDir,
 }
 
 impl Fx {

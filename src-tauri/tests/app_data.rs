@@ -10,10 +10,12 @@ use serde_json::json;
 use tauri::test::{MockRuntime, mock_builder};
 
 struct Fixture {
-    _tmp: tempfile::TempDir,
     data: AppData,
-    _app: tauri::App<MockRuntime>,
+    _app: common::TestApp,
     window: tauri::WebviewWindow<MockRuntime>,
+    /// Last, so it is dropped last: fields drop in order, and on Windows
+    /// the folder cannot be deleted while a database in it is still open.
+    _tmp: tempfile::TempDir,
 }
 
 fn fixture() -> Fixture {

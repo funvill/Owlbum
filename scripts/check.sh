@@ -29,7 +29,29 @@ step "TypeScript bindings are current"
 cargo test -p owlbum --test bindings
 
 step "Rust tests"
-cargo test --workspace
+# The tests run with a temporary folder of their own, which must be empty
+# when they finish: a test that leaves an album or data folder behind
+# (usually a TempDir dropped while a database inside it is still open, so
+# Windows refuses the delete and tempfile ignores the error) fails the gate
+# instead of quietly filling the drive. Only this run's folder is removed.
+cargo test --workspace --no-run
+test_tmp=$(mktemp -d)
+trap 'rm -rf "$test_tmp"' EXIT
+test_tmp_native=$test_tmp
+if command -v cygpath >/dev/null 2>&1; then
+  test_tmp_native=$(cygpath -w "$test_tmp")
+fi
+TMP=$test_tmp_native TEMP=$test_tmp_native TMPDIR=$test_tmp_native \
+  cargo test --workspace
+leftovers=$(ls -A "$test_tmp")
+if [ -n "$leftovers" ]; then
+  echo "The Rust tests left $(echo "$leftovers" | wc -l) item(s) in their temporary folder:" >&2
+  for item in $leftovers; do
+    echo "  $item: $(ls -A "$test_tmp/$item" 2>/dev/null | tr '\n' ' ')" >&2
+  done
+  exit 1
+fi
+echo "no temporary folders left behind"
 
 step "Page types"
 npm --prefix ui run typecheck

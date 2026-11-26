@@ -34,10 +34,11 @@ fn eventually(what: &str, mut done: impl FnMut() -> bool) {
 
 /// An album of `rels`, scanned, with a scanner and a watch on it.
 struct Watched {
-    fx: Fx,
     scanner: Arc<Scanner>,
     watch: Option<AlbumWatch>,
     db: Arc<Album>,
+    /// Last, so the album's folder is deleted after the album closes.
+    fx: Fx,
 }
 
 impl Watched {

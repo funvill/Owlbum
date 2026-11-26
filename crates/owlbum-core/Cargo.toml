@@ -10,6 +10,7 @@ authors.workspace = true
 publish = false
 
 [dependencies]
+chrono.workspace = true
 image = { workspace = true, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
 jxl-oxide.workspace = true
 rusqlite.workspace = true
@@ -20,7 +21,11 @@ ts-rs.workspace = true
 uuid.workspace = true
 
 [target.'cfg(windows)'.dependencies]
-windows-sys = { workspace = true, features = ["Win32_Storage_FileSystem"] }
+windows-sys = { workspace = true, features = [
+    "Win32_Foundation",
+    "Win32_Storage_FileSystem",
+    "Win32_System_Threading",
+] }
 
 [dev-dependencies]
 tempfile.workspace = true

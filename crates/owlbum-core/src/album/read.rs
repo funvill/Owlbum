@@ -30,6 +30,13 @@ impl Readers {
         }
     }
 
+    /// Reads through one connection held for the session: the in-memory
+    /// database of a folder that cannot be written. Reads take turns.
+    pub fn shared(conn: Connection) -> Self {
+        let _ = conn;
+        unimplemented!("#4")
+    }
+
     /// Runs `f` with a read-only connection. Any number of threads may read
     /// at once; a read waits (up to [`db::BUSY_TIMEOUT`]) only while the
     /// writer commits.
@@ -81,6 +88,30 @@ mod tests {
         assert_eq!(n, 0);
         let write = readers.read(|c| Ok(c.execute("INSERT INTO t VALUES (1)", [])));
         assert!(write.unwrap().is_err());
+    }
+
+    #[test]
+    fn a_shared_connection_serves_every_read() {
+        let conn = Connection::open_in_memory().unwrap();
+        conn.execute_batch("CREATE TABLE t (n); INSERT INTO t VALUES (1), (2);")
+            .unwrap();
+        let readers = std::sync::Arc::new(Readers::shared(conn));
+        let threads: Vec<_> = (0..4)
+            .map(|_| {
+                let readers = std::sync::Arc::clone(&readers);
+                std::thread::spawn(move || {
+                    readers
+                        .read(|c| {
+                            Ok(c.query_row("SELECT count(*) FROM t", [], |r| r.get::<_, i64>(0))
+                                .unwrap())
+                        })
+                        .unwrap()
+                })
+            })
+            .collect();
+        for t in threads {
+            assert_eq!(t.join().unwrap(), 2);
+        }
     }
 
     #[test]

@@ -1,8 +1,8 @@
 //! The album database (docs/02-data.md, "The album database").
 //!
-//! Opening an album is three steps, kept apart so that album safety (#4:
-//! the lock file, view-only, backups, the damage check) can sit between
-//! them:
+//! [`Album::open`] is the way in: it runs album safety ([`open`]: the lock
+//! file, view-only, the damage check, the daily backup) around three steps
+//! that are kept apart for it:
 //!
 //! 1. [`root::locate`] finds the album root for the folder the user opened,
 //!    and the scope inside it. It reads only; it creates nothing.
@@ -12,13 +12,18 @@
 //! 3. The open database has one [`writer::Writer`] thread that does every
 //!    write, and a small pool of read-only connections ([`read::Readers`]).
 
+pub mod backup;
+pub mod check;
 pub mod db;
+pub mod lock;
+pub mod open;
 pub mod read;
 pub mod root;
 pub mod schema;
 pub mod writer;
 
 pub use db::{AlbumDb, Opened};
+pub use open::{Album, OpenOptions, Safety, ViewOnly};
 pub use root::{AlbumLocation, locate};
 
 /// Maps a SQLite error to an `internal` error that says what was being

@@ -34,24 +34,39 @@ pub enum Opened {
     /// The database is open, its schema current, its writer running.
     Ready(AlbumDb),
     /// The database was made by a newer Owlbum. It was not changed, and no
-    /// writer was started; #4 opens such an album view-only.
+    /// writer was started: `db` is view-only (reads work, writes answer
+    /// `view_only`).
     Newer {
         /// The file's schema version.
         version: u32,
+        /// The database, open for reading only.
+        db: AlbumDb,
     },
 }
 
 /// An open album database: its writer thread and its readers.
+///
+/// A view-only database has readers and no writer; [`AlbumDb::write`]
+/// answers `view_only` with the first sentence of the banner in force.
 #[derive(Debug)]
 pub struct AlbumDb {
-    path: PathBuf,
+    path: Option<PathBuf>,
     album_id: String,
     schema: SchemaState,
     // Field order matters on drop: readers close before the writer's thread
     // is joined, so the last connection to close is the writer's.
     readers: Readers,
-    writer: Writer,
+    writer: Option<Writer>,
+    /// Why writes are refused: the `view_only` error's message.
+    view_only: Option<String>,
+    /// Set once the album's lock was taken over by another computer: the
+    /// `view_only` error's message from then on.
+    lost: Option<LostLock>,
 }
+
+/// Shared with the lock's heartbeat: the message to refuse writes with once
+/// the lock is lost.
+pub type LostLock = std::sync::Arc<std::sync::Mutex<Option<String>>>;
 
 impl AlbumDb {
     /// Opens the database of the album at `location`, creating
@@ -70,22 +85,55 @@ impl AlbumDb {
         let mut conn = open_writable(&path)?;
         let schema = schema::migrate(&mut conn)?;
         if let SchemaState::Newer { version } = schema {
-            return Ok(Opened::Newer { version });
+            drop(conn);
+            let db = Self::view_only(&path, text::album::view_only::NEWER)?;
+            return Ok(Opened::Newer { version, db });
         }
         let album_id = schema::meta(&conn, "album_id")?
             .ok_or_else(|| AppError::internal(text::album::OPENING_DATABASE))?;
         Ok(Opened::Ready(Self {
             readers: Readers::new(&path),
-            writer: Writer::start(conn)?,
-            path,
+            writer: Some(Writer::start(conn)?),
+            path: Some(path),
             album_id,
             schema,
+            view_only: None,
+            lost: None,
         }))
     }
 
-    /// The database file.
-    pub fn path(&self) -> &Path {
-        &self.path
+    /// Opens the database at `path` for reading only. Nothing is written to
+    /// it; writes answer `view_only` with `message`. When the file's
+    /// `album_id` cannot be read (a newer or damaged schema), a fresh one
+    /// names the album for this session.
+    pub fn view_only(path: &Path, message: &str) -> AppResult<Self> {
+        let _ = (path, message);
+        unimplemented!("#4")
+    }
+
+    /// A view-only database in memory, with the current schema and no rows,
+    /// for a folder that has no album and cannot be written. Nothing is
+    /// saved.
+    pub fn in_memory(message: &str) -> AppResult<Self> {
+        let _ = message;
+        unimplemented!("#4")
+    }
+
+    /// Refuses writes with a `view_only` error carrying the message in
+    /// `lost` once it is set (the album's lock was taken over).
+    pub fn refuse_writes_when(&mut self, lost: LostLock) {
+        self.lost = Some(lost);
+    }
+
+    /// The database file; None for an in-memory database.
+    pub fn path(&self) -> Option<&Path> {
+        self.path.as_deref()
+    }
+
+    /// Why writes are refused right now, as the `view_only` message; None
+    /// when the database can be written.
+    pub fn view_only_message(&self) -> Option<String> {
+        unimplemented!("#4")
     }
 
     /// The album's UUID from `meta`. It names the album in thumbnail keys.
@@ -98,11 +146,6 @@ impl AlbumDb {
         self.schema
     }
 
-    /// The writer thread. See [`Writer::write`].
-    pub fn writer(&self) -> &Writer {
-        &self.writer
-    }
-
     /// Runs `job` in a transaction on the writer thread; answers after the
     /// commit.
     pub fn write<T, F>(&self, job: F) -> AppResult<T>
@@ -110,7 +153,8 @@ impl AlbumDb {
         T: Send + 'static,
         F: FnOnce(&Transaction<'_>) -> AppResult<T> + Send + 'static,
     {
-        self.writer.write(job)
+        let _ = job;
+        unimplemented!("#4")
     }
 
     /// Runs `f` with a read-only connection.
@@ -197,7 +241,7 @@ mod tests {
     fn ready(opened: Opened) -> AlbumDb {
         match opened {
             Opened::Ready(db) => db,
-            Opened::Newer { version } => panic!("newer: {version}"),
+            Opened::Newer { version, .. } => panic!("newer: {version}"),
         }
     }
 
@@ -227,7 +271,7 @@ mod tests {
         assert!(!loc.exists);
 
         let db = ready(AlbumDb::open(&loc).unwrap());
-        assert_eq!(db.path(), loc.database_path());
+        assert_eq!(db.path(), Some(loc.database_path().as_path()));
         assert!(loc.database_path().is_file());
         assert_eq!(
             db.schema(),
@@ -379,11 +423,84 @@ mod tests {
         let before = std::fs::read(&path).unwrap();
 
         match AlbumDb::open_at(tmp.path()).unwrap() {
-            Opened::Newer { version } => assert_eq!(version, CURRENT_VERSION + 1),
+            Opened::Newer { version, db } => {
+                assert_eq!(version, CURRENT_VERSION + 1);
+                assert_eq!(count_photos(&db), 0, "reads work");
+                let err = db.write(|tx| insert_photo(tx, "a.jpg")).unwrap_err();
+                assert_eq!(err.code, crate::ErrorCode::ViewOnly);
+                assert_eq!(err.message, text::album::view_only::NEWER);
+            }
             Opened::Ready(_) => panic!("a newer database must not open for writing"),
         }
         assert_eq!(std::fs::read(&path).unwrap(), before);
         assert_eq!(files_in(&tmp.path().join(".owlbum")), ["owlbum.sqlite"]);
+    }
+
+    fn count_photos(db: &AlbumDb) -> i64 {
+        db.read(|c| {
+            c.query_row("SELECT count(*) FROM photos", [], |r| r.get(0))
+                .map_err(sqlite_error(text::album::READING_DATABASE))
+        })
+        .unwrap()
+    }
+
+    #[test]
+    fn a_view_only_database_reads_and_refuses_writes() {
+        let tmp = tempfile::tempdir().unwrap();
+        let id = {
+            let db = ready(AlbumDb::open_at(tmp.path()).unwrap());
+            db.write(|tx| insert_photo(tx, "a.jpg")).unwrap();
+            db.album_id().to_owned()
+        };
+        let path = super::super::root::database_path(tmp.path());
+        let before = std::fs::read(&path).unwrap();
+        let db = AlbumDb::view_only(&path, "No.").unwrap();
+        assert_eq!(db.album_id(), id);
+        assert_eq!(db.view_only_message().as_deref(), Some("No."));
+        assert_eq!(count_photos(&db), 1);
+        let err = db.write(|tx| insert_photo(tx, "b.jpg")).unwrap_err();
+        assert_eq!(err.code, crate::ErrorCode::ViewOnly);
+        assert_eq!(err.message, "No.");
+        drop(db);
+        assert_eq!(std::fs::read(&path).unwrap(), before);
+        assert_eq!(files_in(&tmp.path().join(".owlbum")), ["owlbum.sqlite"]);
+    }
+
+    #[test]
+    fn an_in_memory_database_has_the_schema_and_no_file() {
+        let db = AlbumDb::in_memory("Nothing is kept.").unwrap();
+        assert_eq!(db.path(), None);
+        assert!(uuid::Uuid::parse_str(db.album_id()).is_ok());
+        assert_eq!(count_photos(&db), 0);
+        // Several threads can read it at once.
+        let db = Arc::new(db);
+        let threads: Vec<_> = (0..4)
+            .map(|_| {
+                let db = Arc::clone(&db);
+                std::thread::spawn(move || count_photos(&db))
+            })
+            .collect();
+        for t in threads {
+            assert_eq!(t.join().unwrap(), 0);
+        }
+        let err = db.write(|tx| insert_photo(tx, "a.jpg")).unwrap_err();
+        assert_eq!(err.code, crate::ErrorCode::ViewOnly);
+        assert_eq!(err.message, "Nothing is kept.");
+    }
+
+    #[test]
+    fn a_lost_lock_refuses_writes_from_then_on() {
+        let tmp = tempfile::tempdir().unwrap();
+        let mut db = ready(AlbumDb::open_at(tmp.path()).unwrap());
+        let lost: LostLock = Default::default();
+        db.refuse_writes_when(Arc::clone(&lost));
+        db.write(|tx| insert_photo(tx, "a.jpg")).unwrap();
+        assert_eq!(db.view_only_message(), None);
+        *lost.lock().unwrap() = Some("Taken.".into());
+        assert_eq!(db.view_only_message().as_deref(), Some("Taken."));
+        let err = db.write(|tx| insert_photo(tx, "b.jpg")).unwrap_err();
+        assert_eq!(err.message, "Taken.");
+        assert_eq!(count_photos(&db), 1);
     }
 
     #[test]

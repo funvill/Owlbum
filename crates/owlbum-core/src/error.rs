@@ -17,6 +17,12 @@ use ts_rs::TS;
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
 pub enum ErrorCode {
+    /// `album_open`: the album database failed its damage check
+    /// (docs/04-browsing.md, "Opening a folder").
+    AlbumDamaged,
+    /// `album_open`: another computer's lock on the album has an old
+    /// heartbeat; the user chooses what to do.
+    AlbumLockStale,
     /// The album folder cannot be reached (an unplugged drive).
     AlbumUnreachable,
     /// The query could not be understood.

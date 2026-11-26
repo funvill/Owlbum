@@ -1,0 +1,192 @@
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { setApi } from "../../api";
+import { appError, createFakeApi, type FakeApi } from "../../api/fake";
+import { createQueryFake, type FakePhoto, type QueryFake } from "../../api/fake/query";
+import { defaultQuery } from "../../api/query";
+import { useSettingsStore } from "../app/settings";
+import { RERUN_BUSY_MS, RERUN_IDLE_MS, SAVE_SIZE_MS, gridBlocks, resetGrid, useGridStore } from "./store";
+
+function photos(n: number): FakePhoto[] {
+  return Array.from({ length: n }, (_, i) => ({
+    id: i + 1,
+    rel_path: `p${i + 1}.jpg`,
+    date: `2024-01-01T00:00:${String(i).padStart(2, "0")}`,
+  }));
+}
+
+let album: QueryFake;
+let fake: FakeApi;
+let busy = false;
+
+const runs = () => fake.calls.filter((c) => c.command === "query_run");
+const grid = () => useGridStore.getState();
+
+beforeEach(() => {
+  resetGrid();
+  useSettingsStore.setState({ settings: null, error: null });
+  album = createQueryFake(photos(10));
+  fake = createFakeApi(album.handlers);
+  setApi(fake);
+  busy = false;
+});
+
+afterEach(() => {
+  resetGrid();
+  vi.useRealTimers();
+});
+
+describe("grid store", () => {
+  it("runs the default query when it starts, once", async () => {
+    await grid().start();
+    await grid().start();
+    expect(runs()).toHaveLength(1);
+    expect(runs()[0]!.args).toEqual({ query: defaultQuery(), keep: null });
+    expect(grid().result?.count).toBe(10);
+    expect(gridBlocks().token).toBe(grid().result?.token);
+    expect(gridBlocks().count).toBe(10);
+  });
+
+  it("makes one call for changes within one frame, with the last query", async () => {
+    await grid().start();
+    grid().setQuery({ ...defaultQuery(), sort: "name" });
+    grid().setQuery({ ...defaultQuery(), sort: "date" });
+    grid().setQuery({ ...defaultQuery(), sort: "name" });
+    await vi.waitFor(() => expect(runs()).toHaveLength(2));
+    await new Promise((r) => setTimeout(r, 50));
+    expect(runs()).toHaveLength(2);
+    expect(runs()[1]!.args).toMatchObject({ query: { sort: "name" } });
+    expect(grid().query.sort).toBe("name");
+  });
+
+  it("goes to the top after a change the user made with no current photo", async () => {
+    await grid().start();
+    const seq = grid().scroll?.seq ?? 0;
+    grid().setQuery({ ...defaultQuery(), sort: "name" });
+    await vi.waitFor(() => expect(grid().scroll).toMatchObject({ to: "top" }));
+    expect(grid().scroll!.seq).toBeGreaterThan(seq);
+  });
+
+  it("follows the current photo and the selection into the new result", async () => {
+    await grid().start();
+    grid().setSelection({ current: { id: 3, index: 2 }, anchor: { id: 3, index: 2 }, selection: [3, 5] });
+    grid().setQuery({ ...defaultQuery(), sort: "name" });
+    await vi.waitFor(() => expect(runs()).toHaveLength(2));
+    expect(runs()[1]!.args).toMatchObject({
+      keep: { current: { id: 3, index: 2 }, anchor_id: 3, selection: [3, 5] },
+    });
+    await vi.waitFor(() => expect(grid().scroll).toMatchObject({ to: "current" }));
+    expect(grid().current?.id).toBe(3);
+    expect(grid().selection).toEqual([3, 5]);
+  });
+
+  it("settles the current photo when it leaves the result", async () => {
+    await grid().start();
+    grid().setSelection({ current: { id: 3, index: 2 }, anchor: null, selection: [3] });
+    const revision = album.change((ps) => ps.map((p) => (p.id === 3 ? { ...p, hidden: true } : p)));
+    fake.emit("album_changed", { reason: "info", revision });
+    await vi.waitFor(() => expect(grid().current).toEqual({ id: 4, index: 2 }));
+    expect(grid().selection).toEqual([4]);
+    expect(grid().anchor).toEqual({ id: 4, index: 2 });
+  });
+
+  it("keeps the scroll position after album_changed", async () => {
+    await grid().start();
+    const before = grid().scroll;
+    const revision = album.change((ps) => [...ps, { id: 99, rel_path: "new.jpg" }]);
+    fake.emit("album_changed", { reason: "scan", revision });
+    await vi.waitFor(() => expect(grid().result?.count).toBe(11));
+    expect(grid().scroll).toEqual(before);
+  });
+
+  it("re-runs at most once per 100 ms when nothing is running, and never loses the last change", async () => {
+    vi.useFakeTimers();
+    const started = grid().start({ busy: () => busy });
+    await vi.advanceTimersByTimeAsync(0);
+    await started;
+    for (let i = 0; i < 5; i++) {
+      const revision = album.change((ps) => [...ps, { id: 100 + i, rel_path: `n${i}.jpg` }]);
+      fake.emit("album_changed", { reason: "scan", revision });
+      await vi.advanceTimersByTimeAsync(10);
+    }
+    expect(runs().length).toBeLessThanOrEqual(2);
+    await vi.advanceTimersByTimeAsync(RERUN_IDLE_MS);
+    expect(runs()).toHaveLength(3);
+    expect(grid().result?.count).toBe(15);
+  });
+
+  it("re-runs at most once per second while a scan is running", async () => {
+    vi.useFakeTimers();
+    busy = true;
+    const started = grid().start({ busy: () => busy });
+    await vi.advanceTimersByTimeAsync(0);
+    await started;
+    for (let i = 0; i < 10; i++) {
+      const revision = album.change((ps) => [...ps, { id: 100 + i, rel_path: `n${i}.jpg` }]);
+      fake.emit("album_changed", { reason: "scan", revision });
+      await vi.advanceTimersByTimeAsync(RERUN_BUSY_MS / 10);
+    }
+    // One at once, then one a second later.
+    expect(runs().length).toBeLessThanOrEqual(3);
+    await vi.advanceTimersByTimeAsync(RERUN_BUSY_MS);
+    expect(grid().result?.count).toBe(20);
+  });
+
+  it("skips an event whose revision is not newer, and reasons that need no re-run", async () => {
+    await grid().start();
+    fake.emit("album_changed", { reason: "scan", revision: 0 });
+    const revision = album.change((ps) => ps);
+    fake.emit("album_changed", { reason: "tidy", revision });
+    fake.emit("album_changed", { reason: "status", revision });
+    await new Promise((r) => setTimeout(r, RERUN_IDLE_MS * 2));
+    expect(runs()).toHaveLength(1);
+  });
+
+  it("asks for the rows on screen again after an edit", async () => {
+    await grid().start();
+    const refresh = vi.spyOn(gridBlocks(), "refresh");
+    const revision = album.change((ps) => ps);
+    fake.emit("album_changed", { reason: "edit", revision });
+    expect(refresh).toHaveBeenCalled();
+    expect(runs()).toHaveLength(1);
+  });
+
+  it("keeps the error of a failed run", async () => {
+    fake.handle("query_run", () => {
+      throw appError("bad_query", "Owlbum can't show filtered photos yet.");
+    });
+    await grid().start();
+    expect(grid().error?.code).toBe("bad_query");
+  });
+
+  it("stops following album_changed when stopped", async () => {
+    await grid().start();
+    grid().stop();
+    const revision = album.change((ps) => ps);
+    fake.emit("album_changed", { reason: "scan", revision });
+    await new Promise((r) => setTimeout(r, RERUN_IDLE_MS * 2));
+    expect(runs()).toHaveLength(1);
+  });
+});
+
+describe("thumbnail size", () => {
+  it("starts from the setting", async () => {
+    await useSettingsStore.getState().load();
+    useSettingsStore.setState((s) => ({ settings: { ...s.settings!, thumb_size: 200 } }));
+    await grid().start();
+    expect(grid().thumbSize).toBe(200);
+  });
+
+  it("changes at once, clamped, and is saved 300 ms after the slider last moved", async () => {
+    vi.useFakeTimers();
+    grid().setThumbSize(170);
+    grid().setThumbSize(500);
+    expect(grid().thumbSize).toBe(320);
+    await vi.advanceTimersByTimeAsync(SAVE_SIZE_MS - 50);
+    grid().setThumbSize(240);
+    await vi.advanceTimersByTimeAsync(SAVE_SIZE_MS - 1);
+    expect(fake.calls.filter((c) => c.command === "app_settings_set")).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(1);
+    const saves = fake.calls.filter((c) => c.command === "app_settings_set");
+    expect(saves).toEqual([{ command: "app_settings_set", args: { patch: { thumb_size: 240 } } }]);
+  });
+});

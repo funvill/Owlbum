@@ -233,6 +233,8 @@ export const useGridStore = create<GridState>()((set, get) => {
         : get().follow;
     const facets = result.facets ?? (get().query.want_facets ? get().facets : null);
     set({ result, error: null, ...selected, scroll, follow, pending: null, facets });
+    // The panel opened while this run was on its way: ask for its facets now.
+    if (get().query.want_facets && result.facets === undefined) void get().wantFacets(true);
     if (s.pickFirst) {
       if (current !== null) s.pickFirst = false;
       else if (result.count > 0) {

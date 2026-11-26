@@ -43,6 +43,11 @@ export function FilterPanel({ filter, facets, onChange }: FilterPanelProps) {
   const set = (change: Partial<Filter>) => {
     const next: Filter = { ...filter, ...change };
     for (const key of Object.keys(next) as (keyof Filter)[]) if (next[key] === undefined) delete next[key];
+    // A typed date can get past the picker's bounds: From never after To,
+    // and only whole days reach Rust.
+    const day = (d: string | undefined) => d === undefined || /^\d{4}-\d{2}-\d{2}$/.test(d);
+    if (!day(next.from) || !day(next.to)) return;
+    if (next.from !== undefined && next.to !== undefined && next.from > next.to) return;
     onChange(next);
   };
   const folders = facets?.folders ?? [];

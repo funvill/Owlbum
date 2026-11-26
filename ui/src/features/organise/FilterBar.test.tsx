@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setApi } from "../../api";
 import { createFakeApi, type FakeApi } from "../../api/fake";
@@ -148,5 +148,18 @@ describe("FilterBar", () => {
     await userEvent.click(screen.getByText("outside"));
     expect(screen.queryByRole("group", { name: "Filters" })).not.toBeInTheDocument();
     expect(grid().facets).toBeNull();
+  });
+
+  it("never sets From after To", async () => {
+    await grid().start();
+    render(<FilterBar />);
+    await userEvent.click(screen.getByRole("button", { name: "Filters" }));
+    fireEvent.change(screen.getByLabelText("To"), { target: { value: "2024-01-02" } });
+    await vi.waitFor(() => expect(grid().query.filter).toEqual({ to: "2024-01-02" }));
+    expect(screen.getByLabelText("From")).toHaveAttribute("max", "2024-01-02");
+    fireEvent.change(screen.getByLabelText("From"), { target: { value: "2024-01-05" } });
+    fireEvent.change(screen.getByLabelText("From"), { target: { value: "2024-01-01" } });
+    await vi.waitFor(() => expect(grid().query.filter).toEqual({ from: "2024-01-01", to: "2024-01-02" }));
+    expect(await screen.findByText("2024-01-01 → 2024-01-02")).toBeInTheDocument();
   });
 });

@@ -6,6 +6,9 @@ source "$(dirname "$0")/env.sh"
 
 step() { printf '\n==> %s\n' "$*"; }
 
+step "Text files are UTF-8"
+node scripts/check-utf8.mjs
+
 step "Page dependencies"
 if [ ! -d ui/node_modules ] || [ ui/package-lock.json -nt ui/node_modules/.package-lock.json ]; then
   npm --prefix ui ci

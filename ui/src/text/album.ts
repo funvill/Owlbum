@@ -1,6 +1,6 @@
 // Text shown by the album feature (src/features/album).
 
 export const albumText = {
-  scanWalking: "Looking for photos…",
+  scanWalking: "Looking for photosâ€¦",
   scanReading: (done: number, found: number) => `Reading photos ${done} / ${found}`,
 };

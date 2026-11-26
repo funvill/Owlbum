@@ -29,6 +29,7 @@ tracing.workspace = true
 ts-rs.workspace = true
 
 [dev-dependencies]
+muda.workspace = true
 tauri = { workspace = true, features = ["test"] }
 tempfile.workspace = true
 

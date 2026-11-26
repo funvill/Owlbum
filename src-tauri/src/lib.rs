@@ -8,6 +8,7 @@
 pub mod bindings;
 pub mod commands;
 pub mod events;
+pub mod keymap;
 
 use std::sync::Arc;
 

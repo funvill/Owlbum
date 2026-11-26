@@ -155,7 +155,7 @@ The menu bar has three menus. `&` marks the mnemonic.
 
 Rules:
 
-- **Every accelerator is set explicitly.** None is left to a platform default.
+- **Every accelerator is set explicitly.** None is left to a platform default. Each comes from its `menu` row in the [key table](#the-key-table); Reload and Toggle developer tools have rows marked `dev`.
 - **`?` is not a native accelerator.** It must not fire while the user is typing, so the page handles it. The menu only shows the key beside the item.
 - **F1, F2, F11, `Ctrl+O`, `Ctrl+W` and `Ctrl+Q` are native accelerators.** They work whenever the window has focus, including while typing and while a dialog is open. The page must not bind them.
 - **Items that act in the page** (Close folder, Rescan, Keyboard shortcuts, What's new, About, and the update item) emit `app_menu` with `{ item }`, the item's id. The page does the rest.
@@ -229,18 +229,28 @@ Each row has these fields:
 |---|---|
 | `id` | A stable name such as `browse.star`. The label shown in the overlay is the text-module entry with the same id. |
 | `place` | `everywhere`, `browse`, `viewer` or `edit`. |
-| `keys` | One or more keys. Each is a `KeyboardEvent.key` value, with `Ctrl+`, `Shift+` or `Alt+` in front when needed. Letters match in either case. |
+| `keys` | One or more keys. Each is a `KeyboardEvent.key` value, with `Ctrl+`, `Shift+` and `Alt+` in front when needed, in that order. Letters are written in upper case and match in either case. The space bar is written `Space` (its `key` is a single space). The first key is the one hints show, such as the photo menu's "F" for Star. |
 | `hold` | True when the action lasts only while the key is down. |
 | `repeat` | True when holding the key repeats the action. |
-| `menu` | True when the key is a native menu accelerator. |
+| `menu` | True when the key is a native menu accelerator. A `menu` row has exactly one key. |
+| `dev` | True for a menu accelerator that exists only in development builds. The overlay leaves these rows out. |
+| `typing` | True when the row also acts while typing in a text field (never in a dialog). |
+
+A flag that is false is left out of the file. The page checks the file when it loads (`ui/src/keys/table.ts`) and matches keys with `ui/src/keys/match.ts`; the shell reads it through `src-tauri/src/keymap.rs`.
 
 Matching rules, the same for every row:
 
 | Rule | Detail |
 |---|---|
-| Typing | A row that is not `menu` is ignored while focus is in a text field, a select, an editable element, a dialog or the Filters panel. Edit mode's sliders do not count as typing. |
-| Modifiers | A key pressed with a modifier the row does not name is ignored. |
-| Symbols | `?`, `[`, `]` and `\` match on the character produced, so they work on keyboards where they need Shift or AltGr. |
+| Menu rows | The page never binds a `menu` row; the native accelerator does the work. |
+| Typing | A row that is not `menu` is ignored while focus is in a text field, a select, an editable element, a dialog or the Filters panel, unless it is marked `typing` (F6 and Shift+F6, so focus can leave the search box). Rows marked `typing` are still ignored in a dialog and the Filters panel. Edit mode's sliders do not count as typing. The Filters panel is marked `data-keys="dialog"`; a full-page layer that has its own rows, such as the viewer, is marked `data-keys="surface"` so it is not taken for a dialog. While a dialog is open the page ignores the rows wherever focus is. |
+| Controls | While a button, link, checkbox or similar control has focus, Enter and Space are left to it. Other rows still act. |
+| Menus | While focus is in a menu, its own keys (arrows, Home, End, Enter, Space, Esc, Tab) are left to it. Any other row closes the menu and then acts. |
+| Handled keys | A key that a control already handled (a slider's or a splitter's arrows) or that is part of composing text is ignored. |
+| Modifiers | A key pressed with a modifier the row does not name is ignored. Meta (the Windows or Super key) never matches. `Ctrl+` is the Ctrl key: version 1 runs on Windows and Linux only. |
+| Symbols | Every key that is a single character other than a letter (`?`, `[`, `]`, `\`, `+`, `=`, `-`, `0`) matches on the character produced, so it works on keyboards where it needs Shift or AltGr. Windows reports AltGr as Ctrl+Alt. |
+| Letters | On a layout of another alphabet, where a key gives no Latin letter, a letter row matches the physical key (`KeyboardEvent.code`). |
+| Repeat | An auto-repeated press acts only on a `repeat` row. A `hold` row starts on the first press and ends when its key is released, whatever the modifiers or focus are by then. |
 | Place | `browse` rows apply in the grid, the timeline, the map and the preview. While the viewer or edit mode is open, only its own rows and the `everywhere` rows apply. |
 | Dialogs and menus | Esc closes the topmost dialog, menu or overlay first. Nothing else reaches the rows beneath. |
 
@@ -248,7 +258,7 @@ Matching rules, the same for every row:
 
 What each action does is owned by the part named in the last column. This table owns only which key reaches it.
 
-| Id | Place | Keys | Action | Hold or repeat | Owner |
+| Id | Place | Keys | Action | Flags | Owner |
 |---|---|---|---|---|---|
 | `app.shortcuts` | everywhere | `?` | Open or close the shortcut overlay | | this part |
 | `app.about` | everywhere | `F1` | About Owlbum | menu | this part |
@@ -257,7 +267,9 @@ What each action does is owned by the part named in the last column. This table 
 | `app.full_screen` | everywhere | `F11` | Toggle full screen | menu | this part |
 | `app.quit` | everywhere | `Ctrl+Q` | Quit | menu | this part |
 | `app.close_folder` | everywhere | `Ctrl+W` | Close folder | menu | 04 |
-| `app.next_region`, `app.previous_region` | everywhere | `F6`, `Shift+F6` | Move focus to the next or previous region: top bar, filter bar, grid, preview, details panel | | [09](09-visual-design.md#accessibility-baseline) |
+| `app.reload` | everywhere | `Ctrl+R` | Reload the page (development builds only) | menu, dev | this part |
+| `app.developer_tools` | everywhere | `Ctrl+Shift+I` | Toggle developer tools (development builds only) | menu, dev | this part |
+| `app.next_region`, `app.previous_region` | everywhere | `F6`, `Shift+F6` | Move focus to the next or previous region: top bar, filter bar, grid, preview, details panel | typing | [09](09-visual-design.md#accessibility-baseline) |
 | `browse.previous`, `browse.next` | browse | `ArrowLeft`, `ArrowRight` | Previous or next photo | repeat | [04](04-browsing.md) |
 | `browse.extend_previous`, `browse.extend_next` | browse | `Shift+ArrowLeft`, `Shift+ArrowRight` | Extend the selection one photo | repeat | 04 |
 | `browse.first`, `browse.last` | browse | `Home`, `End` | First or last photo | | 04 |
@@ -265,7 +277,7 @@ What each action does is owned by the part named in the last column. This table 
 | `browse.escape` | browse | `Escape` | Close the photo menu, else reduce the selection to the current photo | | 04 |
 | `browse.select_all` | browse | `Ctrl+A` | Select every photo shown in the result | | 04 |
 | `browse.select_none` | browse | `Ctrl+D` | Select nothing | | 04 |
-| `browse.star` | browse | `S`, `F` | Star or unstar | | [05](05-organising.md) |
+| `browse.star` | browse | `F`, `S` | Star or unstar | | [05](05-organising.md) |
 | `browse.hide` | browse | `H` | Hide or unhide | | 05 |
 | `browse.score_up`, `browse.score_down` | browse | `ArrowUp`, `ArrowDown` | Photo score up or down one | | 05 |
 | `browse.undo` | browse | `Ctrl+Z` | Undo | | 05 |
@@ -282,7 +294,7 @@ What each action does is owned by the part named in the last column. This table 
 | `viewer.details` | viewer | `I` | Show or hide the details panel | | 04 |
 | `viewer.zoom_in`, `viewer.zoom_out` | viewer | `+` or `=`, `-` | Zoom in or out | repeat | 04 |
 | `viewer.fit` | viewer | `0` | Back to fit | | 04 |
-| `viewer.star` | viewer | `S`, `F` | Star or unstar the shown photo | | 05 |
+| `viewer.star` | viewer | `F`, `S` | Star or unstar the shown photo | | 05 |
 | `viewer.hide` | viewer | `H` | Hide or unhide the shown photo | | 05 |
 | `viewer.score_up`, `viewer.score_down` | viewer | `ArrowUp`, `ArrowDown` | Photo score up or down one | | 05 |
 | `viewer.undo` | viewer | `Ctrl+Z` | Undo | | 05 |

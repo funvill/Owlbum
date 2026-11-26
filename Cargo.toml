@@ -26,6 +26,9 @@ tracing = { version = "0.1", default-features = false, features = ["std"] }
 ts-rs = { version = "12", features = ["serde-json-impl", "no-serde-warnings"] }
 tauri = "2"
 tauri-build = "2"
+# Only for the shell's test that every menu accelerator in the key table
+# parses the way Tauri's menu builder parses it. The version Tauri uses.
+muda = { version = "0.20", default-features = false }
 tempfile = "3"
 uuid = { version = "1", features = ["v4"] }
 windows-sys = "0.61"

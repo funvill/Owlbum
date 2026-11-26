@@ -14,12 +14,13 @@
 use std::io;
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::thread::JoinHandle;
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
+
+use crate::album::db::LostLock;
 
 /// The lock file's name inside `.owlbum`.
 pub const LOCK_FILE: &str = "lock";
@@ -105,8 +106,23 @@ pub fn judge(
     now: i64,
     is_running: impl Fn(u32) -> bool,
 ) -> Verdict {
-    let _ = (existing, me, now, is_running);
-    unimplemented!("#4")
+    let Some(lock) = existing else {
+        return Verdict::Free;
+    };
+    if lock.host.eq_ignore_ascii_case(&me.host) && (lock.pid == me.pid || !is_running(lock.pid)) {
+        return Verdict::Free;
+    }
+    let age = now.saturating_sub(lock.heartbeat).max(0);
+    if age < LIVE_FOR_MS {
+        Verdict::Live {
+            host: lock.host.clone(),
+        }
+    } else {
+        Verdict::Old {
+            host: lock.host.clone(),
+            last_seen: lock.heartbeat,
+        }
+    }
 }
 
 /// Reads `<dir>/lock`. `Ok(None)` when there is none; a file that is not a
@@ -114,8 +130,37 @@ pub fn judge(
 /// Owlbum writes the lock by renaming a finished file into place, so such a
 /// file was never written by a running Owlbum.
 pub fn read(dir: &Path) -> io::Result<Option<LockInfo>> {
-    let _ = dir;
-    unimplemented!("#4")
+    match std::fs::read(dir.join(LOCK_FILE)) {
+        Ok(bytes) => Ok(serde_json::from_slice(&bytes).ok()),
+        Err(e) if e.kind() == io::ErrorKind::NotFound => Ok(None),
+        Err(e) => Err(e),
+    }
+}
+
+/// Writes `info` to `<dir>/lock` by writing a temporary file and renaming it
+/// into place, so a reader never sees half a lock.
+fn write_whole(dir: &Path, info: &LockInfo) -> io::Result<()> {
+    let tmp = dir.join(format!("{LOCK_FILE}.{}.tmp", info.pid));
+    let result =
+        std::fs::write(&tmp, json(info)).and_then(|()| std::fs::rename(&tmp, dir.join(LOCK_FILE)));
+    if result.is_err() {
+        let _ = std::fs::remove_file(&tmp);
+    }
+    result
+}
+
+fn json(info: &LockInfo) -> Vec<u8> {
+    serde_json::to_vec(info).unwrap_or_default()
+}
+
+/// True when two locks were written by the same open.
+fn same_holder(a: &LockInfo, b: &LockInfo) -> bool {
+    a.host == b.host && a.pid == b.pid && a.opened_at == b.opened_at
+}
+
+/// True when the lock on disk is still the one `info` describes.
+fn still_ours(dir: &Path, info: &LockInfo) -> bool {
+    matches!(read(dir), Ok(Some(on_disk)) if same_holder(&on_disk, info))
 }
 
 /// A held lock. It rewrites the heartbeat in a background thread and
@@ -124,7 +169,7 @@ pub fn read(dir: &Path) -> io::Result<Option<LockInfo>> {
 pub struct AlbumLock {
     path: PathBuf,
     info: LockInfo,
-    lost: Arc<AtomicBool>,
+    lost: LostLock,
     stop: Option<mpsc::Sender<()>>,
     thread: Option<JoinHandle<()>>,
 }
@@ -146,8 +191,70 @@ impl AlbumLock {
         every: Duration,
         now: NowMs,
     ) -> io::Result<Self> {
-        let _ = (dir, me, replace, every, now);
-        unimplemented!("#4")
+        let at = now();
+        let info = LockInfo {
+            host: me.host.clone(),
+            pid: me.pid,
+            user: me.user.clone(),
+            app_version: crate::app::version().version,
+            opened_at: at,
+            heartbeat: at,
+        };
+        if replace {
+            write_whole(dir, &info)?;
+        } else {
+            // `create_new` makes "is there a lock?" and "take it" one step.
+            // The file is written in place here; a reader that catches it
+            // empty reads no lock, and the writer of an empty lock is alive,
+            // so at worst both computers decide the same way a moment apart.
+            let mut file = std::fs::OpenOptions::new()
+                .write(true)
+                .create_new(true)
+                .open(dir.join(LOCK_FILE))?;
+            let written = io::Write::write_all(&mut file, &json(&info));
+            drop(file);
+            if let Err(e) = written {
+                let _ = std::fs::remove_file(dir.join(LOCK_FILE));
+                return Err(e);
+            }
+        }
+
+        let lost = LostLock::default();
+        let (stop, stopped) = mpsc::channel::<()>();
+        let thread = {
+            let dir = dir.to_path_buf();
+            let mut beat = info.clone();
+            let lost = Arc::clone(&lost);
+            std::thread::Builder::new()
+                .name("owlbum-album-lock".into())
+                .spawn(move || {
+                    while let Err(mpsc::RecvTimeoutError::Timeout) = stopped.recv_timeout(every) {
+                        match read(&dir) {
+                            Ok(Some(on_disk)) if !same_holder(&on_disk, &beat) => {
+                                *lost.lock().unwrap_or_else(|p| p.into_inner()) =
+                                    Some(on_disk.host);
+                                break;
+                            }
+                            // Ours, or gone (someone deleted it): beat, which
+                            // puts it back.
+                            Ok(_) => {}
+                            // Unreadable for a moment: try at the next beat.
+                            Err(_) => continue,
+                        }
+                        beat.heartbeat = now();
+                        // A failed beat (a share that dropped for a moment)
+                        // is tried again at the next one.
+                        let _ = write_whole(&dir, &beat);
+                    }
+                })?
+        };
+        Ok(Self {
+            path: dir.join(LOCK_FILE),
+            info,
+            lost,
+            stop: Some(stop),
+            thread: Some(thread),
+        })
     }
 
     /// The lock as written.
@@ -163,7 +270,16 @@ impl AlbumLock {
     /// True once the heartbeat found the file no longer names this holder
     /// (another computer chose Open anyway). The album must stop writing.
     pub fn is_lost(&self) -> bool {
-        self.lost.load(Ordering::Relaxed)
+        self.lost
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .is_some()
+    }
+
+    /// Set to the other computer's name once the lock is lost. The album
+    /// database shares it to refuse writes from then on.
+    pub fn lost_to(&self) -> LostLock {
+        Arc::clone(&self.lost)
     }
 }
 
@@ -173,28 +289,69 @@ impl Drop for AlbumLock {
         if let Some(thread) = self.thread.take() {
             let _ = thread.join();
         }
+        if let Some(dir) = self.path.parent()
+            && still_ours(dir, &self.info)
+        {
+            let _ = std::fs::remove_file(&self.path);
+        }
     }
 }
 
 /// This computer's name, or `"unknown"`.
 pub fn this_host() -> String {
-    unimplemented!("#4")
+    #[cfg(windows)]
+    let name = std::env::var("COMPUTERNAME").ok();
+    #[cfg(not(windows))]
+    let name = std::fs::read_to_string("/proc/sys/kernel/hostname")
+        .or_else(|_| std::fs::read_to_string("/etc/hostname"))
+        .ok()
+        .or_else(|| std::env::var("HOSTNAME").ok());
+    name.map(|n| n.trim().to_owned())
+        .filter(|n| !n.is_empty())
+        .unwrap_or_else(|| "unknown".to_owned())
 }
 
 /// The user this process runs as, or `""`.
 pub fn this_user() -> String {
-    unimplemented!("#4")
+    std::env::var(if cfg!(windows) { "USERNAME" } else { "USER" }).unwrap_or_default()
 }
 
 /// Whether process `pid` of this computer is running.
+#[cfg(windows)]
+#[allow(unsafe_code)]
 pub fn is_running(pid: u32) -> bool {
-    let _ = pid;
-    unimplemented!("#4")
+    use windows_sys::Win32::Foundation::{CloseHandle, ERROR_ACCESS_DENIED, GetLastError};
+    use windows_sys::Win32::System::Threading::{
+        GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    /// `GetExitCodeProcess` answers this while the process runs.
+    const STILL_ACTIVE: u32 = 259;
+
+    // SAFETY: plain calls with no pointers kept; the handle is closed before
+    // returning.
+    unsafe {
+        let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+        if handle.is_null() {
+            // A process we may not look at still exists.
+            return GetLastError() == ERROR_ACCESS_DENIED;
+        }
+        let mut code = 0u32;
+        let ok = GetExitCodeProcess(handle, &mut code) != 0;
+        CloseHandle(handle);
+        ok && code == STILL_ACTIVE
+    }
+}
+
+/// Whether process `pid` of this computer is running.
+#[cfg(not(windows))]
+pub fn is_running(pid: u32) -> bool {
+    Path::new("/proc").join(pid.to_string()).exists()
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::sync::atomic::Ordering;
 
     const NOW: i64 = 1_800_000_000_000;
 
@@ -308,7 +465,14 @@ mod tests {
         keys.sort_unstable();
         assert_eq!(
             keys,
-            ["app_version", "heartbeat", "host", "opened_at", "pid", "user"]
+            [
+                "app_version",
+                "heartbeat",
+                "host",
+                "opened_at",
+                "pid",
+                "user"
+            ]
         );
         assert_eq!(v["host"], "HERE");
         assert_eq!(v["pid"], 100);
@@ -324,8 +488,8 @@ mod tests {
             host: "THERE".into(),
             ..me()
         };
-        let err = AlbumLock::take(tmp.path(), &other, false, HEARTBEAT_EVERY, now_ms())
-            .unwrap_err();
+        let err =
+            AlbumLock::take(tmp.path(), &other, false, HEARTBEAT_EVERY, now_ms()).unwrap_err();
         assert_eq!(err.kind(), io::ErrorKind::AlreadyExists);
         assert_eq!(read(tmp.path()).unwrap().unwrap().host, "HERE");
     }
@@ -378,17 +542,25 @@ mod tests {
     #[test]
     fn a_replaced_lock_is_lost_and_left_alone() {
         let tmp = tempfile::tempdir().unwrap();
-        let held =
-            AlbumLock::take(tmp.path(), &me(), false, Duration::from_millis(20), now_ms()).unwrap();
-        let theirs = lock("THERE", 7, NOW);
-        std::fs::write(
-            tmp.path().join(LOCK_FILE),
-            serde_json::to_vec(&theirs).unwrap(),
+        let held = AlbumLock::take(
+            tmp.path(),
+            &me(),
+            false,
+            Duration::from_millis(20),
+            now_ms(),
         )
         .unwrap();
+        let theirs = lock("THERE", 7, NOW);
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
         while !held.is_lost() {
             assert!(std::time::Instant::now() < deadline, "loss not noticed");
+            // Written again each time, as the other computer's heartbeat
+            // would: a beat of ours can land on one of theirs.
+            std::fs::write(
+                tmp.path().join(LOCK_FILE),
+                serde_json::to_vec(&theirs).unwrap(),
+            )
+            .unwrap();
             std::thread::sleep(Duration::from_millis(10));
         }
         drop(held);

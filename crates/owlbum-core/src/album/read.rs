@@ -15,9 +15,12 @@ pub const POOL_SIZE: usize = 4;
 
 /// Read-only connections to one album database. A connection is opened when
 /// none is idle; up to [`POOL_SIZE`] are kept for reuse.
+///
+/// An in-memory database has no path to open again, so its pool is the one
+/// connection it was made with ([`Readers::shared`]).
 #[derive(Debug)]
 pub struct Readers {
-    path: PathBuf,
+    path: Option<PathBuf>,
     idle: Mutex<Vec<Connection>>,
 }
 
@@ -25,7 +28,7 @@ impl Readers {
     /// A pool for the database at `path`. Opens nothing yet.
     pub fn new(path: &Path) -> Self {
         Self {
-            path: path.to_path_buf(),
+            path: Some(path.to_path_buf()),
             idle: Mutex::new(Vec::new()),
         }
     }
@@ -33,17 +36,23 @@ impl Readers {
     /// Reads through one connection held for the session: the in-memory
     /// database of a folder that cannot be written. Reads take turns.
     pub fn shared(conn: Connection) -> Self {
-        let _ = conn;
-        unimplemented!("#4")
+        Self {
+            path: None,
+            idle: Mutex::new(vec![conn]),
+        }
     }
 
     /// Runs `f` with a read-only connection. Any number of threads may read
     /// at once; a read waits (up to [`db::BUSY_TIMEOUT`]) only while the
     /// writer commits.
     pub fn read<T>(&self, f: impl FnOnce(&Connection) -> AppResult<T>) -> AppResult<T> {
+        let Some(path) = &self.path else {
+            let conn = self.idle.lock().unwrap_or_else(|p| p.into_inner());
+            return f(&conn[0]);
+        };
         let conn = match self.idle.lock().unwrap_or_else(|p| p.into_inner()).pop() {
             Some(conn) => conn,
-            None => open_reader(&self.path)?,
+            None => open_reader(path)?,
         };
         let result = f(&conn);
         let mut idle = self.idle.lock().unwrap_or_else(|p| p.into_inner());
@@ -102,8 +111,10 @@ mod tests {
                 std::thread::spawn(move || {
                     readers
                         .read(|c| {
-                            Ok(c.query_row("SELECT count(*) FROM t", [], |r| r.get::<_, i64>(0))
-                                .unwrap())
+                            Ok(
+                                c.query_row("SELECT count(*) FROM t", [], |r| r.get::<_, i64>(0))
+                                    .unwrap(),
+                            )
                         })
                         .unwrap()
                 })

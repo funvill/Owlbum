@@ -24,18 +24,23 @@
 //! When several reasons for view-only apply, the first in that order wins:
 //! `newer`, `read_only`, `locked`, `chosen`, `damaged`.
 
+use std::io;
 use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 
-use chrono::{DateTime, Local};
+use chrono::{DateTime, Local, TimeZone};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
-use crate::album::db::AlbumDb;
-use crate::album::lock::{self, AlbumLock, Owner};
+use crate::album::check::{self, Header};
+use crate::album::db::{self, AlbumDb, Opened};
+use crate::album::lock::{self, AlbumLock, Owner, Verdict};
 use crate::album::root::AlbumLocation;
+use crate::album::schema::CURRENT_VERSION;
+use crate::album::{backup, locate};
 use crate::error::AppResult;
+use crate::{AppError, ErrorCode, text};
 
 /// The choices `album_open` can carry after a question
 /// (docs/04-browsing.md, "Opening a folder").
@@ -143,8 +148,172 @@ impl Album {
 
     /// [`Album::open`] in a given [`Env`].
     pub fn open_with(folder: &Path, options: &OpenOptions, env: &Env) -> AppResult<Self> {
-        let _ = (folder, options, env);
-        unimplemented!("#4")
+        let location = locate(folder)?;
+        let owl = location.owlbum_dir();
+        let db_path = location.database_path();
+        let safety = Safety {
+            conflict_file: check::conflict_file(&owl),
+            ..Safety::default()
+        };
+
+        // A newer schema is read from the header, before the lock or a
+        // journal is touched.
+        let mut known_damaged = false;
+        if location.exists {
+            match check::read_header(&db_path) {
+                Ok(Header::Version(v)) if v > CURRENT_VERSION => {
+                    return Self::view_only(location, safety, ViewOnly::Newer, None);
+                }
+                Ok(Header::Version(_)) => {}
+                Ok(Header::NotADatabase) => known_damaged = true,
+                Err(e) if is_read_only(&e) => {
+                    return Self::view_only(location, safety, ViewOnly::ReadOnly, None);
+                }
+                Err(e) => return Err(io_error(text::album::OPENING_DATABASE, &e)),
+            }
+        }
+
+        if env.pretend_read_only || (location.exists && !file_writable(&db_path)) {
+            return Self::view_only(location, safety, ViewOnly::ReadOnly, None);
+        }
+
+        let now_ms: lock::NowMs = {
+            let clock = Arc::clone(&env.clock);
+            Arc::new(move || clock().timestamp_millis())
+        };
+        let mut raced = false;
+        let lock = loop {
+            let existing = match lock::read(&owl) {
+                Ok(existing) => existing,
+                Err(e) if is_read_only(&e) => {
+                    return Self::view_only(location, safety, ViewOnly::ReadOnly, None);
+                }
+                Err(e) => return Err(io_error(text::album::LOCKING, &e)),
+            };
+            match lock::judge(existing.as_ref(), &env.owner, now_ms(), env.is_running) {
+                Verdict::Live { host } => {
+                    return Self::view_only(location, safety, ViewOnly::Locked, Some(host));
+                }
+                Verdict::Old { host, .. } if options.view_only => {
+                    return Self::view_only(location, safety, ViewOnly::Chosen, Some(host));
+                }
+                Verdict::Old { host, last_seen } if !options.take_lock => {
+                    return Err(stale_lock(&host, last_seen));
+                }
+                Verdict::Old { .. } | Verdict::Free => {}
+            }
+            if options.view_only {
+                let damaged =
+                    location.exists && (known_damaged || !check::quick_check(&db_path, false)?);
+                let reason = if damaged {
+                    ViewOnly::Damaged
+                } else {
+                    ViewOnly::Chosen
+                };
+                return Self::view_only(location, safety, reason, None);
+            }
+
+            match db::make_owlbum_dir(&location.root) {
+                Ok(_) => {}
+                Err(e) if is_read_only(&e) => {
+                    return Self::view_only(location, safety, ViewOnly::ReadOnly, None);
+                }
+                Err(e) => return Err(io_error(text::album::CREATING_DATABASE, &e)),
+            }
+            // Replace whatever is there (a stale lock, or a file that is not
+            // a lock); create only when there is nothing, so two computers
+            // opening at once cannot both take it.
+            let replace = owl.join(lock::LOCK_FILE).exists();
+            match AlbumLock::take(
+                &owl,
+                &env.owner,
+                replace,
+                env.heartbeat_every,
+                Arc::clone(&now_ms),
+            ) {
+                Ok(lock) => break lock,
+                Err(e) if e.kind() == io::ErrorKind::AlreadyExists && !raced => raced = true,
+                Err(e) if is_read_only(&e) => {
+                    return Self::view_only(location, safety, ViewOnly::ReadOnly, None);
+                }
+                Err(e) => return Err(io_error(text::album::LOCKING, &e)),
+            }
+        };
+        // From here on an early return drops `lock`, which deletes the file.
+
+        if location.exists {
+            let sound = !known_damaged && check::quick_check(&db_path, true)?;
+            if !sound {
+                let restored =
+                    options.restore_backup && backup::restore(&db_path, (env.clock)())?.is_some();
+                if !restored {
+                    return Err(damaged(&owl));
+                }
+            }
+            // A failed backup does not stop the album opening: nothing is
+            // lost, and tomorrow's open tries again. (Logged once #5 brings
+            // the log.)
+            let _ = backup::daily(&db_path, &owl, (env.clock)().date_naive());
+        }
+
+        let mut db = match AlbumDb::open(&location)? {
+            Opened::Ready(db) => db,
+            Opened::Newer { db, .. } => {
+                drop(lock);
+                return Ok(Self {
+                    location,
+                    safety: Safety {
+                        view_only: Some(ViewOnly::Newer),
+                        ..safety
+                    },
+                    db,
+                    lock: None,
+                });
+            }
+        };
+        db.refuse_writes_when(lock.lost_to());
+        Ok(Self {
+            location,
+            safety,
+            db,
+            lock: Some(lock),
+        })
+    }
+
+    /// A view-only album: the database read-only, or in memory when there is
+    /// none on disk. Nothing is written in the album folder.
+    fn view_only(
+        location: AlbumLocation,
+        safety: Safety,
+        reason: ViewOnly,
+        host: Option<String>,
+    ) -> AppResult<Self> {
+        use text::album::view_only as says;
+        let in_memory = !location.exists;
+        let message = match reason {
+            ViewOnly::ReadOnly if in_memory => says::IN_MEMORY.to_owned(),
+            ViewOnly::ReadOnly => says::READ_ONLY.to_owned(),
+            ViewOnly::Locked => says::locked(host.as_deref().unwrap_or_default()),
+            ViewOnly::Chosen => says::chosen(host.as_deref()),
+            ViewOnly::Newer => says::NEWER.to_owned(),
+            ViewOnly::Damaged => says::DAMAGED.to_owned(),
+        };
+        let db = if in_memory {
+            AlbumDb::in_memory(&message)?
+        } else {
+            AlbumDb::view_only(&location.database_path(), &message)?
+        };
+        Ok(Self {
+            location,
+            safety: Safety {
+                view_only: Some(reason),
+                in_memory,
+                lock_host: host,
+                ..safety
+            },
+            db,
+            lock: None,
+        })
     }
 
     /// Where the album is: root and scope.
@@ -155,7 +324,20 @@ impl Album {
     /// What album safety found. Once another computer has replaced the lock
     /// (Open anyway there), the album reports `locked` from then on.
     pub fn safety(&self) -> Safety {
-        unimplemented!("#4")
+        let lost_to = self.lock.as_ref().and_then(|lock| {
+            lock.lost_to()
+                .lock()
+                .unwrap_or_else(|p| p.into_inner())
+                .clone()
+        });
+        match lost_to {
+            Some(host) => Safety {
+                view_only: Some(ViewOnly::Locked),
+                lock_host: Some(host),
+                ..self.safety.clone()
+            },
+            None => self.safety.clone(),
+        }
     }
 
     /// True when the album cannot be changed.
@@ -166,6 +348,58 @@ impl Album {
     /// The album database.
     pub fn db(&self) -> &AlbumDb {
         &self.db
+    }
+}
+
+/// True for the I/O errors that mean "this cannot be written here".
+fn is_read_only(e: &io::Error) -> bool {
+    matches!(
+        e.kind(),
+        io::ErrorKind::PermissionDenied | io::ErrorKind::ReadOnlyFilesystem
+    )
+}
+
+/// False when the file cannot be opened for writing (a read-only file, or
+/// one the user may not change). Nothing is written.
+fn file_writable(path: &Path) -> bool {
+    match std::fs::OpenOptions::new().write(true).open(path) {
+        Ok(_) => true,
+        Err(e) => !is_read_only(&e),
+    }
+}
+
+fn io_error(what: &'static str, e: &io::Error) -> AppError {
+    AppError::internal(what).with_details(serde_json::json!({ "cause": e.to_string() }))
+}
+
+/// `album_lock_stale`, with `details: { host, last_seen }`.
+fn stale_lock(host: &str, last_seen: i64) -> AppError {
+    let shown = Local
+        .timestamp_millis_opt(last_seen)
+        .single()
+        .map(|t| t.format("%Y-%m-%d %H:%M").to_string())
+        .unwrap_or_default();
+    AppError::new(
+        ErrorCode::AlbumLockStale,
+        text::album::lock_stale(host, &shown),
+    )
+    .with_details(serde_json::json!({ "host": host, "last_seen": last_seen }))
+}
+
+/// `album_damaged`, with `details: { backup_date }` naming the newest sound
+/// backup, or null.
+fn damaged(owlbum_dir: &Path) -> AppError {
+    match backup::newest_sound(owlbum_dir) {
+        Some((date, _)) => {
+            let date = date.format("%Y-%m-%d").to_string();
+            AppError::new(
+                ErrorCode::AlbumDamaged,
+                text::album::damaged_with_backup(&date),
+            )
+            .with_details(serde_json::json!({ "backup_date": date }))
+        }
+        None => AppError::new(ErrorCode::AlbumDamaged, text::album::DAMAGED_NO_BACKUP)
+            .with_details(serde_json::json!({ "backup_date": null })),
     }
 }
 
@@ -321,7 +555,10 @@ mod tests {
         assert_eq!(held.host, "HERE");
         assert_eq!(held.pid, std::process::id());
         drop(album);
-        assert!(!owl(tmp.path()).join(LOCK_FILE).exists(), "deleted on close");
+        assert!(
+            !owl(tmp.path()).join(LOCK_FILE).exists(),
+            "deleted on close"
+        );
     }
 
     #[test]
@@ -433,7 +670,10 @@ mod tests {
             err.details,
             Some(serde_json::json!({ "host": "THERE", "last_seen": seen }))
         );
-        assert!(err.message.starts_with("This album looks open on THERE, last seen "));
+        assert!(
+            err.message
+                .starts_with("This album looks open on THERE, last seen ")
+        );
         assert_eq!(snapshot(tmp.path()), before, "nothing written");
     }
 
@@ -482,10 +722,7 @@ mod tests {
         let album = Album::open_with(tmp.path(), &opts, &env).unwrap();
         assert_eq!(album.safety().view_only, Some(ViewOnly::Chosen));
         assert_eq!(album.safety().lock_host.as_deref(), Some("THERE"));
-        assert_view_only_refuses_writes(
-            &album,
-            &text::album::view_only::chosen(Some("THERE")),
-        );
+        assert_view_only_refuses_writes(&album, &text::album::view_only::chosen(Some("THERE")));
         drop(album);
         assert_eq!(snapshot(tmp.path()), before, "nothing written");
     }
@@ -496,10 +733,12 @@ mod tests {
         let mut env = env();
         env.heartbeat_every = Duration::from_millis(20);
         let album = Album::open_with(tmp.path(), &none(), &env).unwrap();
-        write_lock(tmp.path(), "THERE", 7, now_ms(&env));
         let deadline = std::time::Instant::now() + Duration::from_secs(10);
         while !album.is_view_only() {
             assert!(std::time::Instant::now() < deadline, "loss not noticed");
+            // The other computer beats too. A beat of ours can land on one
+            // of theirs; a later one of theirs is then seen.
+            write_lock(tmp.path(), "THERE", 7, now_ms(&env));
             std::thread::sleep(Duration::from_millis(10));
         }
         assert_eq!(album.safety().view_only, Some(ViewOnly::Locked));
@@ -725,11 +964,7 @@ mod tests {
     fn a_conflict_copy_beside_the_database_is_named() {
         let tmp = tempfile::tempdir().unwrap();
         existing_album(tmp.path());
-        std::fs::write(
-            owl(tmp.path()).join("owlbum (conflicted copy).sqlite"),
-            b"",
-        )
-        .unwrap();
+        std::fs::write(owl(tmp.path()).join("owlbum (conflicted copy).sqlite"), b"").unwrap();
         let album = Album::open_with(tmp.path(), &none(), &env()).unwrap();
         assert!(!album.is_view_only(), "only a warning");
         assert_eq!(
@@ -775,10 +1010,7 @@ mod tests {
         .iter()
         .map(|r| serde_json::to_value(r).unwrap())
         .collect();
-        assert_eq!(
-            names,
-            ["read_only", "locked", "chosen", "newer", "damaged"]
-        );
+        assert_eq!(names, ["read_only", "locked", "chosen", "newer", "damaged"]);
         let codes: Vec<serde_json::Value> = [ErrorCode::AlbumDamaged, ErrorCode::AlbumLockStale]
             .iter()
             .map(|c| serde_json::to_value(c).unwrap())

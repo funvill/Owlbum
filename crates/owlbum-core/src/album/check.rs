@@ -25,8 +25,21 @@ pub enum Header {
 /// SQLite, so a newer album is recognised before any lock or journal is
 /// touched.
 pub fn read_header(path: &Path) -> io::Result<Header> {
-    let _ = path;
-    unimplemented!("#4")
+    /// The first 16 bytes of every SQLite database.
+    const MAGIC: &[u8; 16] = b"SQLite format 3\0";
+    let mut header = Vec::with_capacity(100);
+    std::fs::File::open(path)?
+        .take(100)
+        .read_to_end(&mut header)?;
+    if header.is_empty() {
+        return Ok(Header::Version(0));
+    }
+    if header.len() < 100 || &header[..16] != MAGIC {
+        return Ok(Header::NotADatabase);
+    }
+    // `user_version` is the big-endian integer at offset 60.
+    let version = i32::from_be_bytes([header[60], header[61], header[62], header[63]]);
+    Ok(Header::Version(u32::try_from(version).unwrap_or(u32::MAX)))
 }
 
 /// Runs `PRAGMA quick_check` on the database at `path`. Answers false when
@@ -37,18 +50,63 @@ pub fn read_header(path: &Path) -> io::Result<Header> {
 /// `writable` opens the connection for writing, so a journal left by a
 /// crash is rolled back first; the caller must hold the lock.
 pub fn quick_check(path: &Path, writable: bool) -> AppResult<bool> {
-    let _ = (path, writable);
-    unimplemented!("#4")
+    let failed = sqlite_error(text::album::CHECKING_DATABASE);
+    let flags = if writable {
+        OpenFlags::SQLITE_OPEN_READ_WRITE
+    } else {
+        OpenFlags::SQLITE_OPEN_READ_ONLY
+    } | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+    let conn = Connection::open_with_flags(path, flags).map_err(&failed)?;
+    conn.busy_timeout(db::BUSY_TIMEOUT).map_err(&failed)?;
+    let mut answer = Vec::new();
+    let result = conn.prepare("PRAGMA quick_check").and_then(|mut stmt| {
+        stmt.query_map([], |r| r.get::<_, String>(0))?
+            .try_for_each(|row| row.map(|line| answer.push(line)))
+    });
+    match result {
+        Ok(()) => Ok(answer.len() == 1 && answer[0] == "ok"),
+        Err(e) if is_damage(&e) => Ok(false),
+        Err(e) => Err(failed(e)),
+    }
+}
+
+/// True for the SQLite errors that mean the file itself is bad.
+fn is_damage(e: &rusqlite::Error) -> bool {
+    matches!(
+        e.sqlite_error_code(),
+        Some(ErrorCode::DatabaseCorrupt | ErrorCode::NotADatabase)
+    )
 }
 
 /// The name of a copy of the database that a sync tool left beside it in
 /// `.owlbum` (`owlbum (conflicted copy).sqlite`, `owlbum-PC-NAME.sqlite`,
-/// `owlbum.sync-conflict-….sqlite`), or None. When there are several, the
+/// `owlbum.sync-conflict-â€¦.sqlite`), or None. When there are several, the
 /// first by name. Owlbum's own files never match.
 pub fn conflict_file(owlbum_dir: &Path) -> Option<String> {
-    let _ = owlbum_dir;
-    unimplemented!("#4")
+    let mut found: Vec<String> = std::fs::read_dir(owlbum_dir)
+        .ok()?
+        .filter_map(Result::ok)
+        .filter(|e| e.file_type().is_ok_and(|t| t.is_file()))
+        .filter_map(|e| e.file_name().into_string().ok())
+        .filter(|name| is_conflict_name(name))
+        .collect();
+    found.sort();
+    found.into_iter().next()
 }
+
+/// A sync tool names its copy after the original: it starts with `owlbum`
+/// and ends with `.sqlite`. The database itself and the damaged files that
+/// Owlbum keeps after a restore (`owlbum.damaged-…`) are not copies.
+fn is_conflict_name(name: &str) -> bool {
+    let lower = name.to_lowercase();
+    lower.starts_with("owlbum")
+        && lower.ends_with(".sqlite")
+        && lower != super::root::DATABASE_FILE
+        && !lower.starts_with(DAMAGED_PREFIX)
+}
+
+/// The start of the name a damaged database is renamed to.
+pub const DAMAGED_PREFIX: &str = "owlbum.damaged-";
 
 #[cfg(test)]
 mod tests {

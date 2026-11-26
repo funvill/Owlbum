@@ -9,8 +9,12 @@
 use std::path::{Path, PathBuf};
 
 use chrono::{DateTime, Local, NaiveDate};
+use rusqlite::{Connection, MAIN_DB, OpenFlags};
 
+use crate::AppError;
+use crate::album::{check, db, root, sqlite_error};
 use crate::error::AppResult;
+use crate::text;
 
 /// How many daily copies are kept.
 pub const KEEP: usize = 3;
@@ -26,22 +30,84 @@ pub fn file_name(date: NaiveDate) -> String {
 /// The copies in `<owlbum_dir>/backup`, newest first. Files whose names are
 /// not a copy's (a copy being written, for example) are left out.
 pub fn list(owlbum_dir: &Path) -> Vec<(NaiveDate, PathBuf)> {
-    let _ = owlbum_dir;
-    unimplemented!("#4")
+    let Ok(entries) = std::fs::read_dir(owlbum_dir.join(BACKUP_DIR)) else {
+        return Vec::new();
+    };
+    let mut copies: Vec<(NaiveDate, PathBuf)> = entries
+        .filter_map(Result::ok)
+        .filter_map(|e| {
+            let name = e.file_name().into_string().ok()?;
+            let date = name.strip_prefix("owlbum-")?.strip_suffix(".sqlite")?;
+            let date = NaiveDate::parse_from_str(date, "%Y-%m-%d").ok()?;
+            (name == file_name(date)).then(|| (date, e.path()))
+        })
+        .collect();
+    copies.sort_by_key(|c| std::cmp::Reverse(c.0));
+    copies
 }
 
 /// Makes today's copy of the database at `db_path` if there is none yet,
 /// then keeps the newest [`KEEP`]. Answers the new copy's path, or None when
 /// today's copy already existed.
 pub fn daily(db_path: &Path, owlbum_dir: &Path, today: NaiveDate) -> AppResult<Option<PathBuf>> {
-    let _ = (db_path, owlbum_dir, today);
-    unimplemented!("#4")
+    let dir = owlbum_dir.join(BACKUP_DIR);
+    let path = dir.join(file_name(today));
+    if path.exists() {
+        return Ok(None);
+    }
+    let io_failed = |e: std::io::Error| {
+        AppError::internal(text::album::BACKING_UP)
+            .with_details(serde_json::json!({ "cause": e.to_string() }))
+    };
+    std::fs::create_dir_all(&dir).map_err(io_failed)?;
+    let partial = dir.join(format!("{}.partial", file_name(today)));
+    let made = copy_without_vectors(db_path, &partial)
+        .and_then(|()| std::fs::rename(&partial, &path).map_err(io_failed));
+    if let Err(e) = made {
+        let _ = std::fs::remove_file(&partial);
+        return Err(e);
+    }
+    for (_, old) in list(owlbum_dir).into_iter().skip(KEEP) {
+        let _ = std::fs::remove_file(old);
+    }
+    Ok(Some(path))
+}
+
+/// Copies the database with SQLite's backup API, then empties `vectors` in
+/// the copy and compacts it.
+fn copy_without_vectors(db_path: &Path, to: &Path) -> AppResult<()> {
+    let failed = sqlite_error(text::album::BACKING_UP);
+    let _ = std::fs::remove_file(to);
+    let src = Connection::open_with_flags(
+        db_path,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )
+    .map_err(&failed)?;
+    src.busy_timeout(db::BUSY_TIMEOUT).map_err(&failed)?;
+    src.backup(MAIN_DB, to, None::<fn(rusqlite::backup::Progress)>)
+        .map_err(&failed)?;
+    drop(src);
+
+    let copy = Connection::open(to).map_err(&failed)?;
+    let has_vectors: bool = copy
+        .query_row(
+            "SELECT count(*) > 0 FROM sqlite_master WHERE type = 'table' AND name = 'vectors'",
+            [],
+            |r| r.get(0),
+        )
+        .map_err(&failed)?;
+    if has_vectors {
+        copy.execute_batch("DELETE FROM vectors; VACUUM;")
+            .map_err(&failed)?;
+    }
+    Ok(())
 }
 
 /// The newest copy that passes `quick_check`, or None.
 pub fn newest_sound(owlbum_dir: &Path) -> Option<(NaiveDate, PathBuf)> {
-    let _ = owlbum_dir;
-    unimplemented!("#4")
+    list(owlbum_dir)
+        .into_iter()
+        .find(|(_, path)| check::quick_check(path, false).unwrap_or(false))
 }
 
 /// Replaces a damaged database with the newest sound copy. The damaged file
@@ -50,8 +116,33 @@ pub fn newest_sound(owlbum_dir: &Path) -> Option<(NaiveDate, PathBuf)> {
 /// of the copy restored, or None (and changes nothing) when there is no
 /// sound copy. The caller holds the lock and has no connection open.
 pub fn restore(db_path: &Path, now: DateTime<Local>) -> AppResult<Option<NaiveDate>> {
-    let _ = (db_path, now);
-    unimplemented!("#4")
+    let failed = |e: std::io::Error| {
+        AppError::internal(text::album::RESTORING_BACKUP)
+            .with_details(serde_json::json!({ "cause": e.to_string() }))
+    };
+    let Some(owlbum_dir) = db_path.parent() else {
+        return Ok(None);
+    };
+    let Some((date, copy)) = newest_sound(owlbum_dir) else {
+        return Ok(None);
+    };
+    let restoring = owlbum_dir.join(format!("{}.restoring", root::DATABASE_FILE));
+    std::fs::copy(&copy, &restoring).map_err(failed)?;
+
+    let damaged = format!(
+        "{}{}.sqlite",
+        check::DAMAGED_PREFIX,
+        now.format("%Y%m%d-%H%M%S")
+    );
+    let journal = owlbum_dir.join(format!("{}-journal", root::DATABASE_FILE));
+    if journal.exists() {
+        // A journal belongs to the damaged file; left in place it would be
+        // played back into the restored one.
+        std::fs::rename(&journal, owlbum_dir.join(format!("{damaged}-journal"))).map_err(failed)?;
+    }
+    std::fs::rename(db_path, owlbum_dir.join(&damaged)).map_err(failed)?;
+    std::fs::rename(&restoring, db_path).map_err(failed)?;
+    Ok(Some(date))
 }
 
 #[cfg(test)]
@@ -77,8 +168,11 @@ mod tests {
         .unwrap();
         let blob = vec![1u8; 64 * 1024];
         for i in 0..40 {
-            conn.execute("INSERT INTO vectors VALUES (?1, ?2)", rusqlite::params![i, blob])
-                .unwrap();
+            conn.execute(
+                "INSERT INTO vectors VALUES (?1, ?2)",
+                rusqlite::params![i, blob],
+            )
+            .unwrap();
         }
         conn.pragma_update(None, "user_version", 1).unwrap();
         path
@@ -128,7 +222,10 @@ mod tests {
             .unwrap();
         assert_eq!(daily(&db, &owl, date("2026-11-25")).unwrap(), None);
         assert_eq!(
-            count(&owl.join("backup").join("owlbum-2026-11-25.sqlite"), "photos"),
+            count(
+                &owl.join("backup").join("owlbum-2026-11-25.sqlite"),
+                "photos"
+            ),
             2
         );
     }
@@ -192,7 +289,11 @@ mod tests {
             std::fs::read(owl.join(format!("owlbum.damaged-{stamp}.sqlite"))).unwrap(),
             vec![9u8; 8192]
         );
-        assert!(owl.join("backup").join("owlbum-2026-11-24.sqlite").is_file());
+        assert!(
+            owl.join("backup")
+                .join("owlbum-2026-11-24.sqlite")
+                .is_file()
+        );
     }
 
     #[test]

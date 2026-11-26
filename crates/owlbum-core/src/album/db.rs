@@ -6,15 +6,15 @@
 //! sessions the only file is `owlbum.sqlite`.
 //!
 //! This module does not decide whether an album may be written: the lock
-//! file, view-only, the daily backup and the damage check are album safety
-//! (#4), which runs between [`super::locate`] and [`AlbumDb::open`].
+//! file, the daily backup and the damage check are album safety
+//! ([`super::open`]), which runs between [`super::locate`] and
+//! [`AlbumDb::open`] and makes a view-only [`AlbumDb`] when it must.
 
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use rusqlite::{Connection, OpenFlags, Transaction};
 
-use crate::AppError;
 use crate::album::read::Readers;
 use crate::album::root::AlbumLocation;
 use crate::album::schema::{self, SchemaState};
@@ -22,6 +22,7 @@ use crate::album::sqlite_error;
 use crate::album::writer::Writer;
 use crate::error::AppResult;
 use crate::text;
+use crate::{AppError, ErrorCode};
 
 /// How long a connection waits for another one in this program to finish
 /// (readers wait while the writer commits, and the writer waits for readers
@@ -59,13 +60,13 @@ pub struct AlbumDb {
     writer: Option<Writer>,
     /// Why writes are refused: the `view_only` error's message.
     view_only: Option<String>,
-    /// Set once the album's lock was taken over by another computer: the
-    /// `view_only` error's message from then on.
+    /// Set to the other computer's name once the album's lock was taken
+    /// over (Open anyway there): writes are refused from then on.
     lost: Option<LostLock>,
 }
 
-/// Shared with the lock's heartbeat: the message to refuse writes with once
-/// the lock is lost.
+/// Shared with the lock's heartbeat ([`super::lock::AlbumLock::lost_to`]):
+/// the name of the computer that took the album over, once one has.
 pub type LostLock = std::sync::Arc<std::sync::Mutex<Option<String>>>;
 
 impl AlbumDb {
@@ -107,20 +108,56 @@ impl AlbumDb {
     /// `album_id` cannot be read (a newer or damaged schema), a fresh one
     /// names the album for this session.
     pub fn view_only(path: &Path, message: &str) -> AppResult<Self> {
-        let _ = (path, message);
-        unimplemented!("#4")
+        let readers = Readers::new(path);
+        let (version, album_id) = readers
+            .read(|conn| {
+                let version = schema::version(conn)?;
+                Ok((version, schema::meta(conn, "album_id").ok().flatten()))
+            })
+            .unwrap_or((0, None));
+        let schema = if version > schema::CURRENT_VERSION {
+            SchemaState::Newer { version }
+        } else {
+            SchemaState::Current {
+                version,
+                from: version,
+            }
+        };
+        Ok(Self {
+            path: Some(path.to_path_buf()),
+            album_id: album_id.unwrap_or_else(|| uuid::Uuid::new_v4().to_string()),
+            schema,
+            readers,
+            writer: None,
+            view_only: Some(message.to_owned()),
+            lost: None,
+        })
     }
 
     /// A view-only database in memory, with the current schema and no rows,
     /// for a folder that has no album and cannot be written. Nothing is
     /// saved.
     pub fn in_memory(message: &str) -> AppResult<Self> {
-        let _ = message;
-        unimplemented!("#4")
+        let mut conn =
+            Connection::open_in_memory().map_err(sqlite_error(text::album::OPENING_DATABASE))?;
+        conn.pragma_update(None, "foreign_keys", true)
+            .map_err(sqlite_error(text::album::OPENING_DATABASE))?;
+        let schema = schema::migrate(&mut conn)?;
+        let album_id = schema::meta(&conn, "album_id")?
+            .ok_or_else(|| AppError::internal(text::album::OPENING_DATABASE))?;
+        Ok(Self {
+            path: None,
+            album_id,
+            schema,
+            readers: Readers::shared(conn),
+            writer: None,
+            view_only: Some(message.to_owned()),
+            lost: None,
+        })
     }
 
-    /// Refuses writes with a `view_only` error carrying the message in
-    /// `lost` once it is set (the album's lock was taken over).
+    /// Refuses writes with the `locked` view-only message once `lost` names
+    /// a computer (the album's lock was taken over).
     pub fn refuse_writes_when(&mut self, lost: LostLock) {
         self.lost = Some(lost);
     }
@@ -133,7 +170,12 @@ impl AlbumDb {
     /// Why writes are refused right now, as the `view_only` message; None
     /// when the database can be written.
     pub fn view_only_message(&self) -> Option<String> {
-        unimplemented!("#4")
+        if let Some(message) = &self.view_only {
+            return Some(message.clone());
+        }
+        let lost = self.lost.as_ref()?;
+        let host = lost.lock().unwrap_or_else(|p| p.into_inner()).clone()?;
+        Some(text::album::view_only::locked(&host))
     }
 
     /// The album's UUID from `meta`. It names the album in thumbnail keys.
@@ -153,8 +195,13 @@ impl AlbumDb {
         T: Send + 'static,
         F: FnOnce(&Transaction<'_>) -> AppResult<T> + Send + 'static,
     {
-        let _ = job;
-        unimplemented!("#4")
+        match (&self.writer, self.view_only_message()) {
+            (Some(writer), None) => writer.write(job),
+            (_, message) => Err(AppError::new(
+                ErrorCode::ViewOnly,
+                message.unwrap_or_else(|| text::album::view_only::READ_ONLY.to_owned()),
+            )),
+        }
     }
 
     /// Runs `f` with a read-only connection.
@@ -193,14 +240,20 @@ pub fn configure(conn: &Connection) -> rusqlite::Result<()> {
 /// Creates `<root>/.owlbum` (and nothing else) if it is missing. On Windows
 /// the folder is given the hidden attribute when it is created.
 fn create_owlbum_dir(root: &Path) -> AppResult<PathBuf> {
+    make_owlbum_dir(root).map_err(|e| {
+        AppError::internal(text::album::CREATING_DATABASE)
+            .with_details(serde_json::json!({ "cause": e.to_string() }))
+    })
+}
+
+/// [`create_owlbum_dir`] with the I/O error kept, so album safety can tell a
+/// folder that cannot be written from other failures.
+pub(crate) fn make_owlbum_dir(root: &Path) -> std::io::Result<PathBuf> {
     let dir = root.join(super::root::OWLBUM_DIR);
     if dir.is_dir() {
         return Ok(dir);
     }
-    std::fs::create_dir(&dir).map_err(|e| {
-        AppError::internal(text::album::CREATING_DATABASE)
-            .with_details(serde_json::json!({ "cause": e.to_string() }))
-    })?;
+    std::fs::create_dir(&dir)?;
     hide(&dir);
     Ok(dir)
 }
@@ -496,10 +549,11 @@ mod tests {
         db.refuse_writes_when(Arc::clone(&lost));
         db.write(|tx| insert_photo(tx, "a.jpg")).unwrap();
         assert_eq!(db.view_only_message(), None);
-        *lost.lock().unwrap() = Some("Taken.".into());
-        assert_eq!(db.view_only_message().as_deref(), Some("Taken."));
+        *lost.lock().unwrap() = Some("THERE".into());
+        let taken = text::album::view_only::locked("THERE");
+        assert_eq!(db.view_only_message(), Some(taken.clone()));
         let err = db.write(|tx| insert_photo(tx, "b.jpg")).unwrap_err();
-        assert_eq!(err.message, "Taken.");
+        assert_eq!(err.message, taken);
         assert_eq!(count_photos(&db), 1);
     }
 

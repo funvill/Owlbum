@@ -211,6 +211,7 @@ A banner is a full-width strip under the top bar. Its look (fill, icon, text siz
 | `view_only = "newer"` | "This album was last used by a newer Owlbum. It is open view-only." | **Check for updates** (see 08). |
 | `view_only = "damaged"` | "View only: this album's database is damaged." | **Restore backup…** opens the `album_damaged` dialog above. |
 | `view_only = "chosen"` (the user picked Open view-only at a stale lock) | "View only: this album may be open on <host>." | **Open for changes** calls `album_open(path, { take_lock: true })`. |
+| `view_only = "chosen"` and `lock_host` is null (Open view-only with no old lock) | "View only: you opened this album view-only." | **Open for changes** calls `album_open(path)`. |
 | `conflict_file` is set | "Another computer changed this album at the same time. Owlbum is using its own copy and has not merged "<file name>"." | **x** |
 
 **What view-only disables.** Browsing, filtering, the viewer, the map, copy and drag-out work. These controls are disabled, each with a tooltip that says why, which is the first sentence of the banner in force (for example "View only: this folder can't be written to."): the star button on tiles, every typed field in the details panel, people chips' remove buttons, "Use the camera's date", Edit, Tidy, and the tagging controls. The keys S, F, H, E, `[`, `]`, Up, Down, Delete and Ctrl+Z do nothing and show the toast "This album is view-only." at most once every 4 seconds.

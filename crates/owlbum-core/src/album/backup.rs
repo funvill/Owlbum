@@ -2,7 +2,10 @@
 //!
 //! On the first writable open of each calendar day (local time) the
 //! database is copied to `.owlbum/backup/owlbum-<YYYY-MM-DD>.sqlite` with
-//! SQLite's backup API, before any migration. The copy leaves out the
+//! SQLite's backup API, after the damage check and before any migration.
+//! When no migration is waiting, [`super::Album::open`] makes it on a
+//! thread of its own after the open answers ([`daily_gated`]), taking turns
+//! with the album's writer while it reads. The copy leaves out the
 //! `vectors` table. The newest [`KEEP`] copies are kept, judged by the date
 //! in the name.
 
@@ -50,6 +53,19 @@ pub fn list(owlbum_dir: &Path) -> Vec<(NaiveDate, PathBuf)> {
 /// then keeps the newest [`KEEP`]. Answers the new copy's path, or None when
 /// today's copy already existed.
 pub fn daily(db_path: &Path, owlbum_dir: &Path, today: NaiveDate) -> AppResult<Option<PathBuf>> {
+    daily_gated(db_path, owlbum_dir, today, None)
+}
+
+/// [`daily`] while the album is open: the database is read with `gate` held
+/// shared, as the album's readers do, so the copy and the album's writer
+/// take turns rather than meet SQLite's busy handler. Only the read of the
+/// database holds it, not the compaction of the copy.
+pub fn daily_gated(
+    db_path: &Path,
+    owlbum_dir: &Path,
+    today: NaiveDate,
+    gate: Option<&db::Gate>,
+) -> AppResult<Option<PathBuf>> {
     let dir = owlbum_dir.join(BACKUP_DIR);
     let path = dir.join(file_name(today));
     if path.exists() {
@@ -61,7 +77,7 @@ pub fn daily(db_path: &Path, owlbum_dir: &Path, today: NaiveDate) -> AppResult<O
     };
     std::fs::create_dir_all(&dir).map_err(io_failed)?;
     let partial = dir.join(format!("{}.partial", file_name(today)));
-    let made = copy_without_vectors(db_path, &partial)
+    let made = copy_without_vectors(db_path, &partial, gate)
         .and_then(|()| std::fs::rename(&partial, &path).map_err(io_failed));
     if let Err(e) = made {
         let _ = std::fs::remove_file(&partial);
@@ -75,7 +91,7 @@ pub fn daily(db_path: &Path, owlbum_dir: &Path, today: NaiveDate) -> AppResult<O
 
 /// Copies the database with SQLite's backup API, then empties `vectors` in
 /// the copy and compacts it.
-fn copy_without_vectors(db_path: &Path, to: &Path) -> AppResult<()> {
+fn copy_without_vectors(db_path: &Path, to: &Path, gate: Option<&db::Gate>) -> AppResult<()> {
     let failed = sqlite_error(text::album::BACKING_UP);
     let _ = std::fs::remove_file(to);
     let src = Connection::open_with_flags(
@@ -84,9 +100,12 @@ fn copy_without_vectors(db_path: &Path, to: &Path) -> AppResult<()> {
     )
     .map_err(&failed)?;
     src.busy_timeout(db::BUSY_TIMEOUT).map_err(&failed)?;
-    src.backup(MAIN_DB, to, None::<fn(rusqlite::backup::Progress)>)
-        .map_err(&failed)?;
-    drop(src);
+    {
+        let _turn = gate.map(|g| g.read().unwrap_or_else(|p| p.into_inner()));
+        src.backup(MAIN_DB, to, None::<fn(rusqlite::backup::Progress)>)
+            .map_err(&failed)?;
+        drop(src);
+    }
 
     let copy = Connection::open(to).map_err(&failed)?;
     let has_vectors: bool = copy

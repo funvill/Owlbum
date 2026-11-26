@@ -70,6 +70,29 @@ fn serve_small(scanner: &Scanner, thumbs: &Thumbs, keys: &[String]) {
     }
 }
 
+/// Opens the album, runs the default query, reads the first block and
+/// serves the first screen's small thumbnails: what a person reopening it
+/// waits for. Answers the scanner, the time `Album::open` took and the time
+/// to the first screen of tiles.
+fn reopen(root: &Path, thumbs: &Thumbs) -> (Scanner, Duration, Duration) {
+    let opened = Instant::now();
+    let reopened = scanner(root, thumbs, Arc::new(FirstChange::default()));
+    let open_took = opened.elapsed();
+    let engine = QueryEngine::new();
+    let album = Arc::clone(reopened.album());
+    let result = engine.run(&album, &Query::default(), None).unwrap();
+    let window = engine
+        .window(&album, &reopened.overlay(), &result.token, 0, BLOCK)
+        .unwrap();
+    let keys: Vec<String> = window
+        .iter()
+        .take(SCREEN as usize)
+        .map(|r| r.thumb_key.clone())
+        .collect();
+    serve_small(&reopened, thumbs, &keys);
+    (reopened, open_took, opened.elapsed())
+}
+
 fn check(root: &Path, data: &Path, expect: Option<usize>) {
     let thumbs = Thumbs::open(AppData::open(data).unwrap()).unwrap();
 
@@ -87,24 +110,11 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
     }
     drop(first);
 
-    // Reopen with the thumbnails kept: open, run the default query, read
-    // the first block and serve the first screen's small thumbnails.
-    let opened = Instant::now();
-    let reopened = scanner(root, &thumbs, Arc::new(FirstChange::default()));
-    let open_took = opened.elapsed();
+    // Reopen with the thumbnails kept. The first reopen of the day also
+    // makes the day's backup, after the open answers (#124).
+    let (reopened, open_took, first_tiles) = reopen(root, &thumbs);
     let engine = QueryEngine::new();
     let album = Arc::clone(reopened.album());
-    let result = engine.run(&album, &Query::default(), None).unwrap();
-    let window = engine
-        .window(&album, &reopened.overlay(), &result.token, 0, BLOCK)
-        .unwrap();
-    let keys: Vec<String> = window
-        .iter()
-        .take(SCREEN as usize)
-        .map(|r| r.thumb_key.clone())
-        .collect();
-    serve_small(&reopened, &thumbs, &keys);
-    let first_tiles = opened.elapsed();
 
     // The walk and compare of the reopen, which finds nothing to do.
     let walked = Instant::now();
@@ -187,6 +197,12 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
         .unwrap();
     let star = t.elapsed();
 
+    // A later reopen the same day: no backup, the file cache warm.
+    drop(album);
+    drop(reopened);
+    let (again, later_open, later_tiles) = reopen(root, &thumbs);
+    drop(again);
+
     println!("large album, {found} photos");
     println!(
         "  first open: first album_changed {:?}, scan done {scanned:?}",
@@ -196,6 +212,14 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
     println!(
         "  reopen: first {SCREEN} tiles served (target 1 s) {}",
         ms(first_tiles)
+    );
+    println!(
+        "  later reopen: Album::open with index load {}",
+        ms(later_open)
+    );
+    println!(
+        "  later reopen: first {SCREEN} tiles served (target 1 s) {}",
+        ms(later_tiles)
     );
     println!("  reopen: walk and compare (target 15 s) {walk_took:?}");
     println!("  query_run, date (target 30 ms) {}", ms(run_date));

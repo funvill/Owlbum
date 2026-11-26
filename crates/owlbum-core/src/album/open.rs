@@ -17,16 +17,22 @@
 //!    view-only (`read_only`), in memory when there is no database.
 //! 5. With the lock held, run `PRAGMA quick_check`. A damaged database is
 //!    answered with `album_damaged`, or restored from the newest sound
-//!    backup when asked.
+//!    backup when asked. Beside the check, on a thread of its own and a
+//!    read-only connection, the album index is read ([`Preload`]); it is
+//!    kept only when the check passes and the open changes nothing in the
+//!    file, and read again after the open otherwise.
 //! 6. Make the day's backup ([`backup::daily`]), then open the database and
-//!    migrate it ([`AlbumDb::open`]).
+//!    migrate it ([`AlbumDb::open`]). When no migration is waiting, the
+//!    backup is made on a thread after the open answers instead (#124: about
+//!    1.7 s for 100,000 photos); the album waits for it when it closes.
 //!
 //! When several reasons for view-only apply, the first in that order wins:
 //! `newer`, `read_only`, `locked`, `chosen`, `damaged`.
 
 use std::io;
-use std::path::Path;
-use std::sync::Arc;
+use std::path::{Path, PathBuf};
+use std::sync::{Arc, Mutex};
+use std::thread::JoinHandle;
 use std::time::Duration;
 
 use chrono::{DateTime, Local, TimeZone};
@@ -37,7 +43,7 @@ use crate::album::check::{self, Header};
 use crate::album::db::{self, AlbumDb, Opened};
 use crate::album::lock::{self, AlbumLock, Owner, Verdict};
 use crate::album::root::AlbumLocation;
-use crate::album::schema::CURRENT_VERSION;
+use crate::album::schema::{CURRENT_VERSION, SchemaState};
 use crate::album::state::{AlbumState, StatusListener};
 use crate::album::{backup, locate};
 use crate::error::AppResult;
@@ -140,6 +146,16 @@ pub struct Album {
     /// The revision, the status listener and whether a write failed,
     /// shared with the database and the lock's heartbeat.
     state: Arc<AlbumState>,
+    /// The day's backup, while it is being made after the open answered.
+    backup: Mutex<Option<JoinHandle<()>>>,
+}
+
+impl Drop for Album {
+    /// Waits for the day's backup before the database closes and the lock
+    /// is removed, so no other Owlbum opens the album while it is copied.
+    fn drop(&mut self) {
+        self.wait_for_backup();
+    }
 }
 
 impl Album {
@@ -250,19 +266,47 @@ impl Album {
         };
         // From here on an early return drops `lock`, which deletes the file.
 
+        let mut preload = None;
+        let mut backup_later = None;
         if location.exists {
-            let sound = !known_damaged && check::quick_check(&db_path, true)?;
-            if !sound {
+            // A current schema with no journal beside it: nothing the open
+            // does after the check changes the rows, so the index can be
+            // read now. (With a journal the check may roll the file back,
+            // which a read-only connection cannot do.)
+            let current = matches!(
+                check::read_header(&db_path),
+                Ok(Header::Version(v)) if v == CURRENT_VERSION
+            );
+            let reading = (!known_damaged && current && !journal_path(&db_path).exists())
+                .then(|| Preload::start(&db_path, &location.scope));
+            let checked = if known_damaged {
+                Ok(false)
+            } else {
+                check::quick_check(&db_path, true)
+            };
+            // Joined before anything else touches the file, so its
+            // connection is closed before a restore renames it.
+            let preloaded = reading.and_then(Preload::finish);
+            let sound = checked?;
+            if sound {
+                preload = preloaded;
+            } else {
+                drop(preloaded);
                 let restored =
                     options.restore_backup && backup::restore(&db_path, (env.clock)())?.is_some();
                 if !restored {
                     return Err(damaged(&owl));
                 }
             }
-            // A failed backup does not stop the album opening: nothing is
-            // lost, and tomorrow's open tries again. (Logged once #5 brings
-            // the log.)
-            let _ = backup::daily(&db_path, &owl, (env.clock)().date_naive());
+            let today = (env.clock)().date_naive();
+            if sound && current {
+                backup_later = Some((db_path.clone(), owl.clone(), today));
+            } else if let Err(e) = backup::daily(&db_path, &owl, today) {
+                // A migration may be waiting, so the copy is made first. A
+                // failed backup does not stop the album opening: nothing is
+                // lost, and tomorrow's open tries again.
+                tracing::warn!(target: "album", "the day's backup failed: {e}");
+            }
         }
 
         let mut db = match AlbumDb::open(&location)? {
@@ -279,6 +323,7 @@ impl Album {
                     db,
                     lock: None,
                     state: Arc::default(),
+                    backup: Mutex::default(),
                 });
             }
         };
@@ -289,13 +334,32 @@ impl Album {
             let state = Arc::clone(&state);
             lock.on_lost(Arc::new(move || state.status_changed()));
         }
+        // The index read beside the check is kept only when the open
+        // migrated nothing.
+        let unchanged = matches!(
+            db.schema(),
+            SchemaState::Current { version, from } if version == from
+        );
+        let index = match preload {
+            Some(index) if unchanged => Arc::new(index),
+            _ => load_index(&db, &location.scope, false)?,
+        };
+        let backup = backup_later.map(|(db_path, owl, today)| {
+            let gate = db.gate();
+            std::thread::spawn(move || {
+                if let Err(e) = backup::daily_gated(&db_path, &owl, today, Some(&gate)) {
+                    tracing::warn!(target: "album", "the day's backup failed: {e}");
+                }
+            })
+        });
         Ok(Self {
-            index: load_index(&db, &location.scope, false)?,
+            index,
             location,
             safety,
             db,
             lock: Some(lock),
             state,
+            backup: Mutex::new(backup),
         })
     }
 
@@ -334,7 +398,17 @@ impl Album {
             db,
             lock: None,
             state: Arc::default(),
+            backup: Mutex::default(),
         })
+    }
+
+    /// Waits until the day's backup, when one is being made after the open
+    /// answered, is done.
+    pub fn wait_for_backup(&self) {
+        let handle = self.backup.lock().unwrap_or_else(|p| p.into_inner()).take();
+        if let Some(handle) = handle {
+            let _ = handle.join();
+        }
     }
 
     /// Where the album is: root and scope.
@@ -460,6 +534,36 @@ fn load_index(db: &AlbumDb, scope: &str, tolerant: bool) -> AppResult<Arc<AlbumI
         Err(_) if tolerant => Ok(Arc::new(AlbumIndex::empty(scope))),
         Err(e) => Err(e),
     }
+}
+
+/// The album index read beside the damage check, on a thread of its own
+/// and a read-only connection.
+struct Preload(JoinHandle<Option<AlbumIndex>>);
+
+impl Preload {
+    fn start(db_path: &Path, scope: &str) -> Self {
+        let (path, scope) = (db_path.to_path_buf(), scope.to_owned());
+        Self(std::thread::spawn(move || {
+            let flags = rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
+                | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
+            let conn = rusqlite::Connection::open_with_flags(&path, flags).ok()?;
+            conn.busy_timeout(db::BUSY_TIMEOUT).ok()?;
+            AlbumIndex::load(&conn, &scope).ok()
+        }))
+    }
+
+    /// The index, or None when it could not be read (it is then read again
+    /// after the open). Its connection is closed when this answers.
+    fn finish(self) -> Option<AlbumIndex> {
+        self.0.join().ok().flatten()
+    }
+}
+
+/// The rollback journal beside the database at `db_path`.
+fn journal_path(db_path: &Path) -> PathBuf {
+    let mut name = db_path.as_os_str().to_owned();
+    name.push("-journal");
+    PathBuf::from(name)
 }
 
 /// How long a lock file that is not (yet) a lock is given to be finished
@@ -730,6 +834,62 @@ mod tests {
         *now.lock().unwrap() += chrono::Duration::days(1);
         drop(Album::open_with(tmp.path(), &none(), &env).unwrap());
         assert_eq!(backup::list(&owl(tmp.path())).len(), 2);
+    }
+
+    #[test]
+    fn the_days_backup_is_made_after_the_open_answers_and_writes_still_work() {
+        let tmp = tempfile::tempdir().unwrap();
+        existing_album(tmp.path());
+        let (env, _) = env_on("HERE", "2026-11-26");
+        let album = Album::open_with(tmp.path(), &none(), &env).unwrap();
+        // A write made while the copy may still be running waits its turn.
+        insert_photo(&album, "b.jpg").unwrap();
+        album.wait_for_backup();
+        let copies = backup::list(&owl(tmp.path()));
+        assert_eq!(copies.len(), 1);
+        assert!(check::quick_check(&copies[0].1, false).unwrap());
+        let n: i64 = rusqlite::Connection::open(&copies[0].1)
+            .unwrap()
+            .query_row("SELECT count(*) FROM photos", [], |r| r.get(0))
+            .unwrap();
+        assert!(n >= 1, "the copy holds the album as opened");
+        album.wait_for_backup();
+        assert_eq!(photos(&album), 2);
+    }
+
+    // The album index is read beside the damage check.
+
+    #[test]
+    fn the_index_read_beside_the_check_holds_every_photo() {
+        let tmp = tempfile::tempdir().unwrap();
+        existing_album(tmp.path());
+        let album = Album::open_with(tmp.path(), &none(), &env()).unwrap();
+        insert_photo(&album, "b.jpg").unwrap();
+        drop(album);
+        let album = Album::open_with(tmp.path(), &none(), &env()).unwrap();
+        assert_eq!(album.index().len(), 2);
+    }
+
+    #[test]
+    fn a_journal_beside_the_database_still_gives_a_full_index() {
+        let tmp = tempfile::tempdir().unwrap();
+        existing_album(tmp.path());
+        // A journal that is not hot: SQLite ignores it, and the open reads
+        // the index after the check instead of beside it.
+        std::fs::write(owl(tmp.path()).join("owlbum.sqlite-journal"), b"").unwrap();
+        let album = Album::open_with(tmp.path(), &none(), &env()).unwrap();
+        assert_eq!(album.index().len(), 1);
+        assert!(!album.is_view_only());
+    }
+
+    #[test]
+    fn a_damaged_database_read_beside_the_check_is_still_refused() {
+        let tmp = tempfile::tempdir().unwrap();
+        existing_album(tmp.path());
+        damage(tmp.path());
+        let err = Album::open_with(tmp.path(), &none(), &env()).unwrap_err();
+        assert_eq!(err.code, ErrorCode::AlbumDamaged);
+        assert!(!owl(tmp.path()).join(LOCK_FILE).exists(), "lock released");
     }
 
     // Lock from this host whose process is no longer running: stale,

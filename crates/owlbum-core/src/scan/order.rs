@@ -49,6 +49,63 @@ pub fn natural_cmp_text(a: &str, b: &str) -> Ordering {
 
 /// Steps 2 to 5 only: names that differ only in case answer `Equal` here.
 fn runs_cmp(a: &str, b: &str) -> Ordering {
+    if a.is_ascii() && b.is_ascii() {
+        ascii_runs_cmp(a.as_bytes(), b.as_bytes())
+    } else {
+        unicode_runs_cmp(a, b)
+    }
+}
+
+/// [`runs_cmp`] for two ASCII names, on bytes. For ASCII, simple
+/// lower-casing is `to_ascii_lowercase`, so this answers what
+/// [`unicode_runs_cmp`] answers, without its per-character iterators: it is
+/// the comparison the album index's name sort makes about 1.7 million times
+/// for 100,000 photos (#124).
+fn ascii_runs_cmp(a: &[u8], b: &[u8]) -> Ordering {
+    /// The end of the run that starts at `from`.
+    fn run_end(s: &[u8], from: usize) -> usize {
+        let digits = s[from].is_ascii_digit();
+        s[from..]
+            .iter()
+            .position(|c| c.is_ascii_digit() != digits)
+            .map_or(s.len(), |n| from + n)
+    }
+    let (mut i, mut j) = (0, 0);
+    loop {
+        match (i < a.len(), j < b.len()) {
+            (false, false) => return Ordering::Equal,
+            (false, true) => return Ordering::Less,
+            (true, false) => return Ordering::Greater,
+            (true, true) => {}
+        }
+        let (p_end, q_end) = (run_end(a, i), run_end(b, j));
+        let (p, q) = (&a[i..p_end], &b[j..q_end]);
+        let order = match (p[0].is_ascii_digit(), q[0].is_ascii_digit()) {
+            (true, true) => {
+                let zeros = |s: &[u8]| s.iter().take_while(|&&c| c == b'0').count();
+                let (pv, qv) = (&p[zeros(p)..], &q[zeros(q)..]);
+                // By number, then fewer leading zeros first.
+                pv.len()
+                    .cmp(&qv.len())
+                    .then_with(|| pv.cmp(qv))
+                    .then_with(|| p.len().cmp(&q.len()))
+            }
+            (true, false) => Ordering::Less,
+            (false, true) => Ordering::Greater,
+            (false, false) => p
+                .iter()
+                .map(u8::to_ascii_lowercase)
+                .cmp(q.iter().map(u8::to_ascii_lowercase)),
+        };
+        if order != Ordering::Equal {
+            return order;
+        }
+        (i, j) = (p_end, q_end);
+    }
+}
+
+/// [`runs_cmp`] for any names.
+fn unicode_runs_cmp(a: &str, b: &str) -> Ordering {
     let mut x = Runs::new(a);
     let mut y = Runs::new(b);
     loop {
@@ -200,5 +257,39 @@ mod tests {
             assert_ne!(natural_cmp(w[0], w[1]), Ordering::Greater, "{w:?}");
         }
         assert_eq!(s.len(), list.len());
+    }
+
+    #[test]
+    fn the_ascii_path_answers_what_the_general_path_answers() {
+        // Short names from an alphabet chosen for the edges: case, leading
+        // zeros, digit and text runs side by side, punctuation that sorts
+        // between the cases.
+        const ALPHABET: &[u8] = b"0019aAzZ_.- [`";
+        let mut seed: u64 = 0x5eed;
+        let mut next = || {
+            seed = seed.wrapping_mul(6_364_136_223_846_793_005).wrapping_add(1);
+            (seed >> 33) as usize
+        };
+        let mut names: Vec<String> = vec![String::new(), "0".into(), "00".into()];
+        for _ in 0..400 {
+            let len = next() % 7;
+            names.push(
+                (0..len)
+                    .map(|_| char::from(ALPHABET[next() % ALPHABET.len()]))
+                    .collect(),
+            );
+        }
+        for a in &names {
+            for b in &names {
+                assert_eq!(
+                    ascii_runs_cmp(a.as_bytes(), b.as_bytes()),
+                    unicode_runs_cmp(a, b),
+                    "{a:?} against {b:?}"
+                );
+            }
+        }
+        // A name that is not ASCII takes the general path.
+        assert_eq!(runs_cmp("IMG_1", "ÉMG_1"), Ordering::Less);
+        assert_eq!(runs_cmp("émg_2", "ÉMG_10"), Ordering::Less);
     }
 }

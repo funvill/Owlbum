@@ -286,6 +286,13 @@ impl AlbumDb {
     pub fn read<T>(&self, f: impl FnOnce(&Connection) -> AppResult<T>) -> AppResult<T> {
         self.readers.read(f)
     }
+
+    /// The gate the readers hold shared and the writer holds while it
+    /// writes. Anything else that reads the file while the album is open
+    /// (the day's backup) holds it shared too.
+    pub(crate) fn gate(&self) -> Gate {
+        self.readers.gate()
+    }
 }
 
 /// Opens the album database for writing, creating the file when it does not

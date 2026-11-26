@@ -2,6 +2,12 @@
 # The gate every change must pass, on Windows (Git Bash) and on Linux.
 # Stops at the first failure. See docs/08-desktop-and-release.md, "Tests".
 set -euo pipefail
+
+# `--quick` is the merge check for a single issue: format, lint, bindings and
+# page types/lint, plus whatever focused tests the author ran. The full run
+# (all Rust and page tests, page build) happens on main every few merges.
+quick=false
+[ "${1:-}" = "--quick" ] && quick=true
 source "$(dirname "$0")/env.sh"
 
 step() { printf '\n==> %s\n' "$*"; }
@@ -62,6 +68,7 @@ cargo clippy --workspace --all-targets -- -D warnings
 step "TypeScript bindings are current"
 cargo test -p owlbum --test bindings
 
+if [ "$quick" = false ]; then
 step "Rust tests"
 # The tests run with a temporary folder of their own, which must be empty
 # when they finish: a test that leaves an album or data folder behind
@@ -86,6 +93,7 @@ if [ -n "$leftovers" ]; then
   exit 1
 fi
 echo "no temporary folders left behind"
+fi
 
 step "Page types"
 npm --prefix ui run typecheck
@@ -93,10 +101,16 @@ npm --prefix ui run typecheck
 step "Page lint"
 npm --prefix ui run lint
 
+if [ "$quick" = false ]; then
 step "Page tests"
 npm --prefix ui test
 
 step "Page build"
 npm --prefix ui run build
+fi
 
-printf '\nAll checks passed.\n'
+if [ "$quick" = true ]; then
+  printf '\nQuick checks passed (full test run not done).\n'
+else
+  printf '\nAll checks passed.\n'
+fi

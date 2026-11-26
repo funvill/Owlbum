@@ -828,11 +828,11 @@ The timeline shows the same photos as the grid, in date order, with a heading ov
 +-----------------------------------------------+
 | [Grid|Timeline|Map]            [ Day | Month ]|   view switch, unit switch at the right
 +-----------------------------------------------+
-| Saturday 14 July 2026 · 37 photos         |2026|   sticky heading (32px); month rail at the right (44px)
+| Tuesday 14 July 2026 · 37 photos          |2026|   sticky heading (32px); month rail at the right (44px)
 | [tile][tile][tile][tile]                  | Jan|
 | [tile][tile][tile][tile]                  | Feb|
 | ...                                       |>Jul|   the month in view is marked
-| Sunday 15 July 2026 · 12 photos           |2027|
+| Wednesday 15 July 2026 · 12 photos        |2027|
 | [tile][tile][tile][tile]                  | Mar|
 | ...                                       |    |
 | No date · 5 photos                        |    |
@@ -849,8 +849,8 @@ The timeline shows the same photos as the grid, in date order, with a heading ov
 | Which date | The effective date: the typed date, else the camera's. |
 | Grouping | By the written calendar date: the first 10 characters (`YYYY-MM-DD`) for Day, the first 7 (`YYYY-MM`) for Month. The date is never converted through a time zone, so a photo taken at 23:30 abroad stays on its day. |
 | No date | One last group, headed "No date". |
-| Unit | A **Day / Month** segmented control, labelled "Group by". Until the user picks, the unit is automatic: Month when the dated photos in the result span more than 90 days from first to last, Day otherwise. A pick is saved in the setting `timeline_unit` and used for every album. |
-| Heading text | Day: "Saturday 14 July 2026 · 37 photos". Month: "July 2026 · 412 photos". No date: "No date · 5 photos". One photo reads "1 photo". The count is the photos in the group that pass the filter, with stacks unfolded. |
+| Unit | A **Day / Month** segmented control, labelled "Group by". Until the user picks, the unit is automatic: Month when the dated photos in the result span more than 90 calendar days from the first one's day to the last one's, Day otherwise (2026-01-01 to 2026-04-01 is 90 days and stays Day). The switch shows the unit the result used. A pick is saved in the setting `timeline_unit` and used for every album. |
+| Heading text | Day: "Tuesday 14 July 2026 · 37 photos". Month: "July 2026 · 412 photos". No date: "No date · 5 photos". One photo reads "1 photo". The count is the photos in the group that pass the filter, with stacks unfolded. |
 | Sticky headings | The heading of the group at the top of the view stays at the top while its group scrolls. The next heading pushes it out. |
 | Clicking a heading | Selects every photo in the group and makes the first one the current photo. Ctrl-click adds the group to the selection. The heading is a button; Enter and Space do the same. |
 | Keys | The same as the grid. Left and Right step in timeline order; Home and End go to the first and last photo. |

@@ -236,6 +236,24 @@ export async function selectAll(): Promise<void> {
   commit({ current: now, anchor: anchor ?? now, selection: ids });
 }
 
+/**
+ * A click on a timeline heading (docs/04-browsing.md, "Timeline view"):
+ * every photo of the group, `count` tiles from `start`, with the first one
+ * current. With `add` (Ctrl), the group joins the selection.
+ */
+export async function selectGroup(start: number, count: number, add: boolean): Promise<void> {
+  const held = token();
+  if (held === null || count <= 0) return;
+  const mine = ++op;
+  const ids = heldIds(start, start + count - 1) ?? (await fetchIds(held, start, count));
+  if (ids === null || !stillMine(mine, held)) return;
+  const first = ids[0];
+  if (first === undefined) return;
+  const at = { id: first, index: start };
+  const selection = add ? [...new Set([...state().selection, ...ids])] : ids;
+  commit({ current: at, anchor: at, selection });
+}
+
 /** Ctrl+D, and the details panel's close button: nothing selected, no current photo, no anchor. */
 export function selectNone(): void {
   op++;

@@ -9,6 +9,7 @@ import {
   type KeyboardEvent,
 } from "react";
 import { gridText } from "../../text/grid";
+import { timelineText } from "../../text/timeline";
 import { useSettingsStore } from "../app";
 import {
   PAD,
@@ -25,6 +26,8 @@ import {
   type GridLayout,
   type VisibleRange,
 } from "./layout";
+import { HEAD, groupOfRow, rowAt, rowTiles, rowTop } from "./groups";
+import { selectGroup } from "./selection";
 import { animatedLabel, gridBlocks, setGridView, useGridStore } from "./store";
 import { Tile, type TileActions } from "./Tile";
 import "./Grid.css";
@@ -39,6 +42,26 @@ const LINE = 16;
 
 const sameRange = (a: VisibleRange, b: VisibleRange) =>
   a.firstRow === b.firstRow && a.endRow === b.endRow && a.lastIndex === b.lastIndex;
+
+/** The timeline's sticky heading: the group at the top of the view, pushed up by the next heading. */
+interface Sticky {
+  group: number;
+  y: number;
+}
+
+/** The sticky heading for real scroll `real`, or null where none shows (the grid, or a heading in its own place). */
+function stickyAt(l: GridLayout, real: number): Sticky | null {
+  if (l.groups === null || l.rows === 0) return null;
+  const top = real - PAD;
+  const group = groupOfRow(l, rowAt(l, Math.max(0, top)));
+  const own = rowTop(l, l.groups.headRows[group]!);
+  if (top <= own) return null;
+  const next = l.groups.headRows[group + 1];
+  const y = next === undefined ? 0 : Math.min(0, rowTop(l, next) - top - HEAD);
+  return { group, y };
+}
+
+const sameSticky = (a: Sticky | null, b: Sticky | null) => a === b || (a !== null && b !== null && a.group === b.group && a.y === b.y);
 
 /**
  * The grid of the current result (docs/04-browsing.md, "The grid"): a
@@ -58,6 +81,7 @@ export function Grid(props: GridProps) {
   useGridStore((s) => s.formats);
   const editTarget = useSettingsStore((s) => s.settings?.edit_target ?? "album");
   const count = result?.count ?? 0;
+  const groups = result?.groups ?? null;
 
   const blocks = useMemo(() => gridBlocks(), []);
   useSyncExternalStore(
@@ -76,8 +100,9 @@ export function Grid(props: GridProps) {
   const boxRef = useRef<HTMLDivElement>(null);
   const layerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
-  const layout = useMemo(() => gridLayout(size.width, count, thumbSize), [size.width, count, thumbSize]);
+  const layout = useMemo(() => gridLayout(size.width, count, thumbSize, groups), [size.width, count, thumbSize, groups]);
   const [range, setRange] = useState<VisibleRange>(() => visibleRange(layout, 0, 0, count));
+  const [sticky, setSticky] = useState<Sticky | null>(null);
 
   // The latest values, for the handlers attached once.
   // `at` is where the current photo is, or is going while a step waits on its row.
@@ -101,7 +126,7 @@ export function Grid(props: GridProps) {
     const layer = layerRef.current;
     if (el === null || layer === null) return;
     const v = live.current;
-    const y = el.scrollTop - v.real + PAD + drawnFirst.current * v.layout.stride;
+    const y = el.scrollTop - v.real + PAD + rowTop(v.layout, drawnFirst.current);
     layer.style.transform = `translateY(${y}px)`;
   }, []);
 
@@ -117,6 +142,8 @@ export function Grid(props: GridProps) {
     placeLayer();
     const next = visibleRange(v.layout, real, viewport, v.count);
     setRange((before) => (sameRange(before, next) ? before : next));
+    const nextSticky = stickyAt(v.layout, real);
+    setSticky((before) => (sameSticky(before, nextSticky) ? before : nextSticky));
     blocks.want({
       first: next.firstIndex,
       last: next.lastIndex,
@@ -305,17 +332,52 @@ export function Grid(props: GridProps) {
   const shownByIndex = (i: number) => pending !== null && i >= pending.first && i <= pending.last;
   const others = pending === null || pending.add;
   const rows = [];
+  const firstTop = rowTop(layout, range.firstRow);
+  const heading = (g: number, copy = false) => {
+    const group = groups?.[g];
+    if (group === undefined) return null;
+    return (
+      <button
+        type="button"
+        className="ow-grid__head"
+        tabIndex={copy ? -1 : undefined}
+        aria-label={timelineText.selectGroup(group.key, group.photos)}
+        onClick={(e) => void selectGroup(group.start, group.count, e.ctrlKey || e.metaKey)}
+      >
+        {timelineText.heading(group.key, group.photos)}
+      </button>
+    );
+  };
   for (let r = range.firstRow; r < range.endRow; r++) {
+    const tiles: [number, number] | null =
+      layout.groups === null ? [r * layout.cols, Math.min(count, (r + 1) * layout.cols)] : rowTiles(layout, r);
+    if (tiles === null) {
+      // A timeline heading: a click selects its group.
+      rows.push(
+        <div
+          key={r}
+          role="row"
+          aria-rowindex={r + 1}
+          className="ow-grid__row ow-grid__head-row"
+          style={{ height: HEAD, transform: `translateY(${rowTop(layout, r) - firstTop}px)` }}
+        >
+          <div role="rowheader" className="ow-grid__head-cell">
+            {heading(groupOfRow(layout, r))}
+          </div>
+        </div>,
+      );
+      continue;
+    }
+    const [first, end] = tiles;
     const cells = [];
-    const end = Math.min(count, (r + 1) * layout.cols);
-    for (let i = r * layout.cols; i < end; i++) {
+    for (let i = first; i < end; i++) {
       const row = blocks.row(i);
       cells.push(
         <Tile
           key={i}
           index={i}
           row={row}
-          x={PAD + (i - r * layout.cols) * layout.stride}
+          x={PAD + (i - first) * layout.stride}
           side={layout.side}
           thumb={thumb}
           selected={shownByIndex(i) || (others && row !== undefined && selected.has(row.id))}
@@ -333,7 +395,7 @@ export function Grid(props: GridProps) {
         role="row"
         aria-rowindex={r + 1}
         className="ow-grid__row"
-        style={{ height: layout.side, transform: `translateY(${(r - range.firstRow) * layout.stride}px)` }}
+        style={{ height: layout.side, transform: `translateY(${rowTop(layout, r) - firstTop}px)` }}
       >
         {cells}
       </div>,
@@ -353,6 +415,14 @@ export function Grid(props: GridProps) {
       onScroll={onScroll}
       onKeyDown={onKeyDown}
     >
+      {sticky !== null && (
+        // A copy of the heading in its own place, which the screen reader already has.
+        <div className="ow-grid__sticky" aria-hidden="true">
+          <div className="ow-grid__sticky-head" style={{ transform: `translateY(${sticky.y}px)` }}>
+            {heading(sticky.group, true)}
+          </div>
+        </div>
+      )}
       <div className="ow-grid__content" style={{ height: `${layout.height}px` }}>
         <div ref={layerRef} className="ow-grid__layer">
           {rows}

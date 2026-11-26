@@ -7,6 +7,8 @@ import type { Query } from "../bindings/QueryShape";
 import type { Row } from "../bindings/Row";
 import type { JsonValue } from "../bindings/serde_json/JsonValue";
 import type { AppError } from "../bindings/AppError";
+import type { Group } from "../bindings/Group";
+import type { GroupUnit } from "../bindings/GroupUnit";
 import type { AreaHandlers } from "./types";
 import { chips, folderOf, normalised, pass, validate } from "./queryFilter";
 
@@ -170,8 +172,31 @@ function check(query: Query): void {
   const refuse = (what: string) => {
     throw appError("bad_query", `Owlbum can't show ${what} yet.`);
   };
-  if (query.view === "timeline") refuse("the timeline view");
   if (isSearch(query.search)) refuse("search results");
+}
+
+/** Days from 1970-01-01 of a `YYYY-MM-DD…` date, read as written. */
+function dayNumber(date: string): number {
+  return Date.UTC(Number(date.slice(0, 4)), Number(date.slice(5, 7)) - 1, Number(date.slice(8, 10))) / 86_400_000;
+}
+
+/** The timeline's groups of `shown`, in date order, as Rust makes them (owlbum_core::query::timeline). */
+function timelineGroups(shown: FakePhoto[], unit: Query["timeline_unit"]): { groups: Group[]; unit: GroupUnit } {
+  const dated = shown.filter((p) => typeof p.date === "string");
+  let used: GroupUnit = unit === "month" ? "month" : "day";
+  if (unit === "auto" && dated.length > 0 && dayNumber(dated.at(-1)!.date!) - dayNumber(dated[0]!.date!) > 90) {
+    used = "month";
+  }
+  const groups: Group[] = [];
+  shown.forEach((p, i) => {
+    const key = typeof p.date === "string" ? p.date.slice(0, used === "day" ? 10 : 7) : "none";
+    const last = groups.at(-1);
+    if (last?.key === key) {
+      last.count += 1;
+      last.photos += 1;
+    } else groups.push({ key, start: i, count: 1, photos: 1 });
+  });
+  return { groups, unit: used };
 }
 
 /** Settles `keep` as Rust does (owlbum_core::query::keep). */
@@ -221,7 +246,7 @@ function row(id: number, p: FakePhoto | undefined): Row {
 
 /**
  * A stateful fake of the query engine over `photos`, behaving like Rust:
- * the grid and the map in any of the five sorts, with every filter, its chips
+ * the grid, the timeline and the map in any of the five sorts, with every filter, its chips
  * and facets (queryFilter.ts), the
  * last four results kept under tokens, rows read as they are now, and
  * `keep` settled by the four rules. What Rust does not run yet answers
@@ -247,7 +272,8 @@ export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
       const old = keep === null ? undefined : held.find((h) => h.token === keep.token)?.tiles;
       const passed = pass(list, filter, "", query.want_facets);
       const shown = passed.shown;
-      shown.sort(ORDERS[query.sort]);
+      const timeline = query.view === "timeline";
+      shown.sort(ORDERS[timeline ? "date" : query.sort]);
       const tiles = shown.map((p) => p.id);
       const token = `q${nextToken++}`;
       held.push({ token, tiles, filter });
@@ -264,6 +290,7 @@ export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
         panel_count: chipList.length,
         chips: chipList,
         kept: keep === null ? null : settle(keep, old, tiles),
+        ...(timeline ? timelineGroups(shown, query.timeline_unit) : {}),
         ...(passed.facets === undefined ? {} : { facets: passed.facets }),
       };
     },

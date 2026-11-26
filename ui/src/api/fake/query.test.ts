@@ -58,7 +58,6 @@ describe("the fake query commands", () => {
   it("answer bad_query for parts not built yet, like Rust", async () => {
     const { fake } = setup();
     const refused: Query[] = [
-      { ...defaultQuery(), view: "timeline" },
       { ...defaultQuery(), search: "lake" },
       { ...defaultQuery(), filter: { from: "2024-02-30" } },
     ];
@@ -67,6 +66,41 @@ describe("the fake query commands", () => {
     }
     const absent: Query = { ...defaultQuery(), search: "a", filter: { has_people: false, tags: [] } };
     await expect(fake.invoke("query_run", { query: absent, keep: null })).resolves.toMatchObject({ count: 4 });
+  });
+
+  it("run the timeline like Rust: date order whatever the sort, day or month groups", async () => {
+    const { fake } = setup([
+      { id: 1, rel_path: "b.jpg", date: "2026-07-15T08:00:00" },
+      { id: 2, rel_path: "a.jpg", date: "2026-07-14T23:30:00" },
+      { id: 3, rel_path: "c.jpg", date: null },
+      { id: 4, rel_path: "d.jpg", date: "2026-07-14T09:00:00" },
+    ]);
+    const timeline: Query = { ...defaultQuery(), view: "timeline", sort: "name", timeline_unit: "auto" };
+    const r = await fake.invoke("query_run", { query: timeline, keep: null });
+    expect(await ids(fake, r.token)).toEqual([4, 2, 1, 3]);
+    expect(r.unit).toBe("day");
+    expect(r.groups).toEqual([
+      { key: "2026-07-14", start: 0, count: 2, photos: 2 },
+      { key: "2026-07-15", start: 2, count: 1, photos: 1 },
+      { key: "none", start: 3, count: 1, photos: 1 },
+    ]);
+    const month = await fake.invoke("query_run", { query: { ...timeline, timeline_unit: "month" }, keep: null });
+    expect(month.groups?.map((g) => g.key)).toEqual(["2026-07", "none"]);
+    const grid = await fake.invoke("query_run", { query: defaultQuery(), keep: null });
+    expect(grid.groups).toBeUndefined();
+  });
+
+  it("pick Month under auto only past 90 days", async () => {
+    const span = async (last: string) => {
+      const { fake } = setup([
+        { id: 1, rel_path: "a.jpg", date: "2026-01-01T00:00:00" },
+        { id: 2, rel_path: "b.jpg", date: last },
+      ]);
+      const query: Query = { ...defaultQuery(), view: "timeline" };
+      return (await fake.invoke("query_run", { query, keep: null })).unit;
+    };
+    expect(await span("2026-04-01T23:00:00")).toBe("day");
+    expect(await span("2026-04-02T00:00:00")).toBe("month");
   });
 
   it("filter like Rust, with chips, X of Y and facets", async () => {

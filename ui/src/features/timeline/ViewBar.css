@@ -1,0 +1,11 @@
+/* The view switch at the top of the thumbnail column (docs/04-browsing.md,
+   "View switch"); the unit switch sits at its right in the timeline. */
+.ow-view-bar {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: var(--stage);
+}

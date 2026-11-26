@@ -338,6 +338,14 @@ export const useGridStore = create<GridState>()((set, get) => {
         if (animatedLabels.size === 0) await loadFormats();
         if (session !== s) return;
         if (!sizeChosen) set({ thumbSize: clampThumbSize(useSettingsStore.getState().settings?.thumb_size) });
+        // The view and timeline unit last chosen, for an album with no session
+        // (docs/02-data.md, "Settings"). The map is not built yet (#36): a
+        // saved map shows the grid.
+        const saved = useSettingsStore.getState().settings;
+        if (saved !== null) {
+          const view = saved.view === "timeline" ? "timeline" : "grid";
+          set({ query: { ...get().query, view, timeline_unit: saved.timeline_unit ?? "auto" } });
+        }
         const unlisten = await api().listen("album_changed", (change) => changed(s, change));
         if (session !== s) {
           unlisten();

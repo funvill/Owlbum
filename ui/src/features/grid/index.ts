@@ -9,6 +9,7 @@ export {
   reduceToCurrent,
   selectAll,
   selectById,
+  selectGroup,
   selectNone,
   step,
   stepToEnd,

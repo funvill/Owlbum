@@ -7,6 +7,8 @@
 // then every row. Above MAX_SCROLL the scroll box is shorter than that and
 // `realScroll` maps its scrollTop onto the real position.
 
+import { HEAD, groupRows, rowAt, rowOf, rowTop, tileEnd, tileFrom, type GroupRows, type GroupSpan } from "./groups";
+
 /** The padding inside the scroll box (`--space-4`). */
 export const PAD = 12;
 /** The gap between tiles (`--space-3`). */
@@ -47,22 +49,40 @@ export interface GridLayout {
   total: number;
   /** Height of the scroll box's content: the rows and the padding, at most MAX_SCROLL and the padding. */
   height: number;
+  /** The timeline's rows, with a heading over each group; null in the grid, where every row is one stride. */
+  groups: GroupRows | null;
 }
 
-export function gridLayout(clientWidth: number, count: number, tile: number): GridLayout {
+/**
+ * The layout of `count` tiles at a thumbnail size of `tile`. With `groups`
+ * (the timeline), each group has a heading row of HEAD pixels, then its
+ * tile rows, then GROUP_GAP pixels.
+ */
+export function gridLayout(
+  clientWidth: number,
+  count: number,
+  tile: number,
+  groups: readonly GroupSpan[] | null = null,
+): GridLayout {
   const width = Math.max(0, clientWidth - 2 * PAD);
   const cols = Math.max(1, Math.floor((width + GAP) / (tile + GAP)));
   const side = Math.max(1, (width - (cols - 1) * GAP) / cols);
   const stride = side + GAP;
+  if (groups !== null) {
+    const { rows, total } = groupRows(groups, cols, stride);
+    const height = Math.min(total, MAX_SCROLL) + 2 * PAD;
+    return { width, cols, side, stride, rows: rows.tops.length, total, height, groups: rows };
+  }
   const rows = Math.ceil(count / cols);
   const total = rows > 0 ? rows * stride - GAP : 0;
   const height = Math.min(total, MAX_SCROLL) + 2 * PAD;
-  return { width, cols, side, stride, rows, total, height };
+  return { width, cols, side, stride, rows, total, height, groups: null };
 }
 
 /** Where tile `i` sits within the rows (add PAD for the box). */
 export function tilePlace(i: number, l: GridLayout): { x: number; y: number } {
-  return { x: (i % l.cols) * l.stride, y: Math.floor(i / l.cols) * l.stride };
+  const r = rowOf(l, i);
+  return { x: (i - tileFrom(l, r, Number.MAX_SAFE_INTEGER)) * l.stride, y: rowTop(l, r) };
 }
 
 /** Real pixels moved per pixel of scrollTop: 1 below MAX_SCROLL. */
@@ -96,6 +116,12 @@ export interface VisibleRange {
 export function visibleRange(l: GridLayout, real: number, viewport: number, count: number): VisibleRange {
   const clamp = (v: number) => Math.min(l.rows, Math.max(0, v));
   const top = Math.max(0, real - PAD);
+  if (l.groups !== null) {
+    if (l.rows === 0) return { firstRow: 0, endRow: 0, firstIndex: 0, lastIndex: -1 };
+    const firstRow = clamp(rowAt(l, top) - OVERSCAN_ROWS);
+    const endRow = clamp(rowAt(l, top + viewport) + 1 + OVERSCAN_ROWS);
+    return { firstRow, endRow, firstIndex: tileFrom(l, firstRow, count), lastIndex: tileEnd(l, endRow - 1, count) - 1 };
+  }
   const firstRow = clamp(Math.floor(top / l.stride) - OVERSCAN_ROWS);
   const endRow = clamp(Math.ceil((top + viewport) / l.stride) + OVERSCAN_ROWS);
   return { firstRow, endRow, firstIndex: firstRow * l.cols, lastIndex: Math.min(count, endRow * l.cols) - 1 };
@@ -117,27 +143,33 @@ export function viewIndex(
 ): number | null {
   if (count === 0 || l.cols === 0) return null;
   if (at !== null && at < count) {
-    const top = PAD + Math.floor(at / l.cols) * l.stride;
+    const top = PAD + rowTop(l, rowOf(l, at));
     if (top + l.side > real && top < real + viewport) return at;
   }
   if (real <= 0) return null;
-  const index = Math.floor(Math.max(0, real - PAD) / l.stride) * l.cols;
+  const index =
+    l.groups === null
+      ? Math.floor(Math.max(0, real - PAD) / l.stride) * l.cols
+      : tileFrom(l, rowAt(l, Math.max(0, real - PAD)), count);
   return index < count ? index : null;
 }
 
 /** The real scroll position that keeps tile `from`, now at index `to`, where it was on screen. */
 export function followScroll(l: GridLayout, real: number, from: number, to: number): number {
   if (l.cols === 0) return real;
+  if (l.groups !== null) return Math.max(0, real + rowTop(l, rowOf(l, to)) - rowTop(l, rowOf(l, from)));
   return Math.max(0, real + (Math.floor(to / l.cols) - Math.floor(from / l.cols)) * l.stride);
 }
 
 /**
  * The real scroll position that just shows the row of tile `index`, or
- * null when it is already in view.
+ * null when it is already in view. In the timeline the sticky heading
+ * covers the top HEAD pixels.
  */
 export function scrollToShow(index: number, l: GridLayout, real: number, viewport: number): number | null {
-  const top = PAD + Math.floor(index / l.cols) * l.stride;
-  if (top - PAD < real) return top - PAD;
+  const top = PAD + rowTop(l, rowOf(l, index));
+  const covered = l.groups === null ? 0 : HEAD;
+  if (top - PAD - covered < real) return Math.max(0, top - PAD - covered);
   if (top + l.side + PAD > real + viewport) return top + l.side + PAD - viewport;
   return null;
 }
@@ -147,6 +179,10 @@ export function scrollToShow(index: number, l: GridLayout, real: number, viewpor
  * `after`, so the photo at the top-left of the viewport stays in the top row.
  */
 export function anchorAfterResize(before: GridLayout, after: GridLayout, real: number): number {
+  if (before.groups !== null || after.groups !== null) {
+    const index = tileFrom(before, rowAt(before, Math.max(0, real - PAD)), Number.MAX_SAFE_INTEGER);
+    return rowTop(after, rowOf(after, index));
+  }
   const row = Math.floor(real / before.stride);
   const index = row * before.cols;
   return Math.floor(index / after.cols) * after.stride;

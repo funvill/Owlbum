@@ -25,7 +25,14 @@ export const editText = {
     e: "Resize from the right",
   },
   aspect: "Aspect ratio",
-  aspects: { free: "Free", original: "Original", square: "Square", "4:5": "4:5", "3:2": "3:2", "16:9": "16:9" },
+  aspects: {
+    free: "Free",
+    original: "Original",
+    square: "Square",
+    "4:5": "4:5",
+    "3:2": "3:2",
+    "16:9": "16:9",
+  },
   swap: "Swap portrait and landscape",
   swapUnavailable: "Choose Original, 4:5, 3:2 or 16:9 to swap",
   rotateLeft: "Rotate left",
@@ -48,6 +55,25 @@ export const editText = {
   cancel: "Cancel",
   done: "Done",
   keepFailed: (reason: string) => `Couldn't keep the edit: ${reason}`,
+
+  /** Saving (docs/06, "Saving" and "The photo menu"). */
+  save: (n: number) => (n > 1 ? `Save (${n})` : "Save"),
+  saveTooltip: (bin: string) => `Save the edit into the photo file (the original goes to the ${bin})`,
+  saveAs: "Save as…",
+  saveAsTooltip: "Save the edited photo as a new file; this one stays as it is",
+  saveAll: (n: number) => `Save all (${n})`,
+  saveAllTooltip: "Save every edit into its photo file",
+  revert: "Revert to original",
+  revertTooltip: "Remove the edit and show the photo as it is in the file",
+  saving: "Saving…",
+  savingProgress: (done: number, total: number) => `Saving ${done + 1} of ${total}…`,
+  copyOnly: (label: string) => `${label} photos can only be saved as a copy`,
+  beingSaved: "This photo is being saved",
+  saved: (n: number) => (n === 1 ? "Saved 1 photo" : `Saved ${n} photos`),
+  savedSomeFailed: (saved: number, names: readonly string[]) =>
+    `Saved ${saved}, ${names.length} failed: ${names.slice(0, 3).join(", ")}${names.length > 3 ? "…" : ""}`,
+  skippedCopyOnly: (k: number) => `. Skipped ${k} that can only be saved as a copy`,
+  savedCopy: (name: string) => `Saved a copy as ${name}`,
 };
 
 /** A number with its sign: "+2.5", "-3", "0". */

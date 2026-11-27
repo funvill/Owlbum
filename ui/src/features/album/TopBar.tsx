@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { SaveAllButton } from "../edit/SaveAllButton";
 import { Button, IconButton, Pill, Tooltip, useNarrowWindow } from "../../controls";
 import { albumText } from "../../text/album";
 import { appText } from "../../text/app";
@@ -66,6 +67,7 @@ export function TopBar() {
       </div>
       {status !== null && (
         <div className="ow-topbar__right">
+          <SaveAllButton viewOnly={tidyOff} />
           <ThumbSize />
           {narrow ? (
             <>

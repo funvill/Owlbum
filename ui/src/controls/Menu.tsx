@@ -21,6 +21,8 @@ export interface MenuItem {
   danger?: boolean;
   /** Why the row cannot be used now; it is then disabled. */
   disabledReason?: string;
+  /** A tooltip for the row while it is enabled. */
+  tooltip?: string;
   onSelect: () => void;
 }
 
@@ -160,8 +162,9 @@ export function Menu({ label, at, entries, onClose, returnFocus, anchor }: MenuP
               )}
             </div>
           );
-          return disabled ? (
-            <Tooltip key={entry.id} text={entry.disabledReason!} describe={false}>
+          const tip = disabled ? entry.disabledReason : entry.tooltip;
+          return tip !== undefined ? (
+            <Tooltip key={entry.id} text={tip} describe={false}>
               {row}
             </Tooltip>
           ) : (

@@ -8,6 +8,7 @@ import { showToast } from "../../controls";
 import { albumText } from "../../text/album";
 import { useSettingsStore } from "../app/settings";
 import { restoreSession, type SavedSession } from "../grid";
+import { followEditStatus } from "../edit/save";
 import { flushSession, followSession, stopSession } from "./reopen";
 import type { ReadStart } from "./reading";
 
@@ -120,6 +121,17 @@ export function onLeaveAlbum(fn: () => Promise<unknown>): () => void {
 
 async function leaving(): Promise<void> {
   await Promise.all([...beforeLeave].map((fn) => fn().catch(() => {})));
+}
+
+/** The window is closing: finish what the album needs, then tell Rust. */
+async function closingWindow(): Promise<void> {
+  await leaving();
+  await flushSession();
+  try {
+    await api().invoke("app_close_ready");
+  } catch {
+    // Rust closes anyway after 3 seconds.
+  }
 }
 
 /** Forgets what one session said and timed. For tests. */
@@ -257,6 +269,10 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         api().listen("scan_progress", onProgress),
         api().listen("album_changed", (e) => onChanged(e.reason)),
         api().listen("open_folder", (e) => void get().openFolder(e.path)),
+        // The close handshake (docs/08-desktop-and-release.md, "Closing and
+        // quitting"): edit mode ends as Done and the session is saved
+        // before Rust closes the album.
+        api().listen("app_closing", () => void closingWindow()),
         api().listen("folder_drop", (e) => {
           if (e.phase === "over") set({ dropOver: true });
           else set({ dropOver: false });
@@ -264,6 +280,8 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
             showToast({ kind: "info", message: albumText.dropAFolder });
         }),
       ]);
+      const stopStatus = await followEditStatus();
+      listening.push(stopStatus);
       let startup;
       try {
         startup = await api().invoke("app_startup");
@@ -319,7 +337,7 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         reading: null,
         readStart: null,
         conflictHidden: false,
-    noticesHidden: null,
+        noticesHidden: null,
       });
       latest = null;
       const full: OpenOptions = {

@@ -418,7 +418,7 @@ These end edit mode **as Done would**, using the current draft:
 
 If `edit_set` fails, a toast says "Couldn't keep the edit: <reason>". After Done (the button or Enter) edit mode stays open. When it was ending because the photo is no longer shown (another photo selected, the photo left the result, the album left) it closes anyway, since the stage could no longer show that photo.
 
-While edit mode is open, the review screen's own key rows (`browse` in the key table) match nothing, so every other review key, Ctrl+Z, Delete and Ctrl+C included, does nothing; edit mode listens with place `edit`. Closing the window has no close handshake yet (`app_closing`, [Desktop, release and tests](08-desktop-and-release.md)); until it exists, a draft open when the window closes is lost, and the stored edit is as it was.
+While edit mode is open, the review screen's own key rows (`browse` in the key table) match nothing, so every other review key, Ctrl+Z, Delete and Ctrl+C included, does nothing; edit mode listens with place `edit`. Closing the window runs the close handshake (`app_closing`, [Desktop, release and tests](08-desktop-and-release.md#closing-and-quitting)): the page ends edit mode as Done before it answers `app_close_ready`, so a draft open when the window closes is kept.
 
 ### Before and after
 
@@ -511,8 +511,8 @@ The format registry in [Media and scanning](03-media-and-scanning.md#formats-in-
 | 4. Record | One transaction writes a save record to the album database (below). | "Couldn't save <name>: the album could not be written." The render is deleted. Nothing is changed. |
 | 5. Move the original | The original file goes to the Recycle Bin or Trash. | "Couldn't move the original to the <bin>, so nothing was changed: <reason>". The render and the record are deleted. |
 | 6. Move the render into place | The render is moved to the original's path (see the move rules below). | "The original of <name> is in the <bin>, but the edited photo could not be put in its place: <reason>. Restore the original from the <bin> and try again." The render stays in `renders/` and the record stays, so the next open can finish the job. |
-| 7. Finish | The new file is read like a scan of one file. Then **one transaction** sets `photos.edit` to NULL, updates the row's size, modified time, file key and scan facts, and deletes the save record. | "The photo was saved, but Owlbum could not read it again: <reason>". The file is saved; recovery on the next open finishes the row. |
-| 8. Release | The claim is released, `album_changed` is emitted with reason `saved`, and undo steps that hold this photo's edits are removed. | |
+| 7. Finish | The new file is read like a scan of one file. Then **one transaction** sets `photos.edit` to NULL, updates the row's size, modified time, file key and scan facts, and deletes the save record. As built (#47): the transaction sets the size, modified time, file key and thumbnail key from the new file and the width and height from the render, and clears `analysis`; the scan asked for at step 8 runs the pixels pass, which makes the analysis and the new thumbnails. The camera facts (date, place, camera) are kept from the original, since the file is the same photo; tags are kept too. | "The photo was saved, but Owlbum could not read it again: <reason>". The file is saved; recovery on the next open finishes the row. |
+| 8. Release | The claim is released, `album_changed` is emitted with reason `saved` (with the saved photos in `rekeyed`), undo steps that hold this photo's edits are removed (`UndoList::drop_edits_of`), and a scan is asked for. | |
 
 `<bin>` is "Recycle Bin" on Windows and "Trash" on Linux, everywhere in this document.
 
@@ -536,7 +536,7 @@ key:   save:<photo id>
 value: { "edit": <the edit>, "file_key": "<the original's file key>", "render": "<file name in renders/>", "started_at": <ms> }
 ```
 
-While a photo has a save record, its stored edit is **not drawn**: its `Row` carries no plan. So a file that was replaced is never shown with the edit applied a second time, even when step 7 failed and the program kept running. The scanner settles a record by the table below whenever it meets that photo's path.
+While a photo has a save record, its stored edit is **not drawn**: its `Row` carries no plan. So a file that was replaced is never shown with the edit applied a second time, even when step 7 failed and the program kept running. The scanner settles a record by the table below whenever it meets that photo's path. As built (#47), only the open settles records; while a save holds a path the scanner and the folder watcher skip that path (its row and its file), and the save itself finishes or keeps its record.
 
 On every writable open, each save record is settled before the scan starts:
 
@@ -545,11 +545,11 @@ On every writable open, each save record is settled before the scan starts:
 | A file with the recorded `file_key` | The save never replaced the file. | Delete the record. The edit stays. |
 | A file with another `file_key` | The save replaced the file. | Finish step 7: clear the edit if it still equals the recorded one, refresh the row, delete the record. |
 | No file, and the render is still in `renders/` on this computer | The original is in the bin and the move failed. | Do step 6 and step 7. |
-| No file and no render | The original is in the bin and the render is gone. | Delete the record, keep the edit, and show: "<name> was being saved when Owlbum stopped. Its original is in the <bin>; restore it to get the photo back." |
+| No file and no render | The original is in the bin and the render is gone. | Delete the record, keep the edit, and show: "<name> was being saved when Owlbum stopped. Its original is in the <bin>; restore it to get the photo back." As built (#47) the message goes to the log only; showing it on the page is a follow-up. |
 
 ### Save all
 
-`edit_save_all()` saves every photo with an edit, in album order, one after another. It is offered only in `file` mode.
+`edit_save_all()` saves every photo with an edit, in album order (by path, as built), one after another. It is offered only in `file` mode; in `album` mode it answers `not_supported`. Besides the photo menu, the top bar shows **Save all (N)** in `file` mode while any photo has an edit (N is `edited` from `edit_status`); while a save runs that button shows "Saving 2 of 5…" (or "Saving…") and is disabled.
 
 - Copy-only photos are skipped. Photos already being saved are left to that save.
 - `edit_save_progress { done, total, current }` is emitted as each photo starts and once at the end: `done` photos are finished out of `total`, and `current` is the file name of the photo being saved, or null at the end. Failures are in the command's reply, not in the event. The page shows the count in the place of the Save all button.
@@ -627,7 +627,7 @@ The question is asked only when `edit_target` is `file`. The shell asks Rust for
 | 8. Encode | Encode in the target format with the settings in [Output](#output), with the metadata rules there. |
 | 9. Write | Write to `<out_path>.<uuid>.tmp`, flush to disk, and rename onto `out_path`. The temp file is removed on any failure. Returns the written width and height. |
 
-**Version 1 so far (#43).** `render_edit` decodes through the handler's 8-bit sRGB `working` picture, renders with the steps above, and writes JPEG (quality 95, 4:4:4, transparency on white), PNG or lossless WebP through a temporary file. Keeping 16-bit samples and the source profile (the table below) and the metadata rules in [Output](#output) are built with saving (#47), the renderer's first caller.
+**Version 1 so far (#43, #47).** `render_edit` decodes through the handler's 8-bit sRGB `working` picture, renders with the steps above, and writes JPEG (quality 95, 4:4:4, transparency on white), PNG or lossless WebP through a temporary file. Saving (#47) uses it as it is. Keeping 16-bit samples and the source profile (the table below), the metadata rules in [Output](#output) (EXIF and XMP are not written yet, so a saved file has none), and agreement tests 2 and 3 are left to #150.
 
 **Colour profiles.**
 
@@ -829,9 +829,9 @@ Every command takes photo ids. An unknown id answers `photo_not_found`. A comman
 | `edit_turn` | `photo_ids, op` | `{ changed, skipped, revision }` | One transaction, one undo step. |
 | `edit_revert` | `photo_ids` | `{ changed, revision }` | One transaction, one undo step. |
 | `edit_status` | | `{ edited, waiting, saving }` | |
-| `edit_save_to_file` | `photo_ids` | `{ saved, failed: [{ id, name, message }], skipped }` | The sequence above, one photo after another. |
-| `edit_save_all` | | the same | `file` mode only. |
-| `edit_save_as` | `photo_id` | `{ cancelled }` or `{ saved_name, in_album, photo_id?, warning? }` | Rust opens the dialog. |
+| `edit_save_to_file` | `photo_ids` | `{ saved: [id], failed: [{ id, name, message }], skipped, warnings, revision }` | The sequence above, one photo after another. `warnings` holds "A later change to <name> was not saved". |
+| `edit_save_all` | | the same | `file` mode only (`not_supported` in `album` mode). |
+| `edit_save_as` | `photo_id` | `{ cancelled, saved_name, in_album, photo_id, warning, revision }` | Rust opens the dialog. One flat shape: `cancelled` true leaves the rest empty. |
 | `file_trash` | `photo_ids` | `{ trashed: [id], failed: [{ id, name, message }], cancelled, revision }` | Rust shows the confirm. |
 | `file_reveal` | `photo_id` | nothing | |
 | `file_copy_image` | `photo_id` | `{ scaled, file, with_edits }` | `file` when a video's file was copied instead; `with_edits` while the copy cannot show the edit yet. |

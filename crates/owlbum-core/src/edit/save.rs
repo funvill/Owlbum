@@ -415,13 +415,13 @@ fn extension_of(format: SaveFormat) -> &'static str {
     registry_of(format).map_or("", |r| r.extensions[0])
 }
 
-/// The registry entry of a written format.
+/// The registry entry of a written format: the format that is written as
+/// itself (the one saved in place when there are several).
 fn registry_of(format: SaveFormat) -> Option<&'static MediaFormat> {
-    format_by_id(match format {
-        SaveFormat::Jpeg => "jpeg",
-        SaveFormat::Png => "png",
-        SaveFormat::Webp => "webp",
-    })
+    crate::media::FORMATS
+        .iter()
+        .filter(|f| f.caps.save_as == format && f.kind != crate::media::MediaKind::Video)
+        .max_by_key(|f| f.caps.edit_in_place)
 }
 
 /// A fresh render path in `renders/`.

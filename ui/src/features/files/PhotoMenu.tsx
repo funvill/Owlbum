@@ -4,9 +4,12 @@ import type { Point } from "../../controls/place";
 import { primaryKey } from "../../keys";
 import { filesText } from "../../text/files";
 import { useAlbumStore, viewOnlyReason } from "../album";
-import { BLOCK, gridBlocks, useGridStore } from "../grid";
+import { BLOCK, copyOnlyLabel, gridBlocks, useGridStore } from "../grid";
 import { turn } from "../edit/turn";
-import { notEditable, openEdit } from "../edit/mode";
+import { isEditing, notEditable, openEdit } from "../edit/mode";
+import { refreshEditStatus, revertToOriginal, saveAll, saveAs, saveToFile, saving, useSaveStore } from "../edit/save";
+import { useSettingsStore } from "../app/settings";
+import { editText } from "../../text/edit";
 import { toggleFlag } from "../organise";
 import { bin, copyPaths, copyPhotos, revealPhoto, trashPhotos } from "./actions";
 import { selectedTargets } from "./targets";
@@ -38,8 +41,8 @@ export interface PhotoMenuProps {
 
 /**
  * The photo menu (docs/06-editing-and-file-actions.md, "The photo menu"):
- * edit, rotate and flip, copy, copy path, show in folder, star, hide and
- * move to the bin. The save items join it with saving (#47).
+ * edit, rotate and flip, the save items, copy, copy path, show in folder,
+ * star, hide and move to the bin.
  */
 export function PhotoMenu({ at, photoId, onClose }: PhotoMenuProps) {
   const status = useAlbumStore((s) => s.status);
@@ -59,6 +62,74 @@ export function PhotoMenu({ at, photoId, onClose }: PhotoMenuProps) {
   };
   const reasons = all.map(why);
   const turnBlocked = blocked ?? (reasons.every((r) => r !== null) ? (reasons[0] ?? undefined) : undefined);
+
+  // The save items (docs/06, "The photo menu"): Save and Save all only in
+  // `file` mode; all four hidden while edit mode is open.
+  const fileMode = useSettingsStore((s) => s.settings?.edit_target === "file");
+  const editStatus = useSaveStore((s) => s.status);
+  const busy = useSaveStore((s) => s.running) || saving();
+  const edited = all.filter((id) => rowOf(id)?.edit_plan != null);
+  const copyOnly = edited.map((id) => copyOnlyLabel(rowOf(id)?.file_name ?? ""));
+  const savable = edited.filter((_, i) => copyOnly[i] === null);
+  const ownEdit = rowOf(photoId)?.edit_plan != null;
+  const busyReason = busy ? editText.saving : undefined;
+  const saveBlocked =
+    blocked ?? busyReason ?? (savable.length === 0 && copyOnly[0] != null ? editText.copyOnly(copyOnly[0]) : undefined);
+  useEffect(() => {
+    void refreshEditStatus();
+  }, []);
+  const saveEntries: MenuEntry[] = isEditing()
+    ? []
+    : [
+        ...(fileMode && edited.length > 0
+          ? [
+              {
+                id: "save",
+                label: editText.save(savable.length),
+                icon: "check" as const,
+                tooltip: editText.saveTooltip(bin()),
+                disabledReason: saveBlocked,
+                onSelect: () => void saveToFile(savable),
+              },
+            ]
+          : []),
+        ...(ownEdit
+          ? [
+              {
+                id: "save-as",
+                label: editText.saveAs,
+                icon: "download" as const,
+                tooltip: editText.saveAsTooltip,
+                disabledReason: busyReason,
+                onSelect: () => void saveAs(photoId),
+              },
+            ]
+          : []),
+        ...(fileMode && (editStatus?.edited ?? 0) > 0
+          ? [
+              {
+                id: "save-all",
+                label: editText.saveAll(editStatus?.edited ?? 0),
+                icon: "check" as const,
+                tooltip: editText.saveAllTooltip,
+                disabledReason: blocked ?? busyReason,
+                onSelect: () => void saveAll(),
+              },
+            ]
+          : []),
+        ...(edited.length > 0
+          ? [
+              {
+                id: "revert",
+                label: editText.revert,
+                icon: "undo" as const,
+                tooltip: editText.revertTooltip,
+                disabledReason: blocked ?? busyReason,
+                onSelect: () => void revertToOriginal(edited),
+              },
+            ]
+          : []),
+      ];
 
   // The window losing focus or changing size, or a later scroll, closes it.
   useEffect(() => {
@@ -103,7 +174,14 @@ export function PhotoMenu({ at, photoId, onClose }: PhotoMenuProps) {
       disabledReason: turnBlocked,
       onSelect: () => void turn("rotate_right", "selection", all),
     },
-    { id: "flip", label: t.flip, icon: "flip-h", disabledReason: turnBlocked, onSelect: () => void turn("flip", "selection", all) },
+    {
+      id: "flip",
+      label: t.flip,
+      icon: "flip-h",
+      disabledReason: turnBlocked,
+      onSelect: () => void turn("flip", "selection", all),
+    },
+    ...(saveEntries.length > 0 ? (["separator", ...saveEntries] as MenuEntry[]) : []),
     "separator",
     {
       id: "copy",
@@ -112,8 +190,18 @@ export function PhotoMenu({ at, photoId, onClose }: PhotoMenuProps) {
       shortcut: primaryKey("browse.copy"),
       onSelect: () => void copyPhotos(all),
     },
-    { id: "copy-path", label: t.copyPath(all.length), icon: "copy", onSelect: () => void copyPaths(all) },
-    { id: "reveal", label: t.reveal, icon: "folder", onSelect: () => void revealPhoto(photoId) },
+    {
+      id: "copy-path",
+      label: t.copyPath(all.length),
+      icon: "copy",
+      onSelect: () => void copyPaths(all),
+    },
+    {
+      id: "reveal",
+      label: t.reveal,
+      icon: "folder",
+      onSelect: () => void revealPhoto(photoId),
+    },
     "separator",
     {
       id: "star",

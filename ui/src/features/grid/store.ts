@@ -232,9 +232,31 @@ export function animatedLabel(fileName: string): string | null {
     : (animatedLabels.get(fileName.slice(dot).toLowerCase()) ?? null);
 }
 
+/** File extension to the label of a format that can only be saved as a copy. */
+let copyOnlyLabels = new Map<string, string>();
+
+/**
+ * The label of `fileName`'s format when it can only be saved as a copy
+ * (docs/06-editing-and-file-actions.md, "Formats"), such as WebP; null
+ * when Save into the file works for it, or the format is not known.
+ */
+export function copyOnlyLabel(fileName: string): string | null {
+  const dot = fileName.lastIndexOf(".");
+  return dot < 0
+    ? null
+    : (copyOnlyLabels.get(fileName.slice(dot).toLowerCase()) ?? null);
+}
+
 async function loadFormats(): Promise<void> {
   try {
     const formats = await api().invoke("app_formats");
+    copyOnlyLabels = new Map(
+      formats
+        .filter((f) => !f.edit_in_place && f.kind !== "video")
+        .flatMap((f) =>
+          f.extensions.map((e) => [e.toLowerCase(), f.label] as const),
+        ),
+    );
     animatedLabels = new Map(
       formats
         .filter((f) => f.animated)

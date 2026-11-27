@@ -23,7 +23,13 @@ export {
 } from "./selection";
 export type { TileActions } from "./Tile";
 export { ThumbSize } from "./ThumbSize";
-export { gridBlocks, resetGrid, restoreSession, useGridStore } from "./store";
+export {
+  copyOnlyLabel,
+  gridBlocks,
+  resetGrid,
+  restoreSession,
+  useGridStore,
+} from "./store";
 export { sessionOf, withSession, type SavedSession } from "./session";
 export type {
   GridOptions,

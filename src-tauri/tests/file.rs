@@ -296,3 +296,54 @@ fn copy_not_shown_copies_unsupported_then_unreadable_files() {
     assert_eq!(lines[0], "z.heic	HEIC photos are not supported yet.");
     assert!(lines[1].starts_with("bad.jpg	"), "{text:?}");
 }
+
+#[test]
+fn save_into_the_file_goes_through_the_bin_and_status_counts_from_the_database() {
+    use owlbum_core::edit::save::{EditStatus, SavedEdits};
+    let f = fixture();
+    let root = f.open();
+    let a = f.id_of("a.png");
+    f.call::<serde_json::Value>(
+        "edit_set",
+        json!({ "photo_id": a, "edit": { "rotate": 90, "flip": false } }),
+    )
+    .unwrap();
+    let status: EditStatus = f.call("edit_status", json!({})).unwrap();
+    assert_eq!(
+        (status.edited, status.waiting),
+        (1, 0),
+        "album mode waits for nothing"
+    );
+    let refused = f
+        .call::<SavedEdits>("edit_save_all", json!({}))
+        .unwrap_err();
+    assert_eq!(refused["code"], "not_supported");
+
+    f.call::<serde_json::Value>(
+        "app_settings_set",
+        json!({ "patch": { "edit_target": "file" } }),
+    )
+    .unwrap();
+    let status: EditStatus = f.call("edit_status", json!({})).unwrap();
+    assert_eq!(status.waiting, 1);
+
+    let out: SavedEdits = f
+        .call("edit_save_to_file", json!({ "photo_ids": [a] }))
+        .unwrap();
+    assert_eq!(out.saved, vec![a], "{out:?}");
+    assert!(
+        f.fake.bin.join("a.png").exists(),
+        "the original is in the bin"
+    );
+    // The saved file is the turned picture: 20 × 30 instead of 30 × 20.
+    let saved = image::open(root.join("a.png")).unwrap();
+    assert_eq!((saved.width(), saved.height()), (20, 30));
+    let status: EditStatus = f.call("edit_status", json!({})).unwrap();
+    assert_eq!(status, EditStatus::default());
+}
+
+#[test]
+fn the_page_answers_the_close_handshake() {
+    let f = fixture();
+    assert!(invoke(&f.window, "app_close_ready", json!({})).is_ok());
+}

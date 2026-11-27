@@ -599,61 +599,29 @@ Every feature meets this baseline before it is called done.
 
 ## Logo and app icon
 
-**This is a draft for the owner's approval.** Nothing ships with it until it is approved.
+**Approved by the owner on 2026-11-27.**
 
-![Draft Owlbum icon: an owl face with two camera-lens eyes on a dark rounded tile](assets/owlbum-icon.svg)
+![The Owlbum icon: a gold owl on a dark rounded tile with a gold rim](assets/owlbum-icon.png)
 
-### Concept
+The icon is a gold owl, face on, with a frowning brow, ear tufts, large ringed eyes, folded wings and scalloped breast feathers, on a dark square tile with rounded corners and a gold rim. The owner supplied it as a picture; it is used as that picture, not redrawn. An owl is a bird known for looking carefully, and Owlbum is a program for looking through photos.
 
-An owl, face on, reduced to four shapes. The eyes are the idea: each is a camera lens, with an amber ring for the barrel, dark glass, a six-sided aperture and one highlight. An owl is a bird known for looking carefully, and Owlbum is a program for looking through photos. The name is "owl" plus "album", and the mark shows the first half looking at the second.
+### Source and sizes
 
-| Part | Shape | Colour |
-|---|---|---|
-| Tile | A square with rounded corners (radius about 20% of the side). | `#1d1d20`, the dark `--panel`. |
-| Brow and ear tufts | One thick V-shaped stroke with round ends. | `#ecebe7`, the dark `--text`. |
-| Eyes | Two rings that almost touch. | `#e7a65f`, the dark `--accent`. |
-| Glass | A disc inside each ring. | `#161618`, the dark `--bg`. |
-| Aperture | A hexagon inside each disc. | `#333338`, the dark `--line`. |
-| Highlight | A small dot at the upper right of each eye. | `#ecebe7` |
-| Beak | A small diamond below and between the eyes. | `#ecebe7` |
+- The owner's original is a 1024 px JPEG of the tile on a textured backdrop. The tile (about 612 px of it) is cut out along the outer edge of the gold rim, its corners made transparent, and scaled to the 1024 px PNG `src-tauri/icons/source.png`. The same file is `docs/assets/owlbum-icon.png`.
+- `npm --prefix ui run tauri -- icon src-tauri/icons/source.png` makes the rest. Only the files the bundle uses are kept: `32x32.png`, `128x128.png`, `128x128@2x.png`, `icon.png` and `icon.ico` (16, 24, 32, 48, 64 and 256 px). The command also writes Android, iOS, macOS and Windows Store files; those are deleted.
+- At 32 px the owl still reads; at 16 px it is a gold owl shape in a gold-rimmed square. There is no separate small drawing.
+- Being a picture, the icon has no scalable SVG form. The Linux launcher (paused) uses the PNG sizes; a vector version would have to be drawn and approved separately.
 
-The one-colour mark is drawn from this draft in `OwlMark` (`ui/src/controls/`), and an empty state shows it only when asked (`mark`). Until the drawing is approved, no screen asks: empty states show no picture, as suggestion 6 says.
-
-The icon keeps its dark tile in both themes, as app icons do. It uses flat colours only: no gradients, no shadows, no text. The file is hand-written SVG with no outside references, and is the single source for every size.
-
-### How it reads when small
-
-The drawing was looked at in a browser, scaled down to roughly 16, 24, 32, 48 and 64 px. This was a rough check; an exact check of each size happens when the icon files are made. At about 16 px what survives is two amber rings under a pale V on a dark tile, which still reads as an owl; the aperture and highlight are lost, and the beak is a pixel or two.
-
-Because of that, sizes of 24 px and below use a simplified drawing made from the same source, not a scaled-down copy:
-
-- the aperture and highlight are removed;
-- the rings are 25% thicker and the brow stroke 30% thicker;
-- the beak is 40% larger;
-- shapes are nudged onto whole pixels at 16 px.
-
-The simplified drawing is made after the main one is approved.
-
-### Other forms
+### Use
 
 | Form | Use |
 |---|---|
-| Tile icon (the drawing above) | The program icon, installers, the website's favicon. |
-| Mark without the tile | Inside the page: empty states and the About dialog. Drawn in one colour (`currentColor`), with the eyes as rings. |
-| Mark plus the word "Owlbum" | The website header, the About dialog and the README. The word is set in Inter at weight 700, letter-spacing −0.02em, to the right of the mark. |
+| The icon | The program icon, installers, the About dialog, the website's favicon and the README. |
+| Icon plus the word "Owlbum" | The website header and the About dialog. The word is set in Inter at weight 700, letter-spacing −0.02em, to the right of the icon. |
 
-Clear space around the icon is at least one quarter of its width. The mark is not recoloured, stretched, rotated or placed on a photo.
+The one-colour `OwlMark` in `ui/src/controls/` was drawn from an earlier draft and is not used by any screen; empty states show no picture (suggestion 6).
 
-### Sizes to produce
-
-Tauri's icon command makes the standard set from the 1024 × 1024 source. It cannot swap in the simplified drawing or make every size below, so a second small script makes the 16 and 24 px layers from the simplified drawing and the extra Linux sizes, and rebuilds the `.ico`. The sizes in the "Tauri bundle" row are to be confirmed against what the command produces when the first installer is built.
-
-| Platform | File | Sizes |
-|---|---|---|
-| Windows | One `.ico` holding several sizes | 16, 24, 32, 48, 64 and 256 px. The 16 and 24 px layers use the simplified drawing. 20 and 40 px layers are added if the taskbar looks soft at 125% scaling. |
-| Linux | PNG files in the `hicolor` icon theme, at `hicolor/<size>x<size>/apps/owlbum.png` | 16, 24, 32, 48, 64, 128, 256 and 512 px, plus the SVG at `hicolor/scalable/apps/owlbum.svg`. |
-| Tauri bundle | PNG files the bundler expects | 32 × 32, 128 × 128, 256 × 256 (named `128x128@2x`), and 512 × 512. |
-| Website | Favicon | The SVG, plus a 32 px PNG and a 180 px PNG. |
+Clear space around the icon is at least one quarter of its width. The icon is not recoloured, stretched, rotated or placed on a photo.
 
 ## Suggestions awaiting a decision
 

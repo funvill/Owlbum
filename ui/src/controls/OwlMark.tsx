@@ -1,6 +1,6 @@
 // The owl mark without its tile, in one colour (currentColor), with the eyes
-// as rings. Drawn from the draft in docs/assets/owlbum-icon.svg, which awaits
-// the owner's approval: see docs/09-visual-design.md, "Logo and app icon".
+// as rings. Drawn from an earlier draft logo; the approved icon is a picture
+// (docs/09-visual-design.md, "Logo and app icon"), and no screen shows this.
 
 interface OwlMarkProps {
   /** Width and height in pixels; 64 in empty states. */

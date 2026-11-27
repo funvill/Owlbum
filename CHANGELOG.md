@@ -27,6 +27,7 @@ the window's title shows the version that is running.
 
 ### Changed
 
+- New program icon: a gold owl on a dark tile.
 - The window opens where it was last closed, at the same size, maximised if
   it was. It starts at 1440 by 900 and cannot be made smaller than 960 by
   600.

@@ -137,4 +137,3 @@ These are not done by the unattended build and wait for the owner's final review
 - Creating the updater signing key and adding it to the repository's secrets.
 - Publishing a release.
 - Switching on GitHub Pages.
-- Approving the logo.

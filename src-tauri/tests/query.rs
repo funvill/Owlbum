@@ -168,7 +168,11 @@ fn query_map_answers_every_photo_of_a_map_result_once() {
         u64::from(r.count)
     );
     for point in points {
-        assert_eq!(point.as_array().unwrap().len(), 5);
+        assert_eq!(
+            point.as_array().unwrap().len(),
+            6,
+            "id, lat, lon, thumb key, name, edit plan"
+        );
     }
     let err = invoke(&window, "query_map", json!({ "token": "no-such-token" })).unwrap_err();
     assert_eq!(err["code"], "query_expired");

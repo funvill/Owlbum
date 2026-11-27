@@ -56,6 +56,14 @@ export const timelineText = {
   keyLabel,
   /** "Saturday 14 July 2026 · 37 photos", "July 2026 · 412 photos", "No date · 5 photos". */
   heading: (key: string, n: number) => `${keyLabel(key)} · ${photos(n)}`,
+  /** The month rail (docs/04-browsing.md, "Month rail"). */
+  rail: {
+    label: "Jump to a month",
+    /** "Jul". */
+    month: (m: number) => (MONTHS[m - 1] ?? "").slice(0, 3),
+    /** A month's accessible name: "July 2026". */
+    monthName: (y: number, m: number) => `${MONTHS[m - 1] ?? ""} ${y}`,
+  },
   /** The heading button's name: what a click does. */
   selectGroup: (key: string, n: number) => `${keyLabel(key)} · ${photos(n)}. Select these photos`,
 };

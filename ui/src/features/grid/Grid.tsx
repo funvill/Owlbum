@@ -27,6 +27,8 @@ import {
   type VisibleRange,
 } from "./layout";
 import { HEAD, groupOfRow, rowAt, rowTiles, rowTop } from "./groups";
+import { MonthRail } from "./MonthRail";
+import { railFits, railShown, railYears } from "./rail";
 import { selectGroup } from "./selection";
 import {
   animatedLabel,
@@ -117,10 +119,18 @@ export function Grid(props: GridProps) {
     () => gridLayout(size.width, count, thumbSize, groups),
     [size.width, count, thumbSize, groups],
   );
+  // The timeline's month rail: a column beside the box, which narrows it.
+  const years = useMemo(
+    () => (groups === null ? [] : railYears(groups)),
+    [groups],
+  );
+  const rail = railShown(years);
   const [range, setRange] = useState<VisibleRange>(() =>
     visibleRange(layout, 0, 0, count),
   );
   const [sticky, setSticky] = useState<Sticky | null>(null);
+  /** The group holding the top of the view, for the month rail. */
+  const [topGroup, setTopGroup] = useState<number | null>(null);
 
   // The latest values, for the handlers attached once.
   // `at` is where the current photo is, or is going while a step waits on its row.
@@ -175,6 +185,11 @@ export function Grid(props: GridProps) {
     const nextSticky = stickyAt(v.layout, real);
     setSticky((before) =>
       sameSticky(before, nextSticky) ? before : nextSticky,
+    );
+    setTopGroup(
+      v.layout.groups === null || v.layout.rows === 0
+        ? null
+        : groupOfRow(v.layout, rowAt(v.layout, Math.max(0, real - PAD))),
     );
     blocks.want({
       first: next.firstIndex,
@@ -243,6 +258,18 @@ export function Grid(props: GridProps) {
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
   }, []);
+
+  /** Scrolls group `g`'s heading to the top of the view (the month rail). */
+  const jump = useCallback(
+    (g: number) => {
+      const l = live.current.layout;
+      const head = l.groups?.headRows[g];
+      if (head === undefined) return;
+      scrollReal(PAD + rowTop(l, head));
+      update();
+    },
+    [scrollReal, update],
+  );
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     if (e.key !== "PageDown" && e.key !== "PageUp") return;
@@ -469,37 +496,51 @@ export function Grid(props: GridProps) {
   }
 
   return (
-    <div
-      ref={boxRef}
-      className="ow-grid"
-      role="grid"
-      aria-label={gridText.label}
-      aria-multiselectable="true"
-      aria-rowcount={layout.rows}
-      aria-colcount={layout.cols}
-      aria-busy={result === null}
-      onScroll={onScroll}
-      onKeyDown={onKeyDown}
-    >
-      {sticky !== null && (
-        // A copy of the heading in its own place, which the screen reader already has.
-        <div className="ow-grid__sticky" aria-hidden="true">
-          <div
-            className="ow-grid__sticky-head"
-            style={{ transform: `translateY(${sticky.y}px)` }}
-          >
-            {heading(sticky.group, true)}
+    <div className="ow-grid-frame">
+      <div
+        ref={boxRef}
+        className="ow-grid"
+        role="grid"
+        aria-label={gridText.label}
+        aria-multiselectable="true"
+        aria-rowcount={layout.rows}
+        aria-colcount={layout.cols}
+        aria-busy={result === null}
+        onScroll={onScroll}
+        onKeyDown={onKeyDown}
+      >
+        {sticky !== null && (
+          // A copy of the heading in its own place, which the screen reader already has.
+          <div className="ow-grid__sticky" aria-hidden="true">
+            <div
+              className="ow-grid__sticky-head"
+              style={{ transform: `translateY(${sticky.y}px)` }}
+            >
+              {heading(sticky.group, true)}
+            </div>
+          </div>
+        )}
+        <div
+          className="ow-grid__content"
+          style={{ height: `${layout.height}px` }}
+        >
+          <div ref={layerRef} className="ow-grid__layer">
+            {rows}
           </div>
         </div>
-      )}
-      <div
-        className="ow-grid__content"
-        style={{ height: `${layout.height}px` }}
-      >
-        <div ref={layerRef} className="ow-grid__layer">
-          {rows}
-        </div>
       </div>
+      {rail && (
+        <MonthRail
+          years={years}
+          months={railFits(years, size.height)}
+          at={
+            topGroup === null
+              ? null
+              : (groups?.[topGroup]?.key.slice(0, 7) ?? null)
+          }
+          onJump={jump}
+        />
+      )}
     </div>
   );
 }

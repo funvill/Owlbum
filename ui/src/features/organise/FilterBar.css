@@ -55,6 +55,11 @@
   color: var(--error);
 }
 
+/* In a narrow window the hint row is hidden unless it holds an error. */
+.ow-query-box__hint--hidden {
+  display: none;
+}
+
 /* A query-word example: a small boxed word (docs/09-visual-design.md). */
 .ow-query-box__word {
   padding: 0 var(--space-1);

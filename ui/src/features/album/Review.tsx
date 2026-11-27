@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { Point } from "../../controls/place";
 import type { PhotoAt } from "../../api/bindings/PhotoAt";
 import { albumText } from "../../text/album";
@@ -13,11 +13,59 @@ import { ViewBar } from "../timeline";
 import { Viewer, openViewer, useViewerStore } from "../viewer";
 import { viewOnlyReason } from "./banners";
 import { useAlbumStore } from "./session";
+import { useSettingsStore } from "../app";
+import { DETAILS_DEFAULT, DETAILS_MIN, GRID_DEFAULT, GRID_MIN, columnWidths } from "./columns";
+import { Splitter } from "./Splitter";
+
+type Width = "panel.grid_width" | "panel.details_width";
+
+/**
+ * The review row's column widths: the stored ones (settings), a width being
+ * moved by a splitter until it is saved, and the row's measured width.
+ */
+function useColumns() {
+  const ref = useRef<HTMLElement>(null);
+  const [room, setRoom] = useState<number | null>(null);
+  const stored = useSettingsStore((s) => s.settings);
+  const [moving, setMoving] = useState<Partial<Record<Width, number>>>({});
+
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (el === null) return;
+    // A row not laid out yet (width 0) counts as not measured.
+    const measure = () => setRoom(el.clientWidth > 0 ? el.clientWidth : null);
+    measure();
+    if (typeof ResizeObserver === "undefined") {
+      window.addEventListener("resize", measure);
+      return () => window.removeEventListener("resize", measure);
+    }
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
+  const grid = moving["panel.grid_width"] ?? stored?.["panel.grid_width"] ?? GRID_DEFAULT;
+  const details = moving["panel.details_width"] ?? stored?.["panel.details_width"] ?? DETAILS_DEFAULT;
+  const move = useCallback((key: Width, width: number) => setMoving((m) => ({ ...m, [key]: width })), []);
+  const save = useCallback(async (key: Width, width: number) => {
+    setMoving((m) => ({ ...m, [key]: width }));
+    await useSettingsStore.getState().update({ [key]: width });
+    // The store holds Rust's answer now (or the old value, if it was refused).
+    setMoving((m) => {
+      if (m[key] !== width) return m;
+      const rest = { ...m };
+      delete rest[key];
+      return rest;
+    });
+  }, []);
+  return { ref, columns: columnWidths(room, grid, details), move, save };
+}
 
 /**
  * The review screen (docs/04-browsing.md, "Review screen"): the thumbnail
- * column, the preview and the details column. The splitters and the stored
- * column widths come later (#111).
+ * column, the preview and the details column, with a splitter between each
+ * two. The column widths are the stored settings `panel.grid_width` and
+ * `panel.details_width`, narrowed to fit the row without changing them.
  *
  * The preview and the details panel show the page's one current photo,
  * which the grid store holds and every `query_run` settles, so they can
@@ -65,10 +113,11 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
   const view = useGridStore((s) => s.query.view);
   // The viewer belongs to the open album: it does not come back with the next one.
   useEffect(() => () => useViewerStore.setState({ open: false }), []);
+  const { ref, columns, move, save } = useColumns();
 
   return (
-    <section className="ow-review" aria-label={albumText.photosRegion}>
-      <div className="ow-review__photos">
+    <section ref={ref} className="ow-review" aria-label={albumText.photosRegion}>
+      <div className="ow-review__photos" style={{ width: columns.grid }}>
         <ViewBar />
         {view === "map" ? (
           <MapView album={folder} onOpen={open} />
@@ -83,10 +132,30 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
           />
         )}
       </div>
+      <Splitter
+        label={albumText.resizeGrid}
+        value={columns.grid}
+        min={GRID_MIN}
+        max={columns.gridMax}
+        dir={1}
+        reset={GRID_DEFAULT}
+        onMove={(w) => move("panel.grid_width", w)}
+        onSave={(w) => void save("panel.grid_width", w)}
+      />
       <div className="ow-review__preview">
         <Preview detail={detail.detail} onOpen={open} onMenu={openMenu} />
       </div>
-      <div className="ow-review__details">
+      <Splitter
+        label={albumText.resizeDetails}
+        value={columns.details}
+        min={DETAILS_MIN}
+        max={columns.detailsMax}
+        dir={-1}
+        reset={DETAILS_DEFAULT}
+        onMove={(w) => move("panel.details_width", w)}
+        onSave={(w) => void save("panel.details_width", w)}
+      />
+      <div className="ow-review__details" style={{ width: columns.details }}>
         {/* Close details does what Ctrl+D does: nothing selected. */}
         <DetailsPanel current={shown} onClose={selectNone} onNotFound={notFound} shared={detail} />
       </div>

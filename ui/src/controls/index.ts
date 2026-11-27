@@ -11,6 +11,7 @@ export { SearchBox, SelectField, TextArea, TextField, type SelectOption } from "
 export { layerRoot } from "./layers";
 export { Menu, MenuButton, type MenuEntry, type MenuItem } from "./Menu";
 export { MiddleEllipsis } from "./MiddleEllipsis";
+export { useNarrowWindow } from "./narrow";
 export { OwlMark } from "./OwlMark";
 export { placeWithin } from "./place";
 export { ProgressBar } from "./ProgressBar";

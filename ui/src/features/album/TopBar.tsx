@@ -1,29 +1,11 @@
-import { useState, useSyncExternalStore } from "react";
-import { Button, IconButton, Pill, Tooltip } from "../../controls";
+import { useState } from "react";
+import { Button, IconButton, Pill, Tooltip, useNarrowWindow } from "../../controls";
 import { albumText } from "../../text/album";
 import { appText } from "../../text/app";
 import { ThumbSize } from "../grid";
 import { shownScope, viewOnlyBanner, viewOnlyReason } from "./banners";
 import { TidyDialog } from "./TidyDialog";
 import { useAlbumStore } from "./session";
-
-/** Below this width the bar's buttons become icon buttons (docs/09-visual-design.md, "The bars"). */
-const NARROW = "(max-width: 1099px)";
-
-function narrowQuery(): MediaQueryList | null {
-  return typeof window.matchMedia === "function" ? window.matchMedia(NARROW) : null;
-}
-
-function subscribeNarrow(changed: () => void): () => void {
-  const query = narrowQuery();
-  query?.addEventListener("change", changed);
-  return () => query?.removeEventListener("change", changed);
-}
-
-/** True when the window is narrower than 1100 px. */
-function useNarrow(): boolean {
-  return useSyncExternalStore(subscribeNarrow, () => narrowQuery()?.matches ?? false);
-}
 
 /**
  * The 48 px bar at the top of the window (docs/04-browsing.md, "Top bar").
@@ -34,7 +16,8 @@ export function TopBar() {
   const openFolder = useAlbumStore((s) => s.openFolder);
   const pick = useAlbumStore((s) => s.pickFolder);
   const close = useAlbumStore((s) => s.close);
-  const narrow = useNarrow();
+  // Below 1100 px the buttons become icon buttons (docs/09-visual-design.md, "The bars").
+  const narrow = useNarrowWindow();
   const [tidying, setTidying] = useState(false);
   // Tidy is off in a view-only album; the tooltip says why.
   const tidyOff = status === null ? undefined : (viewOnlyReason(status) ?? undefined);

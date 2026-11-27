@@ -295,13 +295,13 @@ All values are in px. `room` is the measured width of the row.
 | Name | Rule |
 |---|---|
 | `free` | `room − 300 − 12` (the preview's minimum and the two splitters). Treated as unlimited until `room` has been measured. |
-| `detailsMax` | `max(260, min(560, free − 200))` |
-| Details width | `clamp(panel.details_width, 260, detailsMax)` |
-| `gridMax` | `max(200, free − details width)` |
+| `gridMax` | `max(200, free − 260)` |
 | Thumbnail column width | `clamp(panel.grid_width, 200, gridMax)` |
+| `detailsMax` | `max(260, min(560, free − thumbnail column width))` |
+| Details width | `clamp(panel.details_width, 260, detailsMax)` |
 | Preview | The rest, never under 300. |
 
-The stored widths are not changed by clamping. A narrow window shows narrower columns and a wider window gives the stored widths back.
+So as the row narrows the preview gives up room first, down to 300; then the details column, down to 260; then the thumbnail column, down to 200: the order [Visual design](09-visual-design.md#the-three-columns) sets. The stored widths are not changed by clamping. A narrow window shows narrower columns and a wider window gives the stored widths back. `gridMax` and `detailsMax` are also the splitters' maximums, so dragging the thumbnail splitter can narrow the shown details column down to 260 (its stored width is kept), while the details splitter stops where the thumbnail column is.
 
 ### Splitters
 
@@ -874,7 +874,7 @@ Tiles, placeholders, block fetching, overscan, thumbnail size, the very-tall-con
 
 ### Month rail
 
-A narrow column (44px) down the right edge of the timeline, labelled "Jump to a month".
+A narrow column (44px) down the right edge of the timeline, beside the scroll box (which narrows by as much), a `navigation` region labelled "Jump to a month". Each line is 20px high; a month button is named "July 2026" and the marked one has `aria-current`.
 
 - It lists each year that has photos, in bold, followed by the months of that year that have photos, as three-letter names ("Jan"). "No date" is not listed.
 - A click scrolls so that month's first heading is at the top. In Day mode that is the first day of the month that has photos.

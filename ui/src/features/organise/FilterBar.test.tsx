@@ -209,3 +209,46 @@ describe("FilterBar", () => {
     expect(await screen.findByText("2024-01-01 → 2024-01-02")).toBeInTheDocument();
   });
 });
+
+describe("FilterBar in a narrow window", () => {
+  // A window under 1100 px (docs/09-visual-design.md, "The bars").
+  beforeEach(() => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(max-width: 1099px)",
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  it("hides the hint line, keeps its examples in the box's tooltip, and shows the count as the number alone", async () => {
+    await grid().start();
+    const { container } = render(<FilterBar />);
+    const bar = screen.getByRole("search", { name: "Sort and filter" });
+    const box = screen.getByRole("searchbox", { name: "Search photos" });
+    expect(screen.queryByText("star:yes")).not.toBeInTheDocument();
+    expect(screen.queryByText("Try")).not.toBeInTheDocument();
+    // The count: "3" on screen, "3 photos" to a screen reader and in its tooltip.
+    const count = bar.querySelector(".ow-filter-bar__count")!;
+    expect(count.firstChild?.textContent).toBe("3");
+    expect(count).toHaveTextContent("3 photos");
+    expect(count).toHaveAttribute("title", "3 photos");
+    // The tooltip shows on keyboard focus.
+    await userEvent.tab();
+    await userEvent.tab();
+    await userEvent.tab();
+    expect(box).toHaveFocus();
+    expect(await screen.findByRole("tooltip")).toHaveTextContent(
+      "Try star:yes shape:portrait from:2024-06-01 has:people tag:lake",
+    );
+    expect(await seriousFindings(container)).toEqual([]);
+  });
+
+  it("still shows a bad query word's error", async () => {
+    await grid().start();
+    render(<FilterBar />);
+    await userEvent.type(screen.getByRole("searchbox", { name: "Search photos" }), "star:maybe{Enter}");
+    expect(await screen.findByText(`"star:maybe" isn't a filter: try star:yes or star:no`)).toBeInTheDocument();
+  });
+});

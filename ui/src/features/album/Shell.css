@@ -127,33 +127,51 @@
   display: flex;
 }
 
-/* The thumbnail column at its default width, shrinking to its minimum
-   before the preview goes under 300 px; the splitters and stored widths
-   come later. */
+/* The thumbnail column and the details column take the widths the page
+   works out from the stored ones and the row's width (columns.ts); the
+   preview takes the rest, never under 300 px. */
 .ow-review__photos {
-  flex: 0 1 420px;
+  flex: none;
   min-width: 200px;
   display: flex;
   flex-direction: column;
 }
 
-/* The preview takes the rest, never under 300 px. */
 .ow-review__preview {
   flex: 1 1 0;
   min-width: 300px;
   min-height: 0;
 }
 
-.ow-review__photos > .ow-grid {
+.ow-review__photos > .ow-grid-frame {
   flex: 1;
   min-height: 0;
 }
 
-/* Default width; the splitter and stored width come with the review row. */
 .ow-review__details {
   flex: none;
-  width: 340px;
+  min-width: 260px;
   min-height: 0;
+}
+
+/* docs/04-browsing.md, "Splitters"; docs/09-visual-design.md. */
+.ow-splitter {
+  flex: none;
+  width: var(--size-splitter);
+  background: var(--line-soft);
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.ow-splitter:hover,
+.ow-splitter:focus-visible,
+.ow-splitter--dragging {
+  background: var(--accent);
+}
+
+.ow-splitter--dragging {
+  position: relative;
+  z-index: var(--z-raised);
 }
 
 .ow-drop {

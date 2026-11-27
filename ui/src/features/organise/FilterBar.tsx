@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import type { Filter } from "../../api/bindings/Filter";
 import type { Query } from "../../api/bindings/QueryShape";
-import { Button, Checkbox, SelectField, Tooltip, type SelectOption } from "../../controls";
+import { Button, Checkbox, SelectField, Tooltip, useNarrowWindow, type SelectOption } from "../../controls";
 import { Icon } from "../../icons";
 import { organiseText as t } from "../../text/organise";
 import { useGridStore } from "../grid";
@@ -46,6 +46,8 @@ export function FilterBar() {
   const timeline = query.view === "timeline";
   const panelCount = result?.panel_count ?? 0;
   const filtered = result?.filtered ?? false;
+  // In a narrow window the count is the number alone (docs/09-visual-design.md, "The bars").
+  const narrow = useNarrowWindow();
 
   const show = (on: boolean) => {
     setOpen(on);
@@ -112,7 +114,18 @@ export function FilterBar() {
           </button>
           {open && <FilterPanel filter={query.filter} facets={facets} onChange={setFilter} />}
         </div>
-        {!filtered && result !== null && <span className="ow-filter-bar__count">{t.bar.count(result.total)}</span>}
+        {!filtered && result !== null && (
+          <span className="ow-filter-bar__count" title={narrow ? t.bar.count(result.total) : undefined}>
+            {narrow ? (
+              <>
+                {t.bar.countShort(result.total)}
+                <span className="ow-visually-hidden">{t.bar.countUnit(result.total)}</span>
+              </>
+            ) : (
+              t.bar.count(result.total)
+            )}
+          </span>
+        )}
       </div>
       {filtered && result !== null && (
         <div className="ow-filter-bar__filtered" role="region" aria-label={t.filtered.label}>

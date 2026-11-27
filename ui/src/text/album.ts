@@ -37,6 +37,10 @@ export const albumText = {
   dropHere: "Drop to open this folder",
   photosRegion: "Photos",
 
+  // Review screen splitters (docs/04-browsing.md, "Splitters")
+  resizeGrid: "Resize thumbnail column",
+  resizeDetails: "Resize details panel",
+
   // Top bar
   albumTooltip: (root: string) => `Album: ${root}`,
   scopeTooltip: (folder: string) => `Showing only: ${folder}`,

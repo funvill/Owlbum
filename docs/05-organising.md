@@ -389,7 +389,7 @@ The bar is shown while an album is open and has at least one photo. It is a sear
 | **Filters** | A button that opens the panel. It reads "Filters", or "Filters · N" when N panel filters are on, and takes the `--accent` border and text while N > 0. Its chevron turns over while the panel is open. |
 | Count | "2,140 photos" or "1 photo", with digit grouping. Shown only while no filter is on. It is the `total` from `query_run`. |
 
-The bar never wraps. In a narrow window it gives up room in the order [Visual design](09-visual-design.md#the-bars) sets: the search box shrinks, then the hint line is hidden and the count shows the number alone. The map is sealed in its own layer, so the bar and the panel always sit above the map's controls.
+The bar never wraps. In a narrow window it gives up room in the order [Visual design](09-visual-design.md#the-bars) sets: the search box shrinks, then (under 1100 px) the hint line is hidden and the count shows the number alone. A bad query word's error still shows in the hint line while it is hidden, and the count keeps its word for screen readers and in its tooltip ("2,140 photos"). The map is sealed in its own layer, so the bar and the panel always sit above the map's controls.
 
 ### The filtered row
 

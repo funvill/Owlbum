@@ -17,6 +17,9 @@ export const organiseText = {
     filters: (n: number) => (n > 0 ? `Filters · ${n}` : "Filters"),
     /** "2,140 photos" while no filter is on. */
     count: (n: number) => (n === 1 ? "1 photo" : `${group(n)} photos`),
+    /** The count in a narrow window: the number alone, "2,140"; the unit is kept for screen readers. */
+    countShort: (n: number) => group(n),
+    countUnit: (n: number) => (n === 1 ? " photo" : " photos"),
   },
   /** The search box and its hint line (docs/05-organising.md, "The filter bar"). */
   search: {
@@ -24,6 +27,8 @@ export const organiseText = {
     placeholder: "Search names, people, places, notes and keywords",
     try: "Try",
     examples: ["star:yes", "shape:portrait", "from:2024-06-01", "has:people", "tag:lake"],
+    /** The box's tooltip in a narrow window, where the hint row is hidden. */
+    tooltip: "Try star:yes shape:portrait from:2024-06-01 has:people tag:lake",
   },
   /** The filtered row (docs/05-organising.md, "The filtered row"). */
   filtered: {

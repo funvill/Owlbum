@@ -138,3 +138,68 @@ describe("the heading text", () => {
     expect(timelineText.heading("none", 1)).toBe("No date · 1 photo");
   });
 });
+
+describe("the month rail", () => {
+  /** December 2025, January 2026, two days of July 2026 and one with no date. */
+  const SPREAD: FakePhoto[] = [
+    { id: 1, rel_path: "a.jpg", date: "2025-12-01T10:00:00" },
+    { id: 2, rel_path: "b.jpg", date: "2026-01-05T10:00:00" },
+    { id: 3, rel_path: "c.jpg", date: "2026-07-14T10:00:00" },
+    { id: 4, rel_path: "d.jpg", date: "2026-07-15T10:00:00" },
+    { id: 5, rel_path: "e.jpg", date: null },
+  ];
+
+  const rail = () => screen.getByRole("navigation", { name: timelineText.rail.label });
+  const gridBox = () => screen.getByRole("grid");
+
+  async function timeline(photos: FakePhoto[]) {
+    fake = createFakeApi(createQueryFake(photos).handlers);
+    setApi(fake);
+    screenWith();
+    await userEvent.click(await screen.findByRole("tab", { name: timelineText.views.timeline }));
+    // More than 90 days: grouped by month.
+    await screen.findByRole("button", { name: /^December 2025 · 1 photo/ });
+  }
+
+  it("lists the years and the months that have photos, and marks the month in view", async () => {
+    await timeline(SPREAD);
+    const buttons = Array.from(rail().querySelectorAll("button")).map((b) => b.getAttribute("aria-label") ?? b.textContent);
+    expect(buttons).toEqual(["2025", "December 2025", "2026", "January 2026", "July 2026"]);
+    expect(screen.getByRole("button", { name: "July 2026" })).toHaveTextContent("Jul");
+    expect(screen.getByRole("button", { name: "December 2025" })).toHaveAttribute("aria-current", "true");
+    expect(await seriousFindings()).toEqual([]);
+  });
+
+  it("scrolls a month's first heading to the top on a click, and marks it", async () => {
+    await timeline(SPREAD);
+    await userEvent.click(screen.getByRole("button", { name: "July 2026" }));
+    // Each of the first two months: a 32 px heading, one 168 px row and 8 px of space.
+    expect(gridBox().scrollTop).toBe(12 + 2 * (32 + 168 + 8));
+    fireEvent.scroll(gridBox());
+    await waitFor(() => expect(screen.getByRole("button", { name: "July 2026" })).toHaveAttribute("aria-current", "true"));
+    expect(screen.getByRole("button", { name: "December 2025" })).not.toHaveAttribute("aria-current");
+    // A year goes to its first month.
+    await userEvent.click(screen.getByRole("button", { name: "2026" }));
+    expect(gridBox().scrollTop).toBe(12 + 32 + 168 + 8);
+  });
+
+  it("shows only the years when the months do not fit", async () => {
+    const height = box.height;
+    box.height = 100;
+    try {
+      await timeline(SPREAD);
+      const buttons = Array.from(rail().querySelectorAll("button")).map((b) => b.textContent);
+      expect(buttons).toEqual(["2025", "2026"]);
+      expect(screen.getByRole("button", { name: "2025" })).toHaveAttribute("aria-current", "true");
+    } finally {
+      box.height = height;
+    }
+  });
+
+  it("is not shown with fewer than two months", async () => {
+    screenWith();
+    await userEvent.click(await screen.findByRole("tab", { name: timelineText.views.timeline }));
+    await screen.findByRole("button", { name: /Tuesday 14 July 2026/ });
+    expect(screen.queryByRole("navigation", { name: timelineText.rail.label })).toBeNull();
+  });
+});

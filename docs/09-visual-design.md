@@ -410,7 +410,7 @@ Bars never wrap onto a second line and never scroll sideways. As the window narr
 |---|---|---|
 | 1280 px and wider | Everything shows with its label. | Everything shows, with the query-word hint row. |
 | 1100 to 1279 px | The album path is cut in the middle. | The search box shrinks towards 200 px. |
-| 960 to 1099 px | Buttons other than the primary one become icon buttons with tooltips. The thumbnail-size slider moves into a popover behind the `grid` icon. | The hint row is hidden; the same examples are in the search box's tooltip and in Help. The photo count shows the number alone. |
+| 960 to 1099 px | Buttons other than the primary one become icon buttons with tooltips. The thumbnail-size slider moves into a popover behind the `grid` icon. | The hint row is hidden (a bad query word's error still shows there); the same examples are in the search box's tooltip and in Help. The photo count shows the number alone. |
 
 The Filters panel is `min(620px, window width − 24px)` wide. The "Load maps" card is `min(360px, map width − 24px)` wide.
 

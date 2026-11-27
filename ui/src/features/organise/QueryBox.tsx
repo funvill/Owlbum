@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { api } from "../../api";
 import type { Filter } from "../../api/bindings/Filter";
 import type { ParsedBox } from "../../api/bindings/ParsedBox";
-import { SearchBox } from "../../controls";
+import { SearchBox, Tooltip, useNarrowWindow } from "../../controls";
 import { organiseText as t } from "../../text/organise";
 import { useGridStore } from "../grid";
 
@@ -37,6 +37,10 @@ function endsWord(text: string): boolean {
  * word is read too. A `key:value` word Rust takes leaves the box and joins
  * the filter at once; the rest is the search text, which re-runs the query
  * 200 ms after it last changed. The page holds no table of keys.
+ *
+ * In a window under 1100 px the hint row is hidden (an error still shows
+ * there) and the examples become the box's tooltip
+ * (docs/09-visual-design.md, "The bars").
  */
 export function QueryBox() {
   const search = useGridStore((s) => s.query.search);
@@ -47,6 +51,8 @@ export function QueryBox() {
   /** The search text this box last gave the query. */
   const gave = useRef<string | null>(search);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  // In a narrow window the hint row is hidden and its examples are the box's tooltip.
+  const narrow = useNarrowWindow();
 
   useEffect(() => {
     const clear = () => {
@@ -112,36 +118,45 @@ export function QueryBox() {
     }
   };
 
+  const box = (
+    <SearchBox
+      label={t.search.label}
+      placeholder={t.search.placeholder}
+      className="ow-query-box__input"
+      value={text}
+      onChange={(value) => {
+        setText(value);
+        setError(null);
+        void parse(value, false);
+      }}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          void parse(e.currentTarget.value, true);
+        }
+      }}
+    />
+  );
+
   return (
     <div className="ow-query-box">
-      <SearchBox
-        label={t.search.label}
-        placeholder={t.search.placeholder}
-        className="ow-query-box__input"
-        value={text}
-        onChange={(value) => {
-          setText(value);
-          setError(null);
-          void parse(value, false);
-        }}
-        onKeyDown={(e) => {
-          if (e.key === "Enter") {
-            e.preventDefault();
-            void parse(e.currentTarget.value, true);
-          }
-        }}
-      />
-      <span className={`ow-query-box__hint${error === null ? "" : " ow-query-box__hint--error"}`} aria-live="polite">
-        {error ?? (
-          <>
-            {t.search.try}
-            {t.search.examples.map((word) => (
-              <span key={word} className="ow-query-box__word">
-                {word}
-              </span>
-            ))}
-          </>
-        )}
+      {narrow ? <Tooltip text={t.search.tooltip}>{box}</Tooltip> : box}
+      {/* Kept in place while hidden, so an error shown in a narrow window is still announced. */}
+      <span
+        className={`ow-query-box__hint${error === null ? "" : " ow-query-box__hint--error"}${narrow && error === null ? " ow-query-box__hint--hidden" : ""}`}
+        aria-live="polite"
+      >
+        {error ??
+          (narrow ? null : (
+            <>
+              {t.search.try}
+              {t.search.examples.map((word) => (
+                <span key={word} className="ow-query-box__word">
+                  {word}
+                </span>
+              ))}
+            </>
+          ))}
       </span>
     </div>
   );

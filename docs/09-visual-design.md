@@ -266,7 +266,6 @@ The sizes above are tokens as well, so that no component writes a pixel size of 
 | `--size-toast-edge` | 3 px | The coloured left edge of a toast. |
 | `--size-focus` | 2 px | The focus ring, and the gap inside it. |
 | `--size-mark` | 64 px | The owl mark in empty states. |
-| `--size-flag-mark` | 180 px | The star and hide mark that plays over the photo ([Organising](05-organising.md#the-mark)). |
 
 | Token | Value | Use |
 |---|---|---|
@@ -300,6 +299,7 @@ The old program used 7 px on buttons; that becomes 6 px. Its single `--radius` t
 | `--motion-mark` | 800 ms | How long the star and hide mark plays. |
 | `--motion-score-toast` | 1100 ms | How long the score toast fades after a nudge. |
 | `--mark-grow` | `1.08` | How much the mark grows as it plays. With reduced motion it is `1`. |
+| `--flag-mark-share` | `0.4` | The star, hide and nudge marks over the photo are this share of the shown photo's smaller side ([Organising](05-organising.md#the-mark)); it was a fixed 180 px until the owner's feedback (#168). |
 | `--mark-fade` | `0` | The mark's opacity at the end. With reduced motion it is `1`: the mark stands still and is removed after 800 ms. |
 | `--progress-unknown-width` | `25%` | The travelling block of a progress bar with no known total. |
 | `--progress-unknown-stripes` | `none` | Its stripes: none, so the block is plain. |
@@ -502,7 +502,7 @@ Toasts appear at the bottom centre of the window, 16 px above the edge, newest a
 
 A toast may carry one action, such as Undo, as a Small button. A toast with an action stays for 8 seconds. Every toast has an `x`. Hovering or focusing a toast stops its timer. Toasts never take focus.
 
-The score toast is a different thing. It is a large rounded label over the preview that shows the new score after a nudge, in `--score-up-bg` or `--score-down-bg` with `--score-toast-text`, and fades over 1,100 ms, the time [Organising](05-organising.md#nudges-up-and-down) sets.
+The score toast is a different thing. It is a large rounded label over the preview that shows the change after a nudge ("+1", or "+5" after five quick taps), as tall as the star mark (40 % of the shown photo's smaller side), in `--score-up-bg` or `--score-down-bg` with `--score-toast-text`, and fades over 1,100 ms, the time [Organising](05-organising.md#nudges-up-and-down) sets.
 
 ### Dialogs
 

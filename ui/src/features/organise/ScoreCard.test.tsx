@@ -45,6 +45,16 @@ describe("The score card", () => {
     expect(screen.getByRole("tooltip")).toBeInTheDocument();
   });
 
+  it("draws a total below zero in red, in the card and in the pop-up", async () => {
+    show(fakeScore({ total: -40, lines: [{ label: "Hidden", why: "hidden", points: -50 }, { label: "Size", why: "12 megapixels", points: 10 }] }));
+    const card = await screen.findByTestId("score-card");
+    expect(within(card).getByText("−40")).toHaveClass("ow-score-card__points--minus");
+    fireEvent.focus(card);
+    const rows = within(screen.getByRole("tooltip")).getAllByRole("row");
+    expect(within(rows.at(-1)!).getByText("−40")).toHaveClass("ow-score-card__points--minus");
+    expect(within(rows[1]!).getByText("+10")).not.toHaveClass("ow-score-card__points--minus");
+  });
+
   it("says when the photo has not been read yet", async () => {
     show(
       fakeScore({

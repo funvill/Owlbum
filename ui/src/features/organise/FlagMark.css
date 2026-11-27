@@ -1,11 +1,22 @@
-/* docs/05-organising.md, "The mark": 180 px, centred, grows slightly and fades. */
+/*
+ * docs/05-organising.md, "The mark": 40 % of the shown photo's smaller side,
+ * centred, grows slightly and fades. The stage is a size container; the
+ * photo fitted in it is min(width, height x aspect) wide and min(width /
+ * aspect, height) tall, so its smaller side is the least of the four.
+ */
+.ow-flag-mark,
+.ow-score-toast {
+  --_photo-side: min(100cqw, 100cqh, 100cqw / var(--_photo-aspect), 100cqh * var(--_photo-aspect));
+  --_mark-size: calc(var(--flag-mark-share) * var(--_photo-side));
+}
+
 .ow-flag-mark {
   position: absolute;
   top: 50%;
   left: 50%;
-  width: var(--size-flag-mark);
-  height: var(--size-flag-mark);
-  margin: calc(var(--size-flag-mark) / -2) 0 0 calc(var(--size-flag-mark) / -2);
+  width: var(--_mark-size);
+  height: var(--_mark-size);
+  margin: calc(var(--_mark-size) / -2) 0 0 calc(var(--_mark-size) / -2);
   color: var(--mark-off);
   pointer-events: none;
   z-index: var(--z-raised);

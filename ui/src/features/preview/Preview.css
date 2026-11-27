@@ -9,9 +9,10 @@
   color: var(--preview-text);
 }
 
-/* The picture is clipped to its pane. */
+/* The picture is clipped to its pane. A size container: the star mark and the score toast size themselves on it. */
 .ow-preview__stage {
   position: relative;
+  container-type: size;
   flex: 1;
   min-height: 0;
   overflow: hidden;

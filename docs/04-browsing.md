@@ -60,7 +60,7 @@ The window is one column. Parts appear top to bottom in this order:
 +--------------------------------------------------------------------------------------------+
 | NOTICES (only when needed)  3 files not supported yet (HEIC, AVIF) · 2 files could not … [x]|
 +--------------------------------------------------------------------------------------------+
-| FILTER BAR (see 05)   Sort [Date taken v] [x] Stack similar [Search…] [Filters v]  2,140 photos |
+| FILTER BAR (see 05) [Search…]          Sort [Date taken v] [x] Stack similar [Filters v] 2,140 photos |
 +--------------------------------------------------------------------------------------------+
 | FILTERED ROW (see 05) [Starred x] [lake x]            Showing 312 of 2,140 · [Clear filter] |
 +--------------------------------------------------------------------------------------------+
@@ -276,7 +276,7 @@ A row of five parts: the thumbnail column, a 6px splitter, the preview pane, a 6
 | | [Grid|Timeline|Map]       | |I |  | STAGE: photo fitted, never cropped; |  |I | | IMG_0042.jpg      [x] | |
 | |  (padding 8px 12px)       | |T |  | wheel zooms, drag pans; mini map    |  |T | +-----------------------+ |
 | +---------------------------+ |T |  | top-right when zoomed               |  |T | | Photo score       74  | |
-| | GRID (scrolls, pad 12px,  | |E |  |          "+1 · 74" toast (05)       |  |E | | > Photo               | |
+| | GRID (scrolls, pad 12px,  | |E |  |               "+1" toast (05)       |  |E | | > Photo               | |
 | |  gap 8px, square tiles)   | |R |  +------------------------------------+  |R | | > What's in it        | |
 | | [tile][tile][tile]        | |  |  | CAPTION (padding 8px 12px):         |  |  | | > Camera              | |
 | | [tile][tile][tile]        | |6 |  | 2024/Trip/IMG_0042.jpg [Starred]    |  |6 | | > Histogram           | |
@@ -857,7 +857,7 @@ The timeline shows the same photos as the grid, in date order, with a heading ov
 
 | Topic | Rule |
 |---|---|
-| Order | Always the effective date, oldest first; photos with the same date are in the name order of [Organising](05-organising.md#sorting). Photos with no date come last. The Sort control (see 05) is disabled with the tooltip "Timeline is in date order". The chosen sort is kept and applies again in Grid and Map. |
+| Order | Always the effective date, oldest first; photos with the same date are in the name order of [Organising](05-organising.md#sorting). Photos with no date come last. The Sort control (see 05) is not shown in the timeline (owner's feedback, #166). The chosen sort is kept and applies again in Grid and Map. |
 | Filters, search, stacks, hidden photos | Exactly as in the grid. A stack sits where its face sorts. |
 | Which date | The effective date: the typed date, else the camera's. |
 | Grouping | By the written calendar date: the first 10 characters (`YYYY-MM-DD`) for Day, the first 7 (`YYYY-MM`) for Month. The date is never converted through a time zone, so a photo taken at 23:30 abroad stays on its day. |
@@ -1210,7 +1210,7 @@ type Session = Partial<Query> & {   // the Query's own fields (05), less open_st
 - **Viewer.** It shows the edited picture for a row whose `edit_plan` is not null; zoom works; Esc goes to fit, then closes; closing selects the last photo shown; when the shown photo leaves the result the next one takes its place; an empty result closes it.
 - **Details and preview agree.** After any re-run, both show the same id; a `photo_not_found` answer triggers a re-run; a detail answer for a photo no longer current is ignored.
 - **Details fields.** Each row of the save table; "Saved" shows for 1,800 ms; a failed save keeps the text and shows a toast; a draft survives an answer from an earlier save; changing photo with unsaved text sends it once; every date and location message; everything is disabled in a view-only album.
-- **Timeline.** Layout rows and tops for a group of 9 at 4 columns (one heading, rows of 4, 4 and 1); binary search returns only rows in view; heading labels in Day and Month; the Sort control is disabled with its tooltip; the month rail lists only months with photos, marks the month in view, and collapses to years when too tall.
+- **Timeline.** Layout rows and tops for a group of 9 at 4 columns (one heading, rows of 4, 4 and 1); binary search returns only rows in view; heading labels in Day and Month; the Sort control is not shown; the month rail lists only months with photos, marks the month in view, and collapses to years when too tall.
 - **Map.** The first-use card's exact text; no tile request is made before **Load maps**; "Not now" leaves markers on a plain background; a failed setting save shows the toast and keeps tiles off; the note's singular and plural; a marker click selects; the viewer, a dialog and a toast are each above the map stage (computed stacking order).
 - **Banners and notices.** Each `view_only` value shows its exact sentence; the conflict banner names the file and can be dismissed; a scoped status shows root and scope in the top bar; notice texts for 1 and many files and the list of formats; the Files not shown dialog lists what `album_unsupported` and `album_scan_errors` return.
 - **Opening.** Each route calls `album_open` once; a cancelled dialog does nothing; `album_lock_stale` and `album_damaged` show their dialogs and call again with the chosen option; a failed open shows the toast and stays on the start screen; recent entries that do not exist are disabled.

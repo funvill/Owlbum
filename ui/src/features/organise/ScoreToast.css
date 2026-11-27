@@ -1,13 +1,22 @@
-/* docs/05-organising.md, "The score toast": centred 50% across and 45% down, fading over 1100 ms. */
+/*
+ * docs/05-organising.md, "The score toast": centred 50% across and 45% down,
+ * fading over 1100 ms, as tall as the star mark (its size is worked out in
+ * FlagMark.css).
+ */
 .ow-score-toast {
   position: absolute;
   top: 45%;
   left: 50%;
   transform: translate(-50%, -50%);
-  padding: var(--space-3) var(--space-5);
+  display: flex;
+  align-items: center;
+  height: var(--_mark-size);
+  padding: 0 calc(var(--_mark-size) / 3);
   border-radius: var(--radius-full);
   color: var(--score-toast-text);
   font: var(--text-num);
+  font-size: calc(var(--_mark-size) * 0.6);
+  line-height: 1;
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
   pointer-events: none;

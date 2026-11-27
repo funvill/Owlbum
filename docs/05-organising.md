@@ -68,7 +68,7 @@ When a star or hide is made with a key, a mark plays over the preview pane, or o
 | Hidden | The eye-off icon in `--mark-off`. |
 | Unhidden | An eye outline in `--mark-off`. |
 
-The mark is 180 px (`--size-flag-mark`), centred, and plays for 0.8 s (it grows slightly and fades). A new press restarts it. Its accessible names are "Starred", "Star removed", "Hidden" and "Shown again". With reduced motion it does not move: it is shown for 0.8 s and removed. Clicking the star button on a tile plays no mark; the badge changing is enough.
+The mark is a square 40 % of the shown photo's smaller side (`--flag-mark-share`; owner's feedback, #168), centred, and plays for 0.8 s (it grows slightly and fades). A new press restarts it. Its accessible names are "Starred", "Star removed", "Hidden" and "Shown again". With reduced motion it does not move: it is shown for 0.8 s and removed. Clicking the star button on a tile plays no mark; the badge changing is enough.
 
 ### Hidden photos
 
@@ -150,7 +150,7 @@ The details panel shows a card reading "Photo score" with the total. For a photo
 +--------------------------------------------------------------+
 ```
 
-- One row per non-zero line, in the order of the table above: the label, the "why" text in `--muted`, and signed points. Positive points use `--score-plus`, negative use `--score-minus` with a real minus sign (U+2212).
+- One row per non-zero line, in the order of the table above: the label, the "why" text in `--muted`, and signed points. Positive points use `--score-plus`, negative use `--score-minus` (red) with a real minus sign (U+2212). A total below zero is also in `--score-minus`, on the card and in the pop-up. Each row's label and points sit at the top of the row, so a "why" that wraps does not push the label down to its middle (owner's feedback, #168).
 - A photo that is not analysed adds the row "Focus, exposure and colour are added once the photo has been read."
 - The breakdown comes from `photo_score(id)`. The total is also on every `Row`, so tiles never ask for it.
 
@@ -162,16 +162,18 @@ The details panel shows a card reading "Photo score" with the total. For a photo
 | Targets | The whole selection when it has more than one photo; else the current photo. In the viewer, the shown photo only. |
 | Repeat | A held key does not repeat. Each tap is one write and one undo step. |
 | Limits | `score_adjust` stays within −100,000 and +100,000. A nudge that would pass the limit leaves that photo unchanged. If no target changed, the toast reads "Can't nudge any further". |
-| Command | `photo_nudge(ids, delta)` with `delta` of `+1` or `−1`, the current photo first in `ids`. It replies `{ changed, total, revision }`, where `total` is the current photo's new score, or null while it is not analysed (the one-photo toast then shows the change alone, "+1"). |
+| Command | `photo_nudge(ids, delta)` with `delta` of `+1` or `−1`, the current photo first in `ids`. It replies `{ changed, total, revision }`, where `total` is the current photo's new score, or null while it is not analysed. The toast no longer shows `total`. |
 | Not available | While typing, in a dialog, in edit mode, in a view-only album. |
 
-**The score toast** sits over the middle of the preview, centred 50% across and 45% down. Its fill is `--score-up-bg` for +1 and `--score-down-bg` for −1, with `--score-toast-text`, and it fades over 1100 ms (no fade with reduced motion; it is simply removed after 1100 ms). Each press restarts it. It reads:
+**The score toast** sits over the middle of the preview, centred 50% across and 45% down. Its fill is `--score-up-bg` for +1 and `--score-down-bg` for −1, with `--score-toast-text`, and it fades over 1100 ms (no fade with reduced motion; it is simply removed after 1100 ms). Each press restarts it. It is as tall as the star mark, 40 % of the shown photo's smaller side, with its text in proportion. It shows only the change, never the new total (owner's feedback, #168):
 
 | Case | Text |
 |---|---|
-| One photo, up | "+1 · 74" (the change, then the new total) |
-| One photo, down | "−1 · 72" |
-| Several photos | "+1 · 4 photos" |
+| A tap up | "+1" |
+| A tap down | "−1" |
+| Taps in one direction while the toast still shows in the same place | They add up: five quick Ups read "+5". A tap the other way starts again at "−1". |
+| Several photos | The change alone, as for one. |
+| Nothing changed | "Can't nudge any further" |
 
 ### Is the score stored?
 
@@ -365,7 +367,7 @@ Rust works out the name order once and stores each photo's position as `name_ran
 
 Rust works the keys of `interesting` and `colour` out from the album index each time it sorts (`quality`, the dark and bright flags, the burst keeper and the average colour), so they always match the index as it is; the range of `quality` is taken over every analysed photo in the index, never over the filtered list. Over 100,000 photos each sort takes under 16 ms on a release build.
 
-The sort is saved in the album's session and restored on reopening. Changing it keeps the selection and scrolls as [Browsing](04-browsing.md#when-the-result-changes) says for any change the user makes: to the current photo, or to the top when there is none. In the timeline view the order is always `date`; the Sort control is disabled there.
+The sort is saved in the album's session and restored on reopening. Changing it keeps the selection and scrolls as [Browsing](04-browsing.md#when-the-result-changes) says for any change the user makes: to the current photo, or to the top when there is none. In the timeline view the order is always `date`. The Sort control is shown only in the grid view: the timeline is always in date order and the map shows no order, so there it is hidden, and the chosen sort is kept for the grid's return (owner's feedback, #166).
 
 ## The filter bar
 
@@ -373,8 +375,8 @@ The bar is shown while an album is open and has at least one photo. It is a sear
 
 ```text
 +----------------------------------------------------------------------------------------------------------+
-| Sort [Date taken   v]  [x] Stack similar  [ Search photos                     ]  [Filters · 2 v]  2,140 photos |
-|                                           Try star:yes shape:portrait from:2024-06-01 has:people tag:lake      |
+| [ Search photos                     ]          Sort [Date taken   v]  [x] Stack similar  [Filters · 2 v]  2,140 photos |
+| Try star:yes shape:portrait from:2024-06-01 has:people tag:lake                                                     |
 +----------------------------------------------------------------------------------------------------------+
 | (Starred ×) (2024-06-01 → 2024-06-30 ×) (lake ×) (Has people ×)        Showing 312 of 2,140 · [Clear filter]  |
 +----------------------------------------------------------------------------------------------------------+
@@ -382,7 +384,8 @@ The bar is shown while an album is open and has at least one photo. It is a sear
 
 | Control | Behaviour |
 |---|---|
-| **Sort** | A select with the five options above. |
+| **Search box** (left) | First in the bar, at its left edge; everything else sits at the right (owner's feedback, #166). See its row below. |
+| **Sort** | A select with the five options above. Shown only in the grid view. |
 | **Stack similar** | A checkbox. |
 | **Search box** | Placeholder "Search names, people, places, notes and keywords". Accessible name "Search photos". Width grows from 200 px to 460 px. |
 | Hint line | Under the box, announced politely. Normally "Try" followed by the examples `star:yes`, `shape:portrait`, `from:2024-06-01`, `has:people`, `tag:lake`, drawn as the small boxed words [Visual design](09-visual-design.md#typography) defines (no monospace font is bundled). When a query word is bad it shows the error in `--error` instead. |
@@ -1004,7 +1007,7 @@ When the page re-runs its query after `album_changed` is decided by the reason, 
 | Keys | F and S star, H hides, Up and Down nudge: in the grid, the preview and the viewer. None of them fire while typing, in the filter panel, or in a view-only album. Held keys send one command. |
 | Targets | The ids sent for one photo, for a multi-selection, for a tile's star button, and in the viewer. |
 | Selection | After a hide, the page re-runs with `keep` and selects `kept.current`. |
-| Mark and toast | The mark for each of the four changes; the toast texts "+1 · 74", "−1 · 72", "+1 · 4 photos", "Can't nudge any further"; no motion with reduced motion. |
+| Mark and toast | The mark for each of the four changes; the toast texts "+1", "−1", "+5" after five taps, "Can't nudge any further"; no motion with reduced motion. |
 | Filter bar | The labels kept for tests: "Sort", "Stack similar", "Search photos", "Filters", "Filters · 2", "2,140 photos", "1 photo", the hint line starting "Try". |
 | Filtered row | Chips are drawn from `chips`; × sends the chip's `remove` filter; "Showing 312 of 2,140"; Clear filter empties the box and the filter. |
 | Panel | Opens with focus on the first control; Esc closes it, returns focus, and does not reach the grid's keys; a press outside closes it; facet counts are shown; Folder is absent with one folder. |

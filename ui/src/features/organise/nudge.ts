@@ -2,7 +2,8 @@
 //
 // Up adds 1 to the score of the targets, Down takes 1 away. The page sends
 // one `photo_nudge` per tap, current photo first, and shows the score toast
-// from the reply. Rust rescores and sends `album_changed` (reason `info`);
+// from the reply: the change alone, never the new total (owner's feedback,
+// issue 168). Rust rescores and sends `album_changed` (reason `info`);
 // the grid's re-run brings the new score to the tiles. The selection never
 // moves.
 
@@ -21,6 +22,8 @@ export type ToastPlace = "preview" | "viewer";
 export interface ScoreToastState {
   text: string;
   delta: NudgeDelta;
+  /** The change the toast adds up while it shows; 0 for "Can't nudge any further". */
+  change: number;
   place: ToastPlace;
   /** Moves on with each press, so a new press restarts the toast. */
   seq: number;
@@ -43,16 +46,31 @@ export function resetNudges(): void {
 }
 
 /**
- * The toast's text (docs/05-organising.md, "The score toast"): "+1 · 74"
- * for one photo, "−1 · 4 photos" for several, "Can't nudge any further"
- * when nothing changed. One photo whose score is not worked out yet shows
- * the change alone.
+ * The toast's text (docs/05-organising.md, "The score toast"): the change
+ * alone, "+1" or "−5" with a real minus sign, or "Can't nudge any further"
+ * when the tap changed nothing.
  */
-export function toastText(delta: NudgeDelta, targets: number, changed: number, total: number | null): string {
-  if (changed === 0) return t.nudgeLimit;
-  const change = delta > 0 ? "+1" : "−1";
-  if (targets > 1) return `${change} · ${t.photos(changed)}`;
-  return total === null ? change : `${change} · ${total < 0 ? `−${-total}` : total}`;
+export function toastText(change: number): string {
+  if (change === 0) return t.nudgeLimit;
+  return change < 0 ? `−${-change}` : `+${change}`;
+}
+
+/**
+ * The change a toast shows after a tap of `delta` that changed `changed`
+ * photos: taps in the same direction add up while the toast is still
+ * showing in the same place, so five quick Ups read "+5".
+ */
+export function toastChange(
+  before: ScoreToastState | null,
+  delta: NudgeDelta,
+  changed: number,
+  place: ToastPlace,
+): number {
+  if (changed === 0) return 0;
+  if (before !== null && before.place === place && before.change !== 0 && Math.sign(before.change) === delta) {
+    return before.change + delta;
+  }
+  return delta;
 }
 
 /**
@@ -73,14 +91,11 @@ export function nudge(delta: NudgeDelta, where: "selection" | "viewer"): Promise
         : [current.id, ...grid.selection.filter((id) => id !== current.id)];
     try {
       const reply = await api().invoke("photo_nudge", { ids, delta });
-      const seq = (useScoreToastStore.getState().toast?.seq ?? 0) + 1;
+      const before = useScoreToastStore.getState().toast;
+      const place: ToastPlace = where === "viewer" ? "viewer" : "preview";
+      const change = toastChange(before, delta, reply.changed.length, place);
       useScoreToastStore.setState({
-        toast: {
-          text: toastText(delta, ids.length, reply.changed.length, reply.total),
-          delta,
-          place: where === "viewer" ? "viewer" : "preview",
-          seq,
-        },
+        toast: { text: toastText(change), delta, change, place, seq: (before?.seq ?? 0) + 1 },
       });
     } catch (e) {
       showToast({ kind: "error", message: toAppError(e).message });

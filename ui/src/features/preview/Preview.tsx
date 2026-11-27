@@ -103,8 +103,8 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
             handle={zoom}
           />
         </StageFor>
-        <FlagMark place="preview" />
-        <ScoreToast place="preview" />
+        <FlagMark place="preview" aspect={shownAspect(row)} />
+        <ScoreToast place="preview" aspect={shownAspect(row)} />
       </div>
       <Caption
         row={row}
@@ -115,6 +115,11 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
       />
     </section>
   );
+}
+
+/** The shown photo's width over height: the edited picture's when it has an edit. */
+export function shownAspect(row: { aspect: number; edit_plan: { out: { w: number; h: number } } | null }): number {
+  return row.edit_plan === null ? row.aspect : row.edit_plan.out.w / row.edit_plan.out.h;
 }
 
 /** The zoom component, showing the medium picture at once when the image cache has it decoded. */

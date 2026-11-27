@@ -42,6 +42,15 @@ the window's title shows the version that is running.
   600.
 - Quit from the menu finishes edits and saves, and asks about unsaved edits,
   just as closing the window does.
+- The search box is now at the left of the filter bar, with Sort, Stack
+  similar, Filters and the count at the right. Sort shows only in the grid;
+  the timeline and the map no longer show it.
+- After Up or Down the photo shows only the change, such as +1, and quick
+  taps in one direction add up (+5), rather than the new total.
+- The star, hide and score marks that flash over a photo are now 40% of
+  the photo's shown size, so they are much easier to see.
+- In the photo score's pop-up each label sits at the top of its row, and a
+  total below zero is shown in red.
 
 ### Fixed
 

@@ -134,7 +134,6 @@
   --size-toast-edge: 3px;
   --size-focus: 2px;
   --size-mark: 64px;
-  --size-flag-mark: 180px;
 
   /* Radii */
   --radius-sm: 4px;
@@ -153,6 +152,7 @@
   --motion-mark: 800ms;
   --motion-score-toast: 1100ms;
   --mark-grow: 1.08;
+  --flag-mark-share: 0.4;
   --mark-fade: 0;
   --progress-unknown-width: 25%;
   --progress-unknown-stripes: none;

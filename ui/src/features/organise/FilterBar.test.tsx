@@ -63,12 +63,25 @@ describe("FilterBar", () => {
     expect(screen.getByRole("combobox", { name: "Sort" })).toHaveValue("score");
   });
 
-  it("is disabled in the timeline view, where the order is by date", () => {
-    useGridStore.setState({ query: { ...defaultQuery(), view: "timeline", sort: "name" } });
+  it("shows Sort only in the grid view, keeping the chosen sort for its return", () => {
+    for (const view of ["timeline", "map"] as const) {
+      useGridStore.setState({ query: { ...defaultQuery(), view, sort: "name" } });
+      const { unmount } = render(<FilterBar />);
+      expect(screen.queryByRole("combobox", { name: "Sort" })).not.toBeInTheDocument();
+      expect(screen.getByRole("searchbox", { name: "Search photos" })).toBeInTheDocument();
+      unmount();
+    }
+    useGridStore.setState({ query: { ...defaultQuery(), view: "grid", sort: "name" } });
     render(<FilterBar />);
-    const sort = screen.getByRole("combobox", { name: "Sort" });
-    expect(sort).toBeDisabled();
-    expect(sort).toHaveValue("date");
+    expect(screen.getByRole("combobox", { name: "Sort" })).toHaveValue("name");
+  });
+
+  it("puts the search box first, at the left, before Sort and Filters", () => {
+    render(<FilterBar />);
+    const bar = screen.getByRole("search", { name: "Sort and filter" });
+    const search = within(bar).getByRole("searchbox", { name: "Search photos" });
+    const sort = within(bar).getByRole("combobox", { name: "Sort" });
+    expect(search.compareDocumentPosition(sort) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("opens the panel with its counts, focus on the first control", async () => {
@@ -234,9 +247,7 @@ describe("FilterBar in a narrow window", () => {
     expect(count.firstChild?.textContent).toBe("3");
     expect(count).toHaveTextContent("3 photos");
     expect(count).toHaveAttribute("title", "3 photos");
-    // The tooltip shows on keyboard focus.
-    await userEvent.tab();
-    await userEvent.tab();
+    // The tooltip shows on keyboard focus; the box is the bar's first stop.
     await userEvent.tab();
     expect(box).toHaveFocus();
     expect(await screen.findByRole("tooltip")).toHaveTextContent(

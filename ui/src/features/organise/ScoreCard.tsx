@@ -14,6 +14,11 @@ function plain(total: number): string {
   return total < 0 ? `−${-total}` : String(total);
 }
 
+/** The class that draws a number below zero in red (`--score-minus`, owner's feedback, issue 168). */
+function minus(n: number): string {
+  return n < 0 ? " ow-score-card__points--minus" : "";
+}
+
 /**
  * The score card at the top of the details panel (docs/05-organising.md,
  * "The score card"): "Photo score" and the total. Hovering or focusing it
@@ -49,7 +54,7 @@ export function ScoreCard({ id, revision }: { id: number; revision: number }) {
       data-testid="score-card"
     >
       <span className="ow-score-card__title">{t.card.title}</span>
-      <span className="ow-score-card__total">{plain(score.total)}</span>
+      <span className={`ow-score-card__total${minus(score.total)}`}>{plain(score.total)}</span>
       {!score.analysed && <span className="ow-score-card__reading">{t.card.reading}</span>}
       {open && (
         <div className="ow-score-card__popup" id={popup} role="tooltip">
@@ -75,7 +80,7 @@ export function ScoreCard({ id, revision }: { id: number; revision: number }) {
               <tr className="ow-score-card__sum">
                 <th scope="row">{t.card.total}</th>
                 <td />
-                <td className="ow-score-card__points">{plain(score.total)}</td>
+                <td className={`ow-score-card__points${minus(score.total)}`}>{plain(score.total)}</td>
               </tr>
             </tbody>
           </table>

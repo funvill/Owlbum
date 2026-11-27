@@ -23,18 +23,19 @@ function setFilter(filter: Filter): void {
 
 /**
  * The filter bar (docs/05-organising.md, "The filter bar"): a search
- * landmark above the body while an album with photos is open. It holds the
- * Sort control (#29), the Filters button with its panel, and the count; a
- * second row, "Active filters", shows the chips, "Showing X of Y" and Clear
- * filter while a filter is on (#31), and the search box with its hint line
- * (#32), and the Stack similar checkbox (#131), which is the `stack_similar`
- * setting.
+ * landmark above the body while an album with photos is open. The search
+ * box with its hint line (#32) sits at the left; at the right are the Sort
+ * control (#29, shown only in the grid view), the Stack similar checkbox
+ * (#131, the `stack_similar` setting), the Filters button with its panel,
+ * and the count. A second row, "Active filters", shows the chips, "Showing
+ * X of Y" and Clear filter while a filter is on (#31).
  *
  * Every number and chip comes from the result: the page never counts or
  * builds chip text itself. A change of sort or filter re-runs the query
  * with the selection kept; the grid then scrolls as for any change the
- * user makes. In the timeline view the order is always by date, so Sort is
- * disabled there.
+ * user makes. The timeline is always in date order and the map has no
+ * order to see, so Sort is shown only in the grid (owner's feedback,
+ * issue 166); the chosen sort is kept for when the grid comes back.
  */
 export function FilterBar() {
   const query = useGridStore((s) => s.query);
@@ -43,7 +44,7 @@ export function FilterBar() {
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const area = useRef<HTMLDivElement>(null);
-  const timeline = query.view === "timeline";
+  const grid = query.view === "grid";
   const panelCount = result?.panel_count ?? 0;
   const filtered = result?.filtered ?? false;
   // In a narrow window the count is the number alone (docs/09-visual-design.md, "The bars").
@@ -73,23 +74,24 @@ export function FilterBar() {
   return (
     <div className="ow-filter-bar" role="search" aria-label={t.bar.label}>
       <div className="ow-filter-bar__main">
-        <SelectField
-          label={t.bar.sort}
-          value={timeline ? "date" : query.sort}
-          options={SORTS}
-          disabled={timeline}
-          onChange={(sort) => {
-            const grid = useGridStore.getState();
-            grid.setQuery({ ...grid.query, sort: sort as Sort });
-          }}
-        />
+        <QueryBox />
+        <span className="ow-filter-bar__spacer" />
+        {grid && (
+          <SelectField
+            label={t.bar.sort}
+            value={query.sort}
+            options={SORTS}
+            onChange={(sort) => {
+              const state = useGridStore.getState();
+              state.setQuery({ ...state.query, sort: sort as Sort });
+            }}
+          />
+        )}
         <Tooltip text={t.bar.stackTip}>
           <span className="ow-filter-bar__stack">
             <Checkbox label={t.bar.stack} checked={query.stack} onChange={setStackSimilar} />
           </span>
         </Tooltip>
-        <QueryBox />
-        <span className="ow-filter-bar__spacer" />
         <div
           ref={area}
           className="ow-filter-bar__filters"

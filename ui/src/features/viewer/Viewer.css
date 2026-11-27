@@ -18,6 +18,8 @@
 .ow-viewer__stage {
   position: absolute;
   inset: 0;
+  /* A size container: the star mark and the score toast size themselves on it. */
+  container-type: size;
   /* The mini map sits below the top bar. */
   --_minimap-top: 56px;
 }

@@ -14,7 +14,7 @@ import { resetGrid, useGridStore } from "../grid";
 import { resetImageCache, type Load } from "../preview";
 import { resetViewer } from "../viewer/store";
 import { resetFlags } from "./flags";
-import { resetNudges, toastText } from "./nudge";
+import { resetNudges, toastChange, toastText } from "./nudge";
 import { undoToast } from "./undo";
 import { useToasts } from "../../controls/toastQueue";
 import type { Undone } from "../../api/bindings/Undone";
@@ -246,13 +246,22 @@ describe("Nudge keys", () => {
     fake.calls.filter((c) => c.command === "photo_nudge").map((c) => c.args as { ids: number[]; delta: number });
   const toast = () => screen.queryByTestId("score-toast");
 
-  it("writes the toast texts", () => {
-    expect(toastText(1, 1, 1, 74)).toBe("+1 · 74");
-    expect(toastText(-1, 1, 1, 72)).toBe("−1 · 72");
-    expect(toastText(1, 4, 4, 80)).toBe("+1 · 4 photos");
-    expect(toastText(1, 1, 0, 74)).toBe("Can't nudge any further");
-    expect(toastText(-1, 1, 1, -3)).toBe("−1 · −3");
-    expect(toastText(1, 1, 1, null)).toBe("+1");
+  it("writes the toast texts: the change alone, never the new total", () => {
+    expect(toastText(1)).toBe("+1");
+    expect(toastText(-1)).toBe("−1");
+    expect(toastText(5)).toBe("+5");
+    expect(toastText(-5)).toBe("−5");
+    expect(toastText(0)).toBe("Can't nudge any further");
+  });
+
+  it("adds up taps in one direction while the toast shows in the same place", () => {
+    const up = { text: "+4", delta: 1 as const, change: 4, place: "preview" as const, seq: 4 };
+    expect(toastChange(up, 1, 1, "preview")).toBe(5);
+    expect(toastChange(up, -1, 1, "preview")).toBe(-1);
+    expect(toastChange(up, 1, 1, "viewer")).toBe(1);
+    expect(toastChange(up, 1, 0, "preview")).toBe(0);
+    expect(toastChange(null, -1, 3, "preview")).toBe(-1);
+    expect(toastChange({ ...up, change: 0 }, 1, 1, "preview")).toBe(1);
   });
 
   it("Up nudges the current photo and shows the toast over the preview, without moving the selection", async () => {
@@ -265,7 +274,8 @@ describe("Nudge keys", () => {
     press("ArrowUp");
     await waitFor(() => expect(nudges()).toEqual([{ ids: [2], delta: 1 }]));
     const t = await within(region("Preview")).findByTestId("score-toast");
-    expect(t).toHaveTextContent("+1 · 74");
+    expect(t).toHaveTextContent("+1");
+    expect(t).not.toHaveTextContent("74");
     expect(t).toHaveClass("ow-score-toast--up");
     expect(grid().current).toEqual({ id: 2, index: 1 });
   });
@@ -275,7 +285,7 @@ describe("Nudge keys", () => {
     press("ArrowDown");
     await waitFor(() => expect(nudges()).toHaveLength(1));
     expect(nudges()[0]).toEqual({ ids: [2, 3, 4], delta: -1 });
-    await waitFor(() => expect(toast()).toHaveTextContent("−1 · 3 photos"));
+    await waitFor(() => expect(toast()).toHaveTextContent("−1"));
     expect(toast()).toHaveClass("ow-score-toast--down");
   });
 
@@ -303,7 +313,7 @@ describe("Nudge keys", () => {
     );
     press("ArrowUp");
     await waitFor(() => expect(nudges()).toEqual([{ ids: [2], delta: 1 }]));
-    expect(await within(viewer).findByTestId("score-toast")).toHaveTextContent("+1 · 55");
+    expect(await within(viewer).findByTestId("score-toast")).toHaveTextContent("+1");
   });
 
   it("does nothing while typing, for a held key, or in a view-only album", async () => {

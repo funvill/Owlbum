@@ -53,6 +53,12 @@
   border-collapse: collapse;
 }
 
+/* Each row's label sits at the top of its row, beside a "why" that may wrap. */
+.ow-score-card__lines th,
+.ow-score-card__lines td {
+  vertical-align: top;
+}
+
 .ow-score-card__lines th {
   padding: var(--space-1) var(--space-3) var(--space-1) 0;
   text-align: left;

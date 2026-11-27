@@ -24,6 +24,7 @@ import { FlagMark, ScoreToast, flagKeyHandlers, isFlagKey } from "../organise";
 import {
   CachedZoomStage,
   StageFor,
+  shownAspect,
   stagePictures,
   toggleVideo,
   usePreload,
@@ -187,8 +188,8 @@ function OpenViewer({ detail }: ViewerProps) {
             />
           </StageFor>
         )}
-        <FlagMark place="viewer" />
-        <ScoreToast place="viewer" />
+        <FlagMark place="viewer" aspect={row === undefined ? 1 : shownAspect(row)} />
+        <ScoreToast place="viewer" aspect={row === undefined ? 1 : shownAspect(row)} />
       </div>
       <div className={`ow-viewer__bar${bar ? "" : " ow-viewer__bar--away"}`}>
         {row !== undefined && (

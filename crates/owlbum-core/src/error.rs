@@ -81,6 +81,18 @@ pub enum ErrorCode {
     ScanRunning,
     /// `app_settings_set` was given a value outside the setting's range.
     SettingOutOfRange,
+    /// Tagging (docs/07-tagging.md, "Commands and events").
+    NoSuchModel,
+    DownloadBusy,
+    DownloadFailed,
+    ModelNotReady,
+    NoDescribeModel,
+    NotDescribedYet,
+    ModelLoadFailed,
+    EmptyDescription,
+    TaggingTimeout,
+    TaggingLost,
+    TaggingStopped,
     /// `file_trash` could not run at all; per-file failures are in its
     /// reply.
     TrashFailed,

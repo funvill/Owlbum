@@ -86,6 +86,18 @@ image-webp = "0.2.4"
 # cannot do. No rayon: the scan pool already decodes one photo per thread.
 jpeg-decoder = { version = "0.3.2", default-features = false }
 rawler = { version = "0.8.0", default-features = false }
+# Tagging (docs/07-tagging.md, "The runtime", "Packaging"): ONNX Runtime
+# on the processor, loaded at run time from Microsoft's own library by its
+# full path (choice B). The prebuilt library of choice A stopped with an
+# illegal instruction on a processor without AVX2 (#52).
+ort = { version = "=2.0.0-rc.15", default-features = false, features = ["std", "load-dynamic", "api-22"] }
+# Model tokenizers, without the C regex library and the training code.
+tokenizers = { version = "0.22.2", default-features = false, features = ["fancy-regex"] }
+# Model downloads (docs/07-tagging.md, "Model download"): Rust only,
+# blocking, redirects followed by hand, rustls with the webpki roots. The
+# same HTTP client `ort` uses to fetch its library at build time.
+ureq = { version = "3", default-features = false, features = ["rustls"] }
+sha2 = "0.10"
 
 [workspace.lints.rust]
 unsafe_code = "deny"

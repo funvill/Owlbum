@@ -332,6 +332,12 @@ impl Thumbs {
         self.thumbnail_with(photo, kind, Priority::Page)
     }
 
+    /// [`Thumbs::thumbnail`] for background work (tagging): its decode
+    /// waits behind every picture the page asked for.
+    pub fn background_thumbnail(&self, photo: &Photo, kind: Kind) -> Option<Vec<u8>> {
+        self.thumbnail_with(photo, kind, Priority::Background)
+    }
+
     /// [`Thumbs::thumbnail`] with its decode at `priority`.
     fn thumbnail_with(&self, photo: &Photo, kind: Kind, priority: Priority) -> Option<Vec<u8>> {
         if kind == Kind::Full || !store::is_thumb_key(&photo.thumb_key) {

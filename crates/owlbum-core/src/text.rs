@@ -16,4 +16,5 @@ pub mod menu;
 pub mod photo;
 pub mod query;
 pub mod scan;
+pub mod tagging;
 pub mod score;

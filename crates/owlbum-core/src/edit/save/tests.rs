@@ -12,9 +12,11 @@ use crate::edit::store::{self, EditStep};
 const RED: [u8; 4] = [255, 0, 0, 255];
 const BLUE: [u8; 4] = [0, 0, 255, 255];
 
+/// `album` comes first so it closes its database before `tmp` deletes the
+/// folder (fields drop in order).
 struct Fixture {
-    tmp: tempfile::TempDir,
     album: Album,
+    tmp: tempfile::TempDir,
 }
 
 impl Fixture {
@@ -23,7 +25,7 @@ impl Fixture {
         std::fs::create_dir_all(tmp.path().join("album")).unwrap();
         std::fs::create_dir_all(tmp.path().join("bin")).unwrap();
         let album = Album::open(&tmp.path().join("album"), &OpenOptions::default()).unwrap();
-        Self { tmp, album }
+        Self { album, tmp }
     }
 
     fn root(&self) -> PathBuf {

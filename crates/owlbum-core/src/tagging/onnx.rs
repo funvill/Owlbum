@@ -791,4 +791,60 @@ mod tests {
         assert!(seen.iter().all(|t| *t >= 95));
         assert!(seen.len() > 1);
     }
+
+    /// The real-model checks (docs/07-tagging.md, "Real-model tests"). They
+    /// run only when `OWLBUM_TEST_MODELS_DIR` names a folder of downloaded
+    /// models (`<folder>/<model id>/…`) and ONNX Runtime can be found
+    /// (`OWLBUM_ORT_DYLIB`); otherwise they pass without doing anything.
+    /// They never download.
+    #[test]
+    fn real_models_when_a_folder_is_given() {
+        let Some(dir) = std::env::var_os("OWLBUM_TEST_MODELS_DIR").map(PathBuf::from) else {
+            return;
+        };
+        let mut b = OnnxBackend::new().expect("ONNX Runtime starts");
+        let cat = super::super::catalogue::Catalogue::real();
+        let long = || Deadline::after(Duration::from_secs(600));
+        let lake = owlbum_fixtures::picture::lake(640, 480);
+        let img = TagImage { rgb: &lake, name: "lake.jpg" };
+        for m in cat.all() {
+            let mdir = dir.join(m.id);
+            if !mdir.is_dir() {
+                continue;
+            }
+            assert_eq!(
+                super::super::install::verify(&mdir, m, true),
+                super::super::install::InstallState::Ok,
+                "{} passes its hashes",
+                m.id
+            );
+            let t = std::time::Instant::now();
+            b.load(m, &mdir, default_threads(), super::super::vocabulary::VOCABULARY, &long())
+                .expect("loads");
+            println!("{}: loaded in {:.1} s", m.id, t.elapsed().as_secs_f32());
+            match m.part {
+                Part::Describe => {
+                    let t = std::time::Instant::now();
+                    let d = b.describe(&img, &long()).unwrap();
+                    println!("{}: {:.1} s a photo", m.id, t.elapsed().as_secs_f32());
+                    let text = d.description.unwrap();
+                    assert!(text.len() > 20 && !text.contains('<') && !text.contains('>'), "{text}");
+                    let again = b.describe(&img, &long()).unwrap();
+                    assert_eq!(again.description.as_deref(), Some(text.as_str()), "greedy is repeatable");
+                    let sampled: std::collections::HashSet<String> =
+                        (0..3).map(|_| b.caption(&img, &long()).unwrap()).collect();
+                    assert!(sampled.len() > 1, "sampled captions vary");
+                }
+                Part::Keywords => {
+                    let k = b.keywords(&img, &long()).unwrap();
+                    assert_eq!(k.vector.len(), m.dim.unwrap() as usize);
+                    let len: f32 = k.vector.iter().map(|x| x * x).sum::<f32>().sqrt();
+                    assert!((len - 1.0).abs() < 1e-4);
+                    assert!(k.keywords.len() <= results::MAX_KEYWORDS);
+                    // The painted lake fixture is not recognised as a lake
+                    // by CLIP (#52), so `lake` is not required here.
+                }
+            }
+        }
+    }
 }

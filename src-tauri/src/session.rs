@@ -70,6 +70,8 @@ pub struct Session {
     open: Mutex<Option<OpenAlbum>>,
     /// Held for the whole of an open or a close.
     gate: Mutex<()>,
+    /// The tagging queue, told when an album opens and closes.
+    tagging: Mutex<Option<Arc<owlbum_core::tagging::runtime::Runtime>>>,
 }
 
 impl Session {
@@ -110,6 +112,9 @@ impl Session {
     /// request still in flight may keep the album itself a moment longer;
     /// it no longer tells the page anything.
     pub fn close(&self) {
+        if let Some(t) = self.tagging.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
+            t.attach(None);
+        }
         let old = self.slot().take();
         if let Some(old) = &old {
             old.album().set_status_listener(Arc::new(|_| {}));
@@ -158,6 +163,27 @@ impl Session {
         }
     }
 
+    /// Gives the open album to the tagging queue
+    /// (docs/07-tagging.md, "Album open and close"). Its pictures are the
+    /// medium thumbnails; it waits while a scan runs.
+    pub fn tag(&self, tagging: Arc<owlbum_core::tagging::runtime::Runtime>, thumbs: Option<Thumbs>) {
+        use owlbum_core::tagging::runtime::{AlbumWork, ThumbPictures};
+        *self.tagging.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::clone(&tagging));
+        let (Some(scanner), Some(thumbs)) = (self.scanner(), thumbs) else {
+            return;
+        };
+        let album = Arc::clone(scanner.album());
+        let weak = Arc::downgrade(&scanner);
+        tagging.attach(Some(AlbumWork {
+            pictures: Arc::new(ThumbPictures {
+                album: Arc::clone(&album),
+                thumbs,
+            }),
+            album,
+            scanning: Arc::new(move || weak.upgrade().is_some_and(|s| s.is_running())),
+        }));
+    }
+
     /// True when an album is open.
     pub fn is_open(&self) -> bool {
         self.slot().is_some()
@@ -186,7 +212,11 @@ pub fn open_album<R: Runtime>(app: &AppHandle<R>, album: Album) -> Vec<String> {
     let mut env = ScanEnv::new(emitter);
     env.thumbs = app.try_state::<Thumbs>().map(|t| t.inner().clone());
     let notices = recover_saves(app, &album);
+    let thumbs = env.thumbs.clone();
     app.state::<Session>().open(album, env);
+    if let Some(t) = crate::commands::tagging::tagging(app) {
+        app.state::<Session>().tag(t.runtime_arc(), thumbs);
+    }
     notices
 }
 

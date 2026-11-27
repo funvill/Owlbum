@@ -34,6 +34,7 @@ pub fn setup<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
         .manage(commands::file::DragPrep::default())
         .manage(closing::Closing::default())
         .manage(window::Geometry::default())
+        .manage(commands::tagging::TaggingState::default())
         .on_menu_event(|app, event| menu::chosen(app, event.id().as_ref()))
         .on_window_event(|window, event| match event {
             WindowEvent::Focused(true) => window.state::<session::Session>().focused(),

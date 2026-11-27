@@ -88,7 +88,7 @@ Rules checked by a unit test:
 | `clip-base-q8` | keywords | smaller | CLIP base | `Xenova/clip-vit-base-patch32` @ `6b7c523703ae26e39be4b03774966f8571c7f523` | 155,851,446 (156 MB) | 0.1 | MIT | 512 | 0.05 | 0.27 |
 | `clip-large-q8` | keywords | larger | CLIP large | `Xenova/clip-vit-large-patch14` @ `c307790166907339eed5a9a53a249af534102536` | 434,215,233 (434 MB) | 0.5 | MIT | 768 | 0.05 | 0.24 |
 
-All four use the 8-bit quantised ONNX files (`q8` in the id). The seconds-per-photo figures and the thresholds were measured with the old program's runtime on 2026-11-24. The prototype measures them again with the Rust runtime, and the catalogue takes the new figures. The `dim` values are what these two CLIP shapes normally produce; the prototype confirms them.
+All four use the 8-bit quantised ONNX files (`q8` in the id). The seconds-per-photo figures and the thresholds were measured with the old program's runtime on 2026-11-24. The prototype (#52) measured the base models with the Rust runtime on a four-core Intel i5-3550 without AVX2, two threads: Florence-2 base 12 to 25 s a photo (caption and objects; load 3 to 7 s), CLIP base 0.4 to 0.6 s a photo (load 6 to 11 s, most of it the 564 vocabulary prompts). That processor is far slower than the six-core reference, so the catalogue keeps the old figures until they are measured on one; the large models were not measured. The `dim` values are what these two CLIP shapes normally produce; the prototype confirms them.
 
 ### Files of each model
 
@@ -292,7 +292,9 @@ Errors returned by the commands themselves:
 
 Models run in ONNX Runtime through the `ort` crate, on the processor only. No graphics card is used in version 1. Text is turned into tokens by the `tokenizers` crate, from each model's own `tokenizer.json`.
 
-The `usls` crate is tried first, because it already implements Florence-2 and CLIP on top of `ort`. If it cannot load the pinned files, cannot be stopped from fetching files itself, or cannot give the outputs this document needs (sampled captions, a deadline, raw labels), Owlbum ports its Florence-2 module into `owlbum-core` and drives `ort` directly. Either way the code sits behind one trait, `TagBackend` (see Tests), and the rest of Owlbum does not know which is in use.
+Owlbum drives `ort` directly (`owlbum_core::tagging::onnx`): CLIP is two sessions and a tokenizer, and Florence-2 is four sessions (vision encoder, token embedder, encoder, merged decoder) with a token loop written in Owlbum, which gives sampled captions, the deadline check between steps and the raw `<OD>` labels this document needs. The prototype (#52) chose this over `usls`: `usls` pins its own `ort` and fetches model files through its own hub client, and Owlbum needs neither. The code sits behind one trait, `TagBackend` (see Tests), and the rest of Owlbum does not know what runs the models.
+
+The merged decoder is driven as `transformers.js` drives it: the first step has `use_cache_branch` false and empty caches; the encoder's cached keys and values from that step are kept for every later step. The model's own `generation_config.json` sets `no_repeat_ngram_size` 3, and Owlbum applies it to greedy and sampled captions alike (without it greedy captions repeat themselves); its `num_beams` 3 is not used. The prompts read from the pinned files are the ones this document expects, and CLIP base gives vectors of 512 numbers.
 
 The runtime never touches the network. It is given a folder of local files and nothing else.
 
@@ -369,7 +371,7 @@ A running thread cannot be killed, so a limit is enforced in three steps:
 
 1. **Between steps.** Florence-2 writes one token per decoder run. The deadline is checked before each one, so a slow caption stops cleanly within one step.
 2. **Inside a run.** A watchdog asks ONNX Runtime to end the run in progress when the deadline passes. `ort` exposes this through its run options; the prototype confirms it for the pinned version.
-3. **Stuck.** If the run has not returned 30 s after it was asked to end, the tagging thread is written off. A new tagging thread is started with empty slots. The stuck thread is left to finish or not, and its result is ignored.
+3. **Stuck.** If the run has not returned 30 s after it was asked to end, the tagging thread is written off. A new tagging thread is started with empty slots. The stuck thread is left to finish or not, and its result is ignored. (Not built yet: steps 1 and 2 are. The prototype saw a run end within about half a second of its deadline through the run options.)
 
 What a timeout does:
 
@@ -949,9 +951,9 @@ ONNX Runtime is a native library. There are two ways to ship it with `ort`.
 | Risks | The prebuilt library may need a newer C library than the oldest Linux Owlbum supports, or may not link cleanly with Tauri's Windows build. | Windows has its own older `onnxruntime.dll` in the system folder; loading by name could pick it up. A missing or blocked file breaks tagging at run time. |
 | Installer size | About 15 to 20 MB more. | About the same. |
 
-**Starting choice: A.** One program file, nothing to go missing, and the same on both platforms. The prototype must show that the built program starts and tags on a clean Windows 10 machine and on the oldest supported Linux (the release workflow's build image).
+**Chosen: B** (#52). The prebuilt library of choice A stopped the program with an illegal instruction on a processor without AVX2 (an Intel i5-3550), before any model was loaded, which would take the whole of Owlbum down on such a computer. Microsoft's own library has no such requirement.
 
-**Fallback: B.** If A fails either check, Owlbum ships the library and loads it with `ort`'s load-from-path call, always by the full path of the file inside its own install folder, never by name. A missing library makes tagging report "The model runtime would not start: …"; the rest of Owlbum is unaffected.
+Owlbum ships Microsoft's `onnxruntime.dll` (Windows) or `libonnxruntime.so` (Linux) from the NuGet package `Microsoft.ML.OnnxRuntime` 1.31.1 (`runtimes/win-x64/native/onnxruntime.dll`, 17,253,728 bytes, SHA-256 `cb2fa518b18356617f6f9f460c012501da2819ec7e5c1d80bd8f5de20492db0c`) and loads it with `ort`'s load-from-path call, always by a full path, never by name: the path set by the shell, else `OWLBUM_ORT_DYLIB` (development and the real-model tests), else the file next to the program. A missing library makes tagging report "The model runtime would not start: …"; the rest of Owlbum is unaffected. Putting the library into the installers (a Tauri resource fetched and checked by the release workflow) is a follow-up issue; until then a development build needs `OWLBUM_ORT_DYLIB`.
 
 Other notes:
 
@@ -1005,8 +1007,9 @@ pub enum BackendError {
 }
 
 pub trait TagBackend: Send {
-    fn load(&mut self, model: &ModelChoice, dir: &Path, threads: usize, vocabulary: &[&str]) -> Result<(), BackendError>;
+    fn load(&mut self, model: &ModelChoice, dir: &Path, threads: usize, vocabulary: &[&str], deadline: &Deadline) -> Result<(), BackendError>;
     fn unload(&mut self, part: Part);
+    fn loaded(&self, part: Part) -> Option<&'static str>;               // the id in a part's slot
     fn describe(&mut self, image: &TagImage, deadline: &Deadline) -> Result<Described, BackendError>;   // greedy caption + objects
     fn caption(&mut self, image: &TagImage, deadline: &Deadline) -> Result<String, BackendError>;       // sampled caption only
     fn keywords(&mut self, image: &TagImage, deadline: &Deadline) -> Result<Keyworded, BackendError>;   // keywords + vector

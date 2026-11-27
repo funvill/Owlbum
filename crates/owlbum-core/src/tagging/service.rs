@@ -169,6 +169,11 @@ impl Tagging {
         &self.runtime
     }
 
+    /// The queue, to hold apart from the service.
+    pub fn runtime_arc(&self) -> Arc<Runtime> {
+        Arc::clone(&self.runtime)
+    }
+
     fn downloads(&self) -> MutexGuard<'_, Downloads> {
         self.inner.downloads.lock().unwrap_or_else(|p| p.into_inner())
     }

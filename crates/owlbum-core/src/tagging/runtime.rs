@@ -357,6 +357,12 @@ impl Runtime {
     }
 }
 
+impl std::fmt::Debug for Runtime {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Runtime").field("status", &self.status()).finish()
+    }
+}
+
 impl Drop for Runtime {
     fn drop(&mut self) {
         self.shutdown();

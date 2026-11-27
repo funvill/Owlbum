@@ -56,6 +56,8 @@ impl Drop for TestApp {
             session.close();
         }
         drop(self.0.unmanage::<Thumbs>());
+        // Tagging holds the app data too, and its thread is stopped.
+        drop(self.0.unmanage::<owlbum_lib::commands::tagging::TaggingState>());
         drop(self.0.unmanage::<AppData>());
     }
 }

@@ -245,8 +245,8 @@ These are the starting choices. A prototype may replace one; the replacement is 
 | EXIF and video metadata | EXIF: Owlbum's own reader (`media::exif`); video containers: Owlbum's own walk of MP4, MOV and AVI headers, and `nom-exif` for dates, places, cameras and Matroska | Read only. Why EXIF is read by hand is in [Media and scanning](03-media-and-scanning.md#metadata-reading). |
 | JPEG XL | `jxl-oxide` | |
 | Camera RAW | `rawler` 0.8 (LGPL-2.1) | Reads the embedded previews and develops the sensor data (#49). Listed in `notices/rawler.txt` until the notices generator lists crates; `about.toml` must accept LGPL-2.1 for it. |
-| Model runtime | `ort` (ONNX Runtime), `tokenizers` | `usls` is tried first for Florence-2 and CLIP. How the runtime library is shipped is decided by the tagging prototype. |
-| Model downloads | `reqwest` (rustls, redirects handled by hand), `sha2` | |
+| Model runtime | `ort` (ONNX Runtime, loaded from Microsoft's library by full path), `tokenizers` | Driven directly, without `usls` (#52). |
+| Model downloads | `ureq` (rustls with the webpki roots, redirects handled by hand), `sha2` | `ureq` is the client `ort` already builds with; blocking suits the one download thread. |
 | Colour profiles | `moxcms` | Converting embedded profiles to sRGB (`media::colour`). Chosen by measurement in #7 over `lcms2` and `qcms` ([Media and scanning](03-media-and-scanning.md#open-questions), question 8). `image` already depends on it. |
 | EXIF writing | none: `owlbum_core::edit::metadata` | Only when an edit is saved into a file or copied: keep the block, reset orientation, set the new size, drop the embedded thumbnail. A small pure-Rust TIFF rewriter, because `little_exif` could not drop the thumbnail (#150). Lossless WebP with its profile, EXIF and XMP is written with `image-webp`, the version `image` already uses. |
 | Video poster frames | The `windows` crate (the shell's thumbnails; Media Foundation is a follow-up); `gstreamer` linked to the system libraries on Linux, not built yet | System codecs only. |

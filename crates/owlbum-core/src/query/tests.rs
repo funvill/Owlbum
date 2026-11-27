@@ -13,6 +13,7 @@ use crate::scan::{Request, ScanEnv, Scanner};
 use crate::text;
 
 mod filters;
+mod map;
 mod search;
 mod stacks;
 mod timeline;

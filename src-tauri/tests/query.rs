@@ -58,6 +58,7 @@ fn the_query_commands_without_an_album_answer_no_album() {
             json!({ "token": "q1", "offset": 0, "limit": 10 }),
         ),
         ("query_locate", json!({ "token": "q1", "id": 1 })),
+        ("query_map", json!({ "token": "q1" })),
         (
             "query_ids",
             json!({ "token": "q1", "offset": 0, "limit": 10 }),
@@ -145,6 +146,32 @@ fn query_parse_reads_the_box_and_search_text_filters() {
     let r = run(&window, json!({ "query": q }));
     assert!(r.filtered);
     assert_eq!(r.photos, 1, "the file name is searchable");
+    app.state::<owlbum_lib::session::Session>().close();
+}
+
+#[test]
+fn query_map_answers_every_photo_of_a_map_result_once() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (app, window) = app_window();
+    open_trip(&app, tmp.path());
+    let mut q = default_query();
+    q["view"] = json!("map");
+    let r = run(&window, json!({ "query": q }));
+    assert!(r.count > 0);
+    let map: Value = invoke(&window, "query_map", json!({ "token": r.token }))
+        .unwrap()
+        .deserialize()
+        .unwrap();
+    let points = map["points"].as_array().unwrap();
+    assert_eq!(
+        points.len() as u64 + map["unlocated"].as_u64().unwrap(),
+        u64::from(r.count)
+    );
+    for point in points {
+        assert_eq!(point.as_array().unwrap().len(), 5);
+    }
+    let err = invoke(&window, "query_map", json!({ "token": "no-such-token" })).unwrap_err();
+    assert_eq!(err["code"], "query_expired");
     app.state::<owlbum_lib::session::Session>().close();
 }
 

@@ -17,6 +17,7 @@ pub mod arg;
 mod engine;
 mod filter;
 mod keep;
+mod map;
 pub mod parse;
 mod search;
 pub mod shape;
@@ -28,6 +29,7 @@ pub mod timeline;
 pub use arg::Arg;
 pub use engine::{QueryEngine, TOKENS_KEPT, WINDOW_MAX};
 pub use keep::{settle, settle_stacked};
+pub use map::{MapPoint, MapPoints};
 pub use parse::{ParsedBox, parse_box};
 pub use shape::{
     Chip, Facets, Filter, FolderFacet, Group, GroupUnit, HiddenFilter, Keep, Kept, Located,

@@ -108,8 +108,14 @@ export interface GridState extends Selected {
   start(options?: GridOptions): Promise<void>;
   /** Stops following the album and forgets its result (the album closed). */
   stop(): void;
-  /** Runs a new query; changes within one animation frame make one call. */
-  setQuery(query: Query): void;
+  /**
+   * Runs a new query; changes within one animation frame make one call.
+   * `"stack"` is a stack opened or folded from its badge: the scroll
+   * position is kept and the current photo is then brought into view if it
+   * is not (docs/04-browsing.md, "When the result changes"). Any other
+   * change scrolls to the current photo, or to the top without one.
+   */
+  setQuery(query: Query, how?: QueryChange): void;
   /**
    * Starts or stops asking for facets (the filter panel opened or closed).
    * Starting asks `query_facets` for the result shown and sets `want_facets`
@@ -129,7 +135,10 @@ export interface GridState extends Selected {
   refresh(): Promise<void>;
 }
 
-type Cause = "first" | "user" | "change";
+/** Why the query changed: the user changed it, or opened or folded a stack. */
+export type QueryChange = "user" | "stack";
+
+type Cause = "first" | "change" | QueryChange;
 
 interface Session {
   client: QueryClient;
@@ -145,6 +154,8 @@ interface Session {
   lastRerun: number;
   rerunTimer: ReturnType<typeof setTimeout> | undefined;
   frame: number | undefined;
+  /** Why the call waiting for `frame` is made; "user" wins over "stack". */
+  queued: QueryChange;
   /**
    * Whether the first photo is still to become current when rows arrive: an
    * album opens with its first photo current (#119), unless a photo is
@@ -299,7 +310,9 @@ export const useGridStore = create<GridState>()((set, get) => {
     const scroll =
       s.cause === "user"
         ? nextScroll(current === null ? "top" : "current")
-        : get().scroll;
+        : s.cause === "stack" && current !== null
+          ? nextScroll("current")
+          : get().scroll;
     const to = result.kept?.view ?? null;
     const from = s.view;
     const follow =
@@ -493,6 +506,7 @@ export const useGridStore = create<GridState>()((set, get) => {
         lastRerun: Number.NEGATIVE_INFINITY,
         rerunTimer: undefined,
         frame: undefined,
+        queued: "user",
         pickFirst: true,
         restore: toRestore,
       };
@@ -565,13 +579,18 @@ export const useGridStore = create<GridState>()((set, get) => {
       });
     },
 
-    setQuery(query) {
+    setQuery(query, how = "user") {
       set({ query });
       const s = session;
-      if (s === null || s.frame !== undefined) return;
+      if (s === null) return;
+      if (s.frame !== undefined) {
+        if (how === "user") s.queued = "user";
+        return;
+      }
+      s.queued = how;
       s.frame = requestAnimationFrame(() => {
         s.frame = undefined;
-        if (session === s) void run(s, "user");
+        if (session === s) void run(s, s.queued);
       });
     },
 

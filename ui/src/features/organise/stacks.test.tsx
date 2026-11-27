@@ -17,6 +17,9 @@ import { createQueryFake, type FakePhoto } from "../../api/fake/query";
 import { useSettingsStore } from "../app";
 import { BrowseGrid, resetGrid, selectById, useGridStore } from "../grid";
 import { FilterBar } from "./FilterBar";
+import { dragTargets, selectedTargets } from "../files";
+import { toggleFlag } from "./flags";
+import { nudge } from "./nudge";
 import { toggleStack } from "./stacks";
 
 // jsdom does no layout: the grid's box is given a size, and ResizeObserver,
@@ -147,6 +150,50 @@ describe("stacks", () => {
     expect(grid().selection).toEqual([3]);
   });
 
+  it("acts on the face only when a closed stack is clicked: star, hide, nudge, delete and drag", async () => {
+    page();
+    await waitFor(() => expect(tiles()).toHaveLength(2));
+    await userEvent.click(tiles()[0]!);
+    expect(grid().selection).toEqual([3]);
+    await waitFor(() => expect(grid().current).toEqual({ id: 3, index: 0 }));
+    const sent = (command: string) =>
+      fake.calls
+        .filter((c) => c.command === command)
+        .map((c) => (c.args as { ids: number[] }).ids);
+    await toggleFlag("star", "selection");
+    await toggleFlag("hidden", "selection");
+    await nudge(1, "selection");
+    expect(sent("photo_set_info")).toEqual([[3], [3]]);
+    expect(sent("photo_nudge")).toEqual([[3]]);
+    expect(selectedTargets()).toEqual([3]);
+    expect(dragTargets(3)).toEqual([3]);
+  });
+
+  it("puts the face in the selection when a stack folds on a selected member that is not current", async () => {
+    page();
+    await waitFor(() => expect(tiles()).toHaveLength(2));
+    await userEvent.click(
+      within(tiles()[0]!).getByRole("button", {
+        name: "Show 3 similar photos",
+      }),
+    );
+    await waitFor(() => expect(tiles()).toHaveLength(4));
+    const user = userEvent.setup();
+    await user.click(tiles()[2]!);
+    await user.keyboard("{Control>}");
+    await user.click(tiles()[3]!);
+    await user.keyboard("{/Control}");
+    expect(grid().current).toEqual({ id: 4, index: 3 });
+    expect([...grid().selection].sort()).toEqual([2, 4]);
+    await userEvent.click(
+      within(tiles()[0]!).getByRole("button", {
+        name: "Fold 3 similar photos",
+      }),
+    );
+    await waitFor(() => expect(grid().current).toEqual({ id: 4, index: 1 }));
+    expect([...grid().selection].sort()).toEqual([3, 4]);
+  });
+
   it("opens the stack a folded photo is in when it must be shown", async () => {
     page();
     await waitFor(() => expect(tiles()).toHaveLength(2));
@@ -158,8 +205,16 @@ describe("stacks", () => {
   it("counts every photo of a closed stack in its timeline heading", async () => {
     page();
     await waitFor(() => expect(tiles()).toHaveLength(2));
-    act(() => grid().setQuery({ ...grid().query, view: "timeline", timeline_unit: "day" }));
-    await waitFor(() => expect(screen.getByText(/· 3 photos$/)).toBeInTheDocument());
+    act(() =>
+      grid().setQuery({
+        ...grid().query,
+        view: "timeline",
+        timeline_unit: "day",
+      }),
+    );
+    await waitFor(() =>
+      expect(screen.getByText(/· 3 photos$/)).toBeInTheDocument(),
+    );
     expect(screen.getByText(/· 1 photo$/)).toBeInTheDocument();
     expect(tiles()).toHaveLength(2);
   });

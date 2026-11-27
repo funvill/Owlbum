@@ -269,6 +269,36 @@ fn closing_a_stack_gives_the_selection_to_its_face() {
 }
 
 #[test]
+fn closing_a_stack_on_a_selected_member_puts_its_face_in_the_selection() {
+    // d is current; b, a member that is not current, is also selected. The
+    // stack folds, so its face takes b's place in the selection (#144).
+    let tmp = tempfile::tempdir().unwrap();
+    let album = album(tmp.path());
+    let [a, b, c, d] = burst(&album);
+    let engine = QueryEngine::new();
+    let open = run(
+        &engine,
+        &album,
+        &Query {
+            open_stacks: vec![a],
+            ..default_query()
+        },
+    );
+    let keep = Keep {
+        selection: vec![b, d],
+        ..keep_current(&open.token, d, 3)
+    };
+    let kept = engine
+        .run(&album, &default_query(), Some(&keep))
+        .unwrap()
+        .kept
+        .unwrap();
+    assert_eq!(kept.current, Some(PhotoAt { id: d, index: 1 }));
+    assert_eq!(kept.anchor, Some(PhotoAt { id: d, index: 1 }));
+    assert_eq!(kept.selection, vec![c, d]);
+}
+
+#[test]
 fn a_hidden_face_hands_the_stack_and_the_selection_to_the_new_face() {
     let tmp = tempfile::tempdir().unwrap();
     let album = album(tmp.path());

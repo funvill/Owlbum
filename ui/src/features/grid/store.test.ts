@@ -173,6 +173,40 @@ describe("grid store", () => {
     expect(grid().scroll!.seq).toBeGreaterThan(seq);
   });
 
+  it("keeps the scroll position when a stack opens or folds with no current photo", async () => {
+    await grid().start();
+    const before = grid().scroll;
+    grid().setQuery({ ...defaultQuery(), open_stacks: [1] }, "stack");
+    await vi.waitFor(() => expect(runs()).toHaveLength(2));
+    await new Promise((r) => setTimeout(r, 20));
+    expect(runs()[1]!.args).toMatchObject({ keep: { view: null } });
+    expect(grid().scroll).toEqual(before);
+  });
+
+  it("brings the current photo into view after a stack opens or folds", async () => {
+    await grid().start();
+    grid().setSelection({
+      current: { id: 3, index: 2 },
+      anchor: { id: 3, index: 2 },
+      selection: [3],
+    });
+    const seq = grid().scroll?.seq ?? 0;
+    grid().setQuery({ ...defaultQuery(), open_stacks: [1] }, "stack");
+    await vi.waitFor(() => expect(grid().scroll?.seq).toBeGreaterThan(seq));
+    expect(grid().scroll).toMatchObject({ to: "current" });
+    expect(grid().current?.id).toBe(3);
+  });
+
+  it("scrolls as for a user change when one comes in the same frame as a stack toggle", async () => {
+    await grid().start();
+    const seq = grid().scroll?.seq ?? 0;
+    grid().setQuery({ ...defaultQuery(), open_stacks: [1] }, "stack");
+    grid().setQuery({ ...grid().query, sort: "name" });
+    await vi.waitFor(() => expect(grid().scroll).toMatchObject({ to: "top" }));
+    expect(grid().scroll!.seq).toBeGreaterThan(seq);
+    expect(runs()).toHaveLength(2);
+  });
+
   it("follows the current photo and the selection into the new result", async () => {
     await grid().start();
     grid().setSelection({

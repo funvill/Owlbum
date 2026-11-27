@@ -298,7 +298,16 @@ function settle(
   const replaced = (gone: PhotoAt): PhotoAt => find(gone.id) ?? replacement(gone.id) ?? inItsPlace(gone);
   const current = keep.current === null ? null : replaced(keep.current);
   const anchor = (keep.anchor_id === null ? null : find(keep.anchor_id)) ?? current;
-  const selection = [...new Set(keep.selection.filter((id) => place.has(id)))];
+  // A selected photo now folded in a closed stack hands its place to the face.
+  const selection = [
+    ...new Set(
+      keep.selection.flatMap((id) => {
+        if (place.has(id)) return [id];
+        const folded = stacks.folded.get(id);
+        return folded === undefined ? [] : [folded.face.id];
+      }),
+    ),
+  ];
   if (current !== null && !selection.includes(current.id)) selection.push(current.id);
   const view = keep.view === null ? null : replaced(keep.view);
   return { current, anchor, selection, view };

@@ -213,6 +213,76 @@ describe("the map's markers", () => {
     map.destroy();
   });
 
+  /** `n` points spread as the large fixture places them: nine in ten in a box around Vancouver, the rest over the globe. */
+  function spread(n: number): MapPoint[] {
+    let seed = 7;
+    const rand = () => (seed = (seed * 1_103_515_245 + 12_345) % 2_147_483_648) / 2_147_483_648;
+    return Array.from({ length: n }, (_, i) =>
+      i % 10 === 0
+        ? point(i + 1, rand() * 160 - 80, rand() * 360 - 180)
+        : point(i + 1, 49 + rand() * 0.6, -123.5 + rand()),
+    );
+  }
+
+  it("adds many markers in slices, and points that arrive meanwhile go on afterwards", async () => {
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    const map = new PhotoMap(el, { onPick: () => {}, onTiles: () => {} });
+    let done = false;
+    map.setPoints(spread(20_000));
+    const loaded = map.whenLoaded().then(() => (done = true));
+    // The first slice is added within the call; the rest come later.
+    expect(done).toBe(false);
+    map.setPoints([point(1), point(2)]);
+    map.setCurrent(2, true);
+    expect(map.shown().size).toBe(20_000);
+    await loaded;
+    expect(map.shown().size).toBe(2);
+    expect(map.marker(3)).toBeUndefined();
+    map.destroy();
+    el.remove();
+  }, 30_000);
+
+  it("waits for the markers being added before it goes", async () => {
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    const map = new PhotoMap(el, { onPick: () => {}, onTiles: () => {} });
+    map.setPoints(spread(20_000));
+    const loaded = map.whenLoaded();
+    map.destroy();
+    expect(el.querySelector(".leaflet-map-pane")).not.toBeNull();
+    await loaded;
+    await new Promise((r) => setTimeout(r, 50));
+    expect(el.querySelector(".leaflet-map-pane")).toBeNull();
+    el.remove();
+  }, 30_000);
+
+  // Opt-in, as it takes several seconds: OWLBUM_LARGE_MAP=1 npx vitest run src/features/map (#146).
+  it.runIf(process.env.OWLBUM_LARGE_MAP)(
+    "times 100,000 markers, and a re-run that keeps them all",
+    async () => {
+      const many = spread(100_000);
+      const el = document.createElement("div");
+      document.body.appendChild(el);
+      const map = new PhotoMap(el, { onPick: () => {}, onTiles: () => {} });
+      let t = performance.now();
+      map.setPoints(many);
+      const call = performance.now() - t;
+      await map.whenLoaded();
+      const all = performance.now() - t;
+      t = performance.now();
+      map.setPoints(many.slice());
+      const again = performance.now() - t;
+      console.info(
+        `map: 100,000 markers: setPoints returns in ${call.toFixed(0)} ms, all clustered in ${all.toFixed(0)} ms; a re-run keeping them ${again.toFixed(0)} ms`,
+      );
+      expect(map.shown().size).toBe(100_000);
+      map.destroy();
+      el.remove();
+    },
+    120_000,
+  );
+
   it("never uses the library's default marker image", () => {
     const el = document.createElement("div");
     const map = new PhotoMap(el, { onPick: () => {}, onTiles: () => {} });

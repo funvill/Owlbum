@@ -17,7 +17,10 @@ export function toggleStack(row: Row): void {
   const id = row.stack.id;
   const grid = useGridStore.getState();
   const open = grid.query.open_stacks;
-  grid.setQuery({ ...grid.query, open_stacks: open.includes(id) ? open.filter((s) => s !== id) : [...open, id] });
+  grid.setQuery(
+    { ...grid.query, open_stacks: open.includes(id) ? open.filter((s) => s !== id) : [...open, id] },
+    "stack",
+  );
 }
 
 /** The Stack similar checkbox: re-runs the query and remembers the choice as the `stack_similar` setting. */

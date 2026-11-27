@@ -925,6 +925,7 @@ The map is the one view that needs every matching photo at once, so it does not 
 - **Current photo.** Its marker has a 3px `--select` border and a white ring, and is drawn above the others. When the current photo changes and its marker is off screen, the map pans to it and keeps the zoom. If it is inside a cluster, the cluster is opened far enough to show it.
 - **Clusters.** Markers within 48px join into a cluster: a 40px `--accent` circle with the count in bold and a 3px white border. A click zooms in to split it.
 - **The library's default marker image is never requested.**
+- **Many markers.** Markers are made 20,000 at a time, and the cluster group adds each batch in slices of about 100 ms with a short pause between, so a whole album's markers (100,000 take a few seconds to cluster) never hold the page up for long. Points that arrive while a load runs wait for it to end, and the newest wins; a pan to the current photo asked for meanwhile happens when it ends (#146).
 
 ### Loading map tiles
 

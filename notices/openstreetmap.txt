@@ -1,0 +1,16 @@
+OpenStreetMap
+
+Owlbum's Map view can show map tiles from OpenStreetMap
+(https://www.openstreetmap.org). It asks before it loads any, and loads
+none while the setting "Map: offline" is chosen. The tiles are downloaded
+from https://tile.openstreetmap.org when the map is shown; none are
+bundled with Owlbum.
+
+Map data © OpenStreetMap contributors. The data is available under the
+Open Database License (ODbL) 1.0, https://www.openstreetmap.org/copyright.
+The map shows the credit "© OpenStreetMap contributors" in its corner
+while tiles are loaded.
+
+Owlbum uses the tiles under the OpenStreetMap Foundation's tile usage
+policy, https://operations.osmfoundation.org/policies/tiles/: a person
+looking at their own photos, with no bulk downloading of tiles.

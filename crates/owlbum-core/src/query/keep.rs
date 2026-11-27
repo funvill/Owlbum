@@ -13,8 +13,9 @@
 //!    is past the end.
 //! 4. An empty result has no current photo.
 //!
-//! The selection is the old selection limited to photos still shown, plus
-//! the new current photo. The anchor stays when it is still shown; else it
+//! The selection is the old selection limited to photos still shown (a
+//! photo now folded in a closed stack counts as its face), plus the new
+//! current photo. The anchor stays when it is still shown; else it
 //! becomes the current photo.
 
 use std::collections::{HashMap, HashSet};
@@ -96,12 +97,22 @@ pub fn settle_stacked(
     let current = keep.current.map(&replaced);
     let anchor = keep.anchor_id.and_then(find).or(current);
 
+    // A selected photo now folded in a closed stack hands its place in the
+    // selection to the stack's face (docs/05-organising.md, "Selection and
+    // stacks"; #144).
     let mut seen = HashSet::new();
     let mut selection: Vec<i64> = keep
         .selection
         .iter()
-        .copied()
-        .filter(|&id| find(id).is_some() && seen.insert(id))
+        .filter_map(|&id| {
+            find(id).map(|_| id).or_else(|| {
+                let folded = u32::try_from(id).ok()?;
+                stacks
+                    .face_of_folded(folded)
+                    .map(|(face, _)| i64::from(face))
+            })
+        })
+        .filter(|&id| seen.insert(id))
         .collect();
     if let Some(c) = current
         && seen.insert(c.id)

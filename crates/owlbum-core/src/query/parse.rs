@@ -6,8 +6,6 @@
 //! rules are tested without an album; [`parse_box`] is `query_parse` over
 //! an open album.
 
-use std::collections::HashSet;
-
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
@@ -282,12 +280,18 @@ struct AlbumNames<'a> {
 impl Names for AlbumNames<'_> {
     fn folders(&mut self) -> (String, Vec<String>) {
         self.album.index().read(|v| {
-            let mut used = HashSet::new();
+            // A flag per folder rather than a set: one pass over 100,000
+            // photos stays well inside `query_parse`'s 2 ms (#125).
+            let mut used = vec![false; v.folder_count()];
             for p in v.photos() {
-                used.insert(p.folder);
+                if let Some(u) = used.get_mut(p.folder as usize) {
+                    *u = true;
+                }
             }
-            let mut folders: Vec<String> =
-                used.into_iter().map(|f| v.folder(f).to_owned()).collect();
+            let mut folders: Vec<String> = (0..used.len())
+                .filter(|&f| used[f])
+                .map(|f| v.folder(f as u32).to_owned())
+                .collect();
             folders.sort_unstable();
             (v.scope().to_owned(), folders)
         })

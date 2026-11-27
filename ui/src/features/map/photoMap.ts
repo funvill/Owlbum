@@ -25,6 +25,8 @@ export const FIT_PADDING = 24;
 /** Markers this close, in pixels, join into a cluster. */
 export const CLUSTER_RADIUS = 48;
 const PIN = 36;
+/** Markers made and handed to the cluster group at a time. */
+const SLICE = 20_000;
 const BUBBLE = 40;
 
 export interface PhotoMapEvents {
@@ -80,6 +82,27 @@ export class PhotoMap {
   private tiles: L.TileLayer | null = null;
   private failing = false;
   private current: number | null = null;
+  /**
+   * Whether the cluster group is still adding markers in chunks (#146):
+   * 100,000 markers take a few seconds to cluster, so the library adds
+   * them a slice at a time and the page stays responsive.
+   */
+  private loading = false;
+  /** Points that arrived while loading, put on the map when it ends. */
+  private waiting: readonly MapPoint[] | null = null;
+  /** A pan to the current photo asked for while loading. */
+  private followWaiting = false;
+  /** `destroy` was called while loading: the map goes when the load ends. */
+  private destroyed = false;
+  private readonly settled: (() => void)[] = [];
+  /** Inside `addLayers`, and whether the load ended within it. */
+  private adding = false;
+  /** How many markers the slice being clustered adds, and whether one is. */
+  private loadSize = 0;
+  private slicing = false;
+  /** Points whose markers are still to be made, in slices. */
+  private pending: MapPoint[] = [];
+  private finished = false;
 
   constructor(
     element: HTMLElement,
@@ -101,6 +124,20 @@ export class PhotoMap {
       maxClusterRadius: CLUSTER_RADIUS,
       showCoverageOnHover: false,
       iconCreateFunction: clusterIcon,
+      // Added in slices of about 100 ms, each followed by a pause, so a
+      // whole album's markers do not hold the page up (#146).
+      chunkedLoading: true,
+      chunkInterval: 100,
+      chunkDelay: 16,
+      // The library still finishes its own work after the last report, so
+      // what follows the load runs once it has returned.
+      chunkProgress: (done: number, total: number) => {
+        // The library also reports adds of its own (an empty one when the
+        // group joins the map): only the end of the load started here counts.
+        if (!this.slicing || total !== this.loadSize || done < total) return;
+        if (this.adding) this.finished = true;
+        else queueMicrotask(() => this.sliceDone());
+      },
     });
     this.map.addLayer(this.clusters);
   }
@@ -115,8 +152,23 @@ export class PhotoMap {
     return this.markers.get(id);
   }
 
-  /** Puts the result's points on the map, keeping markers that still serve. The map does not move. */
+  /** Resolves once every marker asked for is in the cluster group. */
+  whenLoaded(): Promise<void> {
+    if (!this.loading) return Promise.resolve();
+    return new Promise((resolve) => this.settled.push(resolve));
+  }
+
+  /**
+   * Puts the result's points on the map, keeping markers that still serve.
+   * The map does not move. Points that arrive while markers are still
+   * being added wait for that to end; the newest wins.
+   */
   setPoints(next: readonly MapPoint[]): void {
+    if (this.destroyed) return;
+    if (this.loading) {
+      this.waiting = next;
+      return;
+    }
     const { add, remove } = diffPoints(this.points, next);
     const gone = remove.map((id) => this.markers.get(id)).filter((m): m is L.Marker => m !== undefined);
     for (const id of remove) {
@@ -126,27 +178,85 @@ export class PhotoMap {
       this.filters.delete(id);
     }
     this.clusters.removeLayers(gone);
-    const fresh = add.map((p) => {
-      const isCurrent = p[0] === this.current;
-      const marker = L.marker([p[1], p[2]], {
-        icon: pinIcon(p, isCurrent),
-        title: p[4],
-        alt: p[4],
-        keyboard: false,
-        zIndexOffset: isCurrent ? 1000 : 0,
-      });
-      marker.on("click", (e: L.LeafletMouseEvent) => {
-        const ev = e.originalEvent;
-        this.events.onPick(p[0], ev?.ctrlKey === true || ev?.metaKey === true);
-      });
-      this.markers.set(p[0], marker);
-      this.points.set(p[0], p);
-      const colour = p[5]?.colour ?? null;
-      if (p[5] && colour !== null) this.filters.set(p[0], holdColourFilter(p[5].key, colour.svg.map(String).join(" ")));
-      return marker;
-    });
-    this.clusters.addLayers(fresh);
+    if (add.length === 0) return;
+    for (const p of add) this.points.set(p[0], p);
+    this.pending = add;
+    this.loading = true;
+    this.pump();
   }
+
+  /**
+   * Makes the markers of the next slice of points and hands them to the
+   * cluster group. Making 100,000 markers at once held the page for over a
+   * second, so they are made a slice at a time too (#146).
+   */
+  private pump(): void {
+    if (this.destroyed) {
+      this.loading = false;
+      this.teardown();
+      return;
+    }
+    const slice = this.pending.splice(0, SLICE);
+    const fresh = slice.map((p) => this.makeMarker(p));
+    this.loadSize = fresh.length;
+    this.slicing = true;
+    this.adding = true;
+    this.clusters.addLayers(fresh);
+    this.adding = false;
+    if (this.finished) {
+      this.finished = false;
+      this.sliceDone();
+    }
+  }
+
+  private makeMarker(p: MapPoint): L.Marker {
+    const isCurrent = p[0] === this.current;
+    const marker = L.marker([p[1], p[2]], {
+      icon: pinIcon(p, isCurrent),
+      title: p[4],
+      alt: p[4],
+      keyboard: false,
+      zIndexOffset: isCurrent ? 1000 : 0,
+    });
+    marker.on("click", (e: L.LeafletMouseEvent) => {
+      const ev = e.originalEvent;
+      this.events.onPick(p[0], ev?.ctrlKey === true || ev?.metaKey === true);
+    });
+    this.markers.set(p[0], marker);
+    const colour = p[5]?.colour ?? null;
+    if (p[5] && colour !== null) this.filters.set(p[0], holdColourFilter(p[5].key, colour.svg.map(String).join(" ")));
+    return marker;
+  }
+
+  /** The cluster group has every marker of the slice: the next slice, or the end of the load. */
+  private sliceDone(): void {
+    if (!this.slicing) return;
+    this.slicing = false;
+    if (this.pending.length > 0 && !this.destroyed) {
+      setTimeout(() => this.pump(), 0);
+      return;
+    }
+    this.loaded();
+  }
+
+  /** The load ended: tear down, or put on the points that waited. */
+  private loaded(): void {
+    this.loading = false;
+    if (this.destroyed) {
+      this.teardown();
+      return;
+    }
+    const next = this.waiting;
+    this.waiting = null;
+    if (next !== null) this.setPoints(next);
+    if (this.loading) return;
+    if (this.followWaiting) {
+      this.followWaiting = false;
+      this.setCurrent(this.current, true);
+    }
+    for (const resolve of this.settled.splice(0)) resolve();
+  }
+
 
   /** Fits every marker in view, without animation. Answers false when there was nothing to fit or no room. */
   fit(): boolean {
@@ -168,6 +278,11 @@ export class PhotoMap {
       this.restyle(id, true);
     }
     if (!follow || id === null) return;
+    if (this.loading) {
+      // A marker still waiting to be added has no cluster to open yet.
+      this.followWaiting = true;
+      return;
+    }
     const marker = this.markers.get(id);
     if (marker === undefined) return;
     const size = this.map.getSize();
@@ -207,6 +322,14 @@ export class PhotoMap {
   }
 
   destroy(): void {
+    if (this.destroyed) return;
+    this.destroyed = true;
+    // The library's next slice needs the map, so it stays until the load ends.
+    if (!this.loading) this.teardown();
+  }
+
+  private teardown(): void {
+    for (const resolve of this.settled.splice(0)) resolve();
     this.map.remove();
     for (const release of this.filters.values()) release();
     this.filters.clear();

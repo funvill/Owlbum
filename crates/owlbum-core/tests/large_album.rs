@@ -25,7 +25,7 @@ use owlbum_core::appdata::AppData;
 use owlbum_core::events::Emitter;
 use owlbum_core::query::{
     Filter, Keep, Located, PhotoAt, Query, QueryEngine, QuerySort, QueryTimelineUnit, QueryView,
-    ShapeFilter, StarFilter,
+    ShapeFilter, StarFilter, TagFilter, TagKind,
 };
 use owlbum_core::scan::{Request, ScanEnv, Scanner};
 use owlbum_core::thumbs::Thumbs;
@@ -227,6 +227,89 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
     let parsed = owlbum_core::query::parse_box(&album, &words, true, &Filter::default()).unwrap();
     let parse_took = t.elapsed();
     assert!(parsed.taken && parsed.error.is_none(), "{parsed:?}");
+    // Two tags and a person (#125). The fixture has no tags or people, so
+    // they are written here as tagging (#56) and the People field would
+    // leave them: "Ana" on every third photo, the keyword "lake" on every
+    // second and the object "tree" on every fifth, about 3,300 of 100,000
+    // passing all three.
+    let fresh = engine.run(&album, &date, None).unwrap();
+    let all_ids = engine.ids(&fresh.token, 0, count).unwrap();
+    let every = |n: usize| -> Vec<i64> { all_ids.iter().step_by(n).copied().collect() };
+    let (ana, lake, tree) = (every(3), every(2), every(5));
+    album
+        .write_photos(move |tx, touched| {
+            let failed = |e: rusqlite::Error| {
+                owlbum_core::error::AppError::internal("labels")
+                    .with_details(serde_json::json!({ "cause": e.to_string() }))
+            };
+            tx.execute("INSERT OR IGNORE INTO people (name) VALUES ('Ana')", [])
+                .map_err(failed)?;
+            let mut person = tx
+                .prepare(
+                    "INSERT OR IGNORE INTO photo_people (photo_id, person_id)
+                     SELECT ?1, id FROM people WHERE name = 'Ana'",
+                )
+                .map_err(failed)?;
+            for &id in &ana {
+                person.execute([id]).map_err(failed)?;
+                touched.photo(id);
+            }
+            let mut label = tx
+                .prepare("INSERT OR IGNORE INTO photo_labels (kind, label, photo_id) VALUES (?1, ?2, ?3)")
+                .map_err(failed)?;
+            for (kind, value, ids) in [("keyword", "lake", &lake), ("object", "tree", &tree)] {
+                for &id in ids {
+                    label.execute(rusqlite::params![kind, value, id]).map_err(failed)?;
+                }
+            }
+            Ok(())
+        })
+        .unwrap();
+    let tagged = Query {
+        filter: Filter {
+            people: Some(vec!["Ana".to_owned()]),
+            tags: Some(vec![
+                TagFilter {
+                    kind: TagKind::Keyword,
+                    value: "lake".to_owned(),
+                },
+                TagFilter {
+                    kind: TagKind::Object,
+                    value: "tree".to_owned(),
+                },
+            ]),
+            ..Filter::default()
+        },
+        ..date.clone()
+    };
+    let t = Instant::now();
+    let r = engine.run(&album, &tagged, None).unwrap();
+    let run_tagged = t.elapsed();
+    let tagged_photos = r.photos;
+    assert!(r.filtered && tagged_photos > 0 && tagged_photos <= by_date.photos);
+
+    // The map (#146): the whole result with stacks unfolded, then
+    // `query_map` reading every located photo's place.
+    let on_map = Query {
+        view: QueryView::Map,
+        ..date.clone()
+    };
+    let t = Instant::now();
+    let r = engine.run(&album, &on_map, None).unwrap();
+    let run_map = t.elapsed();
+    let t = Instant::now();
+    let points = engine.map(&album, &reopened.overlay(), &r.token).unwrap();
+    let map_took = t.elapsed();
+    let located = points.points.len();
+    assert_eq!(located as u32 + points.unlocated, r.count);
+    let map_bytes = serde_json::to_vec(&points).unwrap().len();
+
+    // The whole-album rebuild of the derived values (docs/05, "Bursts"):
+    // sharpness, quality, bursts, keepers and every score.
+    let t = Instant::now();
+    album.index().rebuild();
+    let rebuild = t.elapsed();
+
     // The engine holds only a few results, and the runs above pushed the
     // date-sorted one out: run it again for the re-run below.
     let by_date = engine.run(&album, &date, None).unwrap();
@@ -266,9 +349,9 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
     let locate_last = t.elapsed();
     assert_eq!(at, Some(Located::At { index: count - 1 }));
     let t = Instant::now();
-    let all_ids = engine.ids(&token, 0, count).unwrap();
+    let whole = engine.ids(&token, 0, count).unwrap();
     let ids_all = t.elapsed();
-    assert_eq!(all_ids.len(), count as usize);
+    assert_eq!(whole.len(), count as usize);
 
     // One star, as the star command will write it (#27): one row through
     // the album's writer, the index following before it answers.
@@ -311,7 +394,11 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
         ms(later_tiles)
     );
     println!("  reopen: walk and compare (target 15 s) {walk_took:?}");
-    println!("  query_run, date (target 30 ms) {}", ms(run_date));
+    println!(
+        "  query_run, date, stacked: {count} tiles of {} photos (target 30 ms) {}",
+        by_date.photos,
+        ms(run_date)
+    );
     println!("  query_run, name (target 30 ms) {}", ms(run_name));
     for (sort, took) in other_sorts {
         println!("  query_run, {sort:?} (target 30 ms) {}", ms(took));
@@ -339,6 +426,20 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
         "  query_run, timeline by day, {} groups (target 100 ms) {}",
         groups.len(),
         ms(run_timeline)
+    );
+    println!(
+        "  query_run, two tags and a person, {tagged_photos} pass (target 100 ms) {}",
+        ms(run_tagged)
+    );
+    println!("  query_run, map view, stacks unfolded {}", ms(run_map));
+    println!(
+        "  query_map, {located} located, {} KB as JSON {}",
+        map_bytes / 1024,
+        ms(map_took)
+    );
+    println!(
+        "  rebuild of the derived values (target 500 ms) {}",
+        ms(rebuild)
     );
     println!(
         "  query_run, date, keeping place and 1,000 selected {}",

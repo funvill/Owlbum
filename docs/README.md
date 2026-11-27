@@ -46,7 +46,7 @@ These shape every part. A feature spec that conflicts with one of them is wrong.
 | Deferred to after version 1 | HEIC, AVIF, telemetry, macOS, Windows code signing. Each has an issue. |
 | Linux gaps | A feature that cannot be made reliable on Linux may ship on Windows only, with its control disabled on Linux and an issue open. |
 | Old program | No import of Photo Tool's `photoinfo.json` or `phototool-tags*.json`. |
-| Tests | Rust unit and integration tests, and page tests against a faked backend, run locally on Windows and on Linux (WSL). No CI test jobs in version 1. |
+| Tests | Rust unit and integration tests, and page tests against a faked backend, run locally on Windows and on Linux (WSL), and on GitHub Actions on Windows for every push to `main` and pull request. |
 | Releases | One GitHub Actions workflow builds installers on a version tag and creates a draft release. Publishing is done by a person. |
 
 ## Glossary

@@ -57,7 +57,7 @@ Owlbum/
   scripts/                check.sh (the gate, on Windows under Git Bash and on Linux), bindings.sh, and the notices generator
   site/                   the marketing page (static HTML), deployed to GitHub Pages by a workflow
   docs/                   these documents; docs/archive holds the old program's
-  .github/workflows/      release.yml (installers on a tag), pages.yml (site)
+  .github/workflows/      checks.yml (the gate on pushes and pull requests), release.yml (installers on a tag), pages.yml (site)
   notices/                hand-written third-party notices for things that are not packages
   LICENSE                 MIT
 ```

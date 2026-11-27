@@ -812,7 +812,19 @@ No size is promised yet. The targets are open questions below. The release check
 
 ## Workflows
 
-There are two workflows. **Neither runs tests in version 1.** Tests are run locally before a tag is pushed (see [Tests](#tests)).
+There are three workflows. `checks.yml` runs the tests on every push to `main` and every pull request; the other two build and publish, and run no tests (the tests run locally before a tag is pushed, and in `checks.yml`; see [Tests](#tests)).
+
+### `checks.yml`
+
+| Topic | Detail |
+|---|---|
+| Trigger | A push to `main`, any pull request, and a manual run. |
+| Permissions | `contents: read`. |
+| Runner | `windows-latest`. A Linux job (`ubuntu-22.04`, with the Tauri build packages) returns when the pause on Linux work ends; the owner paused it on 2026-11-26. |
+| Steps | Check out; Node from `ui/.nvmrc`; the Rust toolchain pinned in `rust-toolchain.toml`; a cache of Cargo's downloads and build directory; `./scripts/check.sh` in bash. |
+| Time limit | 60 minutes. A newer push to the same branch cancels the older run. |
+
+It was added at the owner's request during the build (2026-11-26); earlier versions of this document said version 1 had no CI test jobs.
 
 ### `release.yml`
 
@@ -887,7 +899,7 @@ Rules for the layers:
 
 ### Running them
 
-Tests run locally, on Windows and on Linux under WSL. There are no CI test jobs in version 1.
+Tests run locally, on Windows and on Linux under WSL, and on GitHub Actions on Windows for every push to `main` and every pull request (`checks.yml`, see [Workflows](#workflows)).
 
 | What | Command |
 |---|---|

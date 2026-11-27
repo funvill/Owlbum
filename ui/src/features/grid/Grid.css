@@ -189,6 +189,12 @@
   pointer-events: none;
 }
 
+/* Every member of an open stack carries the stack outline; selection draws over it. */
+.ow-tile--stack-open .ow-tile__outline {
+  outline: 2px solid var(--accent);
+  outline-offset: -2px;
+}
+
 .ow-tile--selected .ow-tile__outline {
   outline: 2px solid var(--select);
   outline-offset: -2px;

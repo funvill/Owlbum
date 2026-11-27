@@ -17,12 +17,15 @@ pub const AUTO_DAYS: i64 = 90;
 pub const NO_DATE_KEY: &str = "none";
 
 /// The groups of `tiles`, which are in date order (undated last), and the
-/// unit used. A group's `photos` counts its tiles: nothing folds yet, so a
-/// tile is one photo; folded stacks add their members here once they exist.
+/// unit used. A group's `count` counts its tiles and its `photos` the
+/// photos they stand for: `weight(i)` is how many the tile at `i` does (a
+/// closed stack's size on its face, else one), so a stack counts in the
+/// group of its face.
 pub fn groups(
     view: &IndexView<'_>,
     tiles: &[u32],
     unit: QueryTimelineUnit,
+    weight: impl Fn(usize) -> u32,
 ) -> (Vec<Group>, GroupUnit) {
     let days: Vec<Option<i64>> = tiles
         .iter()
@@ -64,7 +67,7 @@ pub fn groups(
         }
         if let Some(g) = out.last_mut() {
             g.count += 1;
-            g.photos += 1;
+            g.photos += weight(i);
         }
     }
     (out, unit)

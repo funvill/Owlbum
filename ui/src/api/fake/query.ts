@@ -5,6 +5,7 @@ import type { PhotoAt } from "../bindings/PhotoAt";
 import type { QueryCommands } from "../bindings/query";
 import type { Query } from "../bindings/QueryShape";
 import type { Row } from "../bindings/Row";
+import type { RowStack } from "../bindings/RowStack";
 import type { JsonValue } from "../bindings/serde_json/JsonValue";
 import type { AppError } from "../bindings/AppError";
 import type { Group } from "../bindings/Group";
@@ -54,6 +55,70 @@ export interface FakePhoto {
   low_quality?: boolean;
   /** In a burst. */
   burst?: boolean;
+  /** The id of its burst, which is the id of the stack it folds into; implies `burst`. */
+  burst_id?: number;
+  /** The keeper of its burst. */
+  keeper?: boolean;
+}
+
+/** The stacks of one result, as Rust keeps them (owlbum_core::query::stack). */
+interface Stacks {
+  /** Per tile index, its stack as the row shows it. */
+  rows: Map<number, RowStack>;
+  /** A photo folded inside a closed stack: the stack's id and its face tile. */
+  folded: Map<number, { stack: number; face: PhotoAt }>;
+  /** The face of each stack, to its other members, for rule 2. */
+  faces: Map<number, number[]>;
+}
+
+function noStacks(): Stacks {
+  return { rows: new Map(), folded: new Map(), faces: new Map() };
+}
+
+/** Folds `sorted` as Rust does: filter, sort, then fold. */
+function fold(sorted: FakePhoto[], open: number[]): { tiles: number[]; stacks: Stacks } {
+  const bursts = new Map<number, FakePhoto[]>();
+  for (const p of sorted) {
+    if (p.burst_id === undefined) continue;
+    const members = bursts.get(p.burst_id) ?? [];
+    members.push(p);
+    bursts.set(p.burst_id, members);
+  }
+  const faceOf = new Map<number, FakePhoto>();
+  for (const [id, members] of bursts) {
+    if (members.length < 2) continue;
+    faceOf.set(id, members.find((m) => m.star === true) ?? members.find((m) => m.keeper === true) ?? members[0]!);
+  }
+  const tiles: number[] = [];
+  const stacks = noStacks();
+  const later: { stack: number; id: number }[] = [];
+  for (const p of sorted) {
+    const id = p.burst_id;
+    const face = id === undefined ? undefined : faceOf.get(id);
+    if (id === undefined || face === undefined) {
+      tiles.push(p.id);
+      continue;
+    }
+    if (face !== p) {
+      if (!open.includes(id)) later.push({ stack: id, id: p.id });
+      continue;
+    }
+    const members = [face, ...bursts.get(id)!.filter((m) => m !== face)];
+    stacks.faces.set(
+      face.id,
+      members.slice(1).map((m) => m.id),
+    );
+    const isOpen = open.includes(id);
+    (isOpen ? members : [face]).forEach((m, i) => {
+      stacks.rows.set(tiles.length, { id, size: members.length, open: isOpen, face: i === 0, place: i + 1 });
+      tiles.push(m.id);
+    });
+  }
+  for (const { stack, id } of later) {
+    const face = faceOf.get(stack)!;
+    stacks.folded.set(id, { stack, face: { id: face.id, index: tiles.indexOf(face.id) } });
+  }
+  return { tiles, stacks };
 }
 
 /** The fake album behind the `query_` commands, with what a test needs to change it. */
@@ -167,7 +232,11 @@ function dayNumber(date: string): number {
 }
 
 /** The timeline's groups of `shown`, in date order, as Rust makes them (owlbum_core::query::timeline). */
-function timelineGroups(shown: FakePhoto[], unit: Query["timeline_unit"]): { groups: Group[]; unit: GroupUnit } {
+function timelineGroups(
+  shown: FakePhoto[],
+  unit: Query["timeline_unit"],
+  weight: (i: number) => number = () => 1,
+): { groups: Group[]; unit: GroupUnit } {
   const dated = shown.filter((p) => typeof p.date === "string");
   let used: GroupUnit = unit === "month" ? "month" : "day";
   if (unit === "auto" && dated.length > 0 && dayNumber(dated.at(-1)!.date!) - dayNumber(dated[0]!.date!) > 90) {
@@ -179,14 +248,19 @@ function timelineGroups(shown: FakePhoto[], unit: Query["timeline_unit"]): { gro
     const last = groups.at(-1);
     if (last?.key === key) {
       last.count += 1;
-      last.photos += 1;
-    } else groups.push({ key, start: i, count: 1, photos: 1 });
+      last.photos += weight(i);
+    } else groups.push({ key, start: i, count: 1, photos: weight(i) });
   });
   return { groups, unit: used };
 }
 
 /** Settles `keep` as Rust does (owlbum_core::query::keep). */
-function settle(keep: Keep, old: number[] | undefined, tiles: number[]): Kept {
+function settle(
+  keep: Keep,
+  old: { tiles: number[]; stacks: Stacks } | undefined,
+  tiles: number[],
+  stacks: Stacks = noStacks(),
+): Kept {
   if (tiles.length === 0) return { current: null, anchor: null, selection: [], view: null };
   const place = new Map(tiles.map((id, index) => [id, index]));
   const find = (id: number): PhotoAt | null => {
@@ -196,18 +270,34 @@ function settle(keep: Keep, old: number[] | undefined, tiles: number[]): Kept {
   const inItsPlace = (gone: PhotoAt): PhotoAt => {
     let k = gone.index;
     if (old !== undefined) {
-      let at = old[gone.index] === gone.id ? gone.index : old.indexOf(gone.id);
-      if (at < 0) at = Math.min(gone.index, old.length);
-      k = old.slice(0, at).filter((t) => place.has(t)).length;
+      let at = old.tiles[gone.index] === gone.id ? gone.index : old.tiles.indexOf(gone.id);
+      if (at < 0) at = Math.min(gone.index, old.tiles.length);
+      k = old.tiles.slice(0, at).filter((t) => place.has(t)).length;
     }
     const at = Math.min(k, tiles.length - 1);
     return { id: tiles[at]!, index: at };
   };
-  const current = keep.current === null ? null : (find(keep.current.id) ?? inItsPlace(keep.current));
+  // Rule 2: the face of the stack it is folded in now, or the new face of the stack it was the face of.
+  const replacement = (id: number): PhotoAt | null => {
+    const folded = stacks.folded.get(id);
+    if (folded !== undefined) return folded.face;
+    for (const m of old?.stacks.faces.get(id) ?? []) {
+      const at = stacks.folded.get(m)?.face ?? find(m);
+      if (at === null) continue;
+      if (stacks.rows.get(at.index)?.face === false) {
+        const face = [...stacks.faces.keys()].find((f) => stacks.faces.get(f)!.includes(at.id));
+        if (face !== undefined) return find(face);
+      }
+      return at;
+    }
+    return null;
+  };
+  const replaced = (gone: PhotoAt): PhotoAt => find(gone.id) ?? replacement(gone.id) ?? inItsPlace(gone);
+  const current = keep.current === null ? null : replaced(keep.current);
   const anchor = (keep.anchor_id === null ? null : find(keep.anchor_id)) ?? current;
   const selection = [...new Set(keep.selection.filter((id) => place.has(id)))];
   if (current !== null && !selection.includes(current.id)) selection.push(current.id);
-  const view = keep.view === null ? null : (find(keep.view.id) ?? inItsPlace(keep.view));
+  const view = keep.view === null ? null : replaced(keep.view);
   return { current, anchor, selection, view };
 }
 
@@ -241,7 +331,8 @@ function row(id: number, p: FakePhoto | undefined): Row {
 export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
   let list = [...photos];
   let revision = 0;
-  const held: { token: string; tiles: number[]; filter: Query["filter"]; text: Set<number> | null }[] = [];
+  const held: { token: string; tiles: number[]; stacks: Stacks; filter: Query["filter"]; text: Set<number> | null }[] =
+    [];
 
   const heldOf = (token: string) => {
     const h = held.find((x) => x.token === token);
@@ -254,43 +345,58 @@ export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
     query_run: ({ query, keep }) => {
       const filter = normalised(query.filter);
       validate(filter);
-      const old = keep === null ? undefined : held.find((h) => h.token === keep.token)?.tiles;
+      const old = keep === null ? undefined : held.find((h) => h.token === keep.token);
       const text = textMatches(list, query.search);
       const passed = pass(list, filter, "", query.want_facets, text);
       const shown = passed.shown;
       const timeline = query.view === "timeline";
       shown.sort(ORDERS[timeline ? "date" : query.sort]);
-      const tiles = shown.map((p) => p.id);
+      // The map gives every photo its own marker, so it never folds.
+      const { tiles, stacks } =
+        query.stack && query.view !== "map"
+          ? fold(shown, query.open_stacks)
+          : { tiles: shown.map((p) => p.id), stacks: noStacks() };
       const token = `q${nextToken++}`;
-      held.push({ token, tiles, filter, text });
+      held.push({ token, tiles, stacks, filter, text });
       while (held.length > TOKENS_KEPT) held.shift();
       const chipList = chips(filter, "");
+      const byId = new Map(shown.map((p) => [p.id, p]));
+      const tilePhotos = tiles.map((id) => byId.get(id)!);
+      const weight = (i: number) => {
+        const s = stacks.rows.get(i);
+        return s !== undefined && s.face && !s.open ? s.size : 1;
+      };
       return {
         token,
         revision,
         count: tiles.length,
-        photos: tiles.length,
+        photos: shown.length,
         total: passed.total,
         album_photos: list.length,
         filtered: Object.keys(filter).length > 0 || isSearch(query.search),
         panel_count: chipList.length,
         chips: chipList,
-        kept: keep === null ? null : settle(keep, old, tiles),
-        ...(timeline ? timelineGroups(shown, query.timeline_unit) : {}),
+        kept: keep === null ? null : settle(keep, old, tiles, stacks),
+        ...(timeline ? timelineGroups(tilePhotos, query.timeline_unit, weight) : {}),
         ...(passed.facets === undefined ? {} : { facets: passed.facets }),
       };
     },
     query_window: ({ token, offset, limit }) => {
       const tiles = tilesOf(token);
       const byId = new Map(list.map((p) => [p.id, p]));
-      return tiles.slice(offset, offset + Math.min(limit, WINDOW_MAX)).map((id) => row(id, byId.get(id)));
+      const { stacks } = heldOf(token);
+      return tiles
+        .slice(offset, offset + Math.min(limit, WINDOW_MAX))
+        .map((id, i) => ({ ...row(id, byId.get(id)), stack: stacks.rows.get(offset + i) ?? null }));
     },
     query_facets: ({ token }) => pass(list, heldOf(token).filter, "", true, heldOf(token).text).facets!,
     query_parse: ({ text, enter, filter }) => parseBox(list, text, enter, normalised(filter ?? {})),
     query_ids: ({ token, offset, limit }) => tilesOf(token).slice(offset, offset + limit),
     query_locate: ({ token, id }) => {
       const index = tilesOf(token).indexOf(id);
-      return index < 0 ? null : { index };
+      if (index >= 0) return { index };
+      const folded = heldOf(token).stacks.folded.get(id);
+      return folded === undefined ? null : { folded_in: folded.stack };
     },
   };
 

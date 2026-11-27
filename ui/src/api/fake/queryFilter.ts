@@ -92,7 +92,7 @@ function fails(p: FakePhoto, filter: Filter, text: Set<number> | null): number {
   );
   if (filter.people !== undefined || filter.tags !== undefined) fail(CONTENT, people && tags);
   if (filter.low_quality) fail(LOW_QUALITY, p.low_quality ?? false);
-  if (filter.near_duplicates) fail(NEAR_DUPLICATES, p.burst ?? false);
+  if (filter.near_duplicates) fail(NEAR_DUPLICATES, p.burst ?? p.burst_id !== undefined);
   if (text !== null) fail(TEXT, text.has(p.id));
   return mask;
 }
@@ -139,7 +139,7 @@ export function pass(
     if (counts(LOCATION) && (p.has_location ?? false)) f.has_location += 1;
     if (counts(HAS_PEOPLE) && hasPeople(p)) f.has_people += 1;
     if (counts(LOW_QUALITY) && (p.low_quality ?? false)) f.low_quality += 1;
-    if (counts(NEAR_DUPLICATES) && (p.burst ?? false)) f.near_duplicates += 1;
+    if (counts(NEAR_DUPLICATES) && (p.burst ?? p.burst_id !== undefined)) f.near_duplicates += 1;
   }
   f.folders = [...folders]
     .map(([folder, count]) => ({ folder, label: folder === scope ? "Top folder" : folder, count }))

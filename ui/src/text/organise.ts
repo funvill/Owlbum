@@ -11,6 +11,8 @@ export const organiseText = {
   bar: {
     label: "Sort and filter",
     sort: "Sort",
+    stack: "Stack similar",
+    stackTip: "Show the near-identical shots of a burst as one photo",
     /** The Filters button: "Filters", or "Filters · N" while N panel filters are on. */
     filters: (n: number) => (n > 0 ? `Filters · ${n}` : "Filters"),
     /** "2,140 photos" while no filter is on. */

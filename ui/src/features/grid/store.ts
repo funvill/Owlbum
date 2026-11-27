@@ -499,6 +499,7 @@ export const useGridStore = create<GridState>()((set, get) => {
               ...get().query,
               view,
               timeline_unit: saved.timeline_unit ?? "auto",
+              stack: saved.stack_similar,
             },
           });
         }

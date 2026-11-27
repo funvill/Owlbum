@@ -131,10 +131,14 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
     );
 
     // The query commands, each once, on the whole result.
-    let date = Query::default();
+    // The page's query: stacking on, as the 30 ms target asks (#131).
+    let date = Query {
+        stack: true,
+        ..Query::default()
+    };
     let name = Query {
         sort: QuerySort::Name,
-        ..Query::default()
+        ..date.clone()
     };
     let t = Instant::now();
     let by_date = engine.run(&album, &date, None).unwrap();
@@ -148,7 +152,7 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
     for sort in [QuerySort::Score, QuerySort::Interesting, QuerySort::Colour] {
         let q = Query {
             sort,
-            ..Query::default()
+            ..date.clone()
         };
         let t = Instant::now();
         let r = engine.run(&album, &q, None).unwrap();
@@ -170,7 +174,7 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
     let t = Instant::now();
     let r = engine.run(&album, &filtered, None).unwrap();
     let run_filtered = t.elapsed();
-    assert!(r.filtered && r.photos <= count);
+    assert!(r.filtered && r.photos <= by_date.photos);
     let faceted = Query {
         want_facets: true,
         ..filtered
@@ -187,7 +191,7 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
     let by_day = Query {
         view: QueryView::Timeline,
         timeline_unit: QueryTimelineUnit::Day,
-        ..Query::default()
+        ..date.clone()
     };
     let t = Instant::now();
     let r = engine.run(&album, &by_day, None).unwrap();
@@ -208,7 +212,7 @@ fn check(root: &Path, data: &Path, expect: Option<usize>) {
         let t = Instant::now();
         let r = engine.run(&album, &q, None).unwrap();
         searches.push((text, r.photos, t.elapsed()));
-        assert!(r.filtered && r.photos <= count);
+        assert!(r.filtered && r.photos <= by_date.photos);
         last_search = r.token;
     }
     let folder = engine

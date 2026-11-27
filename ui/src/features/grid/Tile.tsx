@@ -91,6 +91,7 @@ export const Tile = memo(function Tile({
   const face = row.stack !== null && row.stack.face ? row.stack : null;
   if (row.hidden) classes.push("ow-tile--hidden");
   if (row.star) classes.push("ow-tile--starred");
+  if (row.stack?.open === true) classes.push("ow-tile--stack-open");
   const name = gridText.tileName({
     fileName: row.file_name,
     star: row.star,

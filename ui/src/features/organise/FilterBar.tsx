@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { Filter } from "../../api/bindings/Filter";
 import type { Query } from "../../api/bindings/QueryShape";
-import { Button, SelectField, type SelectOption } from "../../controls";
+import { Button, Checkbox, SelectField, Tooltip, type SelectOption } from "../../controls";
 import { Icon } from "../../icons";
 import { organiseText as t } from "../../text/organise";
 import { useGridStore } from "../grid";
 import { FilterChip } from "./FilterChip";
 import { FilterPanel } from "./FilterPanel";
 import { QueryBox, clearQueryBox } from "./QueryBox";
+import { setStackSimilar } from "./stacks";
 import "./FilterBar.css";
 
 type Sort = Query["sort"];
@@ -26,7 +27,8 @@ function setFilter(filter: Filter): void {
  * Sort control (#29), the Filters button with its panel, and the count; a
  * second row, "Active filters", shows the chips, "Showing X of Y" and Clear
  * filter while a filter is on (#31), and the search box with its hint line
- * (#32). Stack similar (#30) joins it with its issue.
+ * (#32), and the Stack similar checkbox (#131), which is the `stack_similar`
+ * setting.
  *
  * Every number and chip comes from the result: the page never counts or
  * builds chip text itself. A change of sort or filter re-runs the query
@@ -79,6 +81,11 @@ export function FilterBar() {
             grid.setQuery({ ...grid.query, sort: sort as Sort });
           }}
         />
+        <Tooltip text={t.bar.stackTip}>
+          <span className="ow-filter-bar__stack">
+            <Checkbox label={t.bar.stack} checked={query.stack} onChange={setStackSimilar} />
+          </span>
+        </Tooltip>
         <QueryBox />
         <span className="ow-filter-bar__spacer" />
         <div

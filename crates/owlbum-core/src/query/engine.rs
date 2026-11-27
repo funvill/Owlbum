@@ -1,15 +1,16 @@
 //! The query engine: runs queries over the album index and keeps their
 //! results under tokens (docs/05-organising.md, "How Rust runs a query").
 
-use std::collections::{HashMap, HashSet, VecDeque};
+use std::collections::{HashSet, VecDeque};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard};
 
 use rusqlite::OptionalExtension;
 
 use super::filter::{self, Content, Matcher};
-use super::keep::settle;
+use super::keep::settle_stacked;
 use super::shape::{Facets, Filter, Keep, Located, Query, QueryResult, QuerySort, QueryView, Row};
+use super::stack::{self, Stacks};
 use super::{search, sort, support, timeline};
 use crate::album::{Album, sqlite_error};
 use crate::error::{AppError, AppResult, ErrorCode};
@@ -35,9 +36,8 @@ struct Held {
     token: String,
     /// Photo ids, one per tile, in order.
     tiles: Vec<u32>,
-    /// Photos folded inside a closed stack, to the stack's id. Empty until
-    /// stacks are built (#30).
-    folded: HashMap<u32, i64>,
+    /// The stacks of the tiles, and the photos folded inside closed ones.
+    stacks: Stacks,
     /// The normalised filter the result was made with, and its people and
     /// tag ids, for `query_facets`.
     filter: Filter,
@@ -119,30 +119,49 @@ impl QueryEngine {
         } else {
             query.sort
         };
-        let (tiles, album_photos, total, facets, chips, grouped) = album.index().read(|v| {
-            let matcher = Matcher::new(v, &filter, &content, &text);
-            let passed = filter::pass(v, &matcher, query.want_facets);
-            let tiles = sort::order(v, &passed.shown, order);
-            let grouped = is_timeline.then(|| timeline::groups(v, &tiles, query.timeline_unit));
-            (
-                tiles,
-                v.len(),
-                passed.total,
-                passed.facets,
-                filter::chips(&filter, v.scope()),
-                grouped,
+        // The map gives every photo its own marker, so it never folds.
+        let folding = query.stack && query.view != QueryView::Map;
+        let (tiles, stacks, photos, album_photos, total, facets, chips, grouped) =
+            album.index().read(|v| {
+                let matcher = Matcher::new(v, &filter, &content, &text);
+                let passed = filter::pass(v, &matcher, query.want_facets);
+                let sorted = sort::order(v, &passed.shown, order);
+                let photos = sorted.len();
+                let (tiles, stacks) = if folding {
+                    stack::fold(v, sorted, &query.open_stacks)
+                } else {
+                    (sorted, Stacks::default())
+                };
+                let grouped = is_timeline.then(|| {
+                    timeline::groups(v, &tiles, query.timeline_unit, |i| stacks.weight(i))
+                });
+                (
+                    tiles,
+                    stacks,
+                    photos,
+                    v.len(),
+                    passed.total,
+                    passed.facets,
+                    filter::chips(&filter, v.scope()),
+                    grouped,
+                )
+            });
+        let (groups, unit) = grouped.map_or((None, None), |(g, u)| (Some(g), Some(u)));
+        // Every photo that passes, stacks unfolded.
+        let photos = count(photos);
+        let kept = keep.map(|k| {
+            settle_stacked(
+                k,
+                old.as_deref().map(|h| (h.tiles.as_slice(), &h.stacks)),
+                (&tiles, &stacks),
             )
         });
-        let (groups, unit) = grouped.map_or((None, None), |(g, u)| (Some(g), Some(u)));
-        // Every photo that passes; stacks unfolded once they exist (#30).
-        let photos = count(tiles.len());
-        let kept = keep.map(|k| settle(k, old.as_deref().map(|h| h.tiles.as_slice()), &tiles));
         let count = count(tiles.len());
         let token = format!("q{}", NEXT_TOKEN.fetch_add(1, Ordering::Relaxed));
         self.store(Held {
             token: token.clone(),
             tiles,
-            folded: HashMap::new(),
+            stacks,
             filter,
             content,
             text,
@@ -279,12 +298,17 @@ impl QueryEngine {
             .iter()
             .zip(display)
             .zip(indexed)
-            .map(|((&id, display), indexed)| row(id, display, indexed))
+            .enumerate()
+            .map(|(i, ((&id, display), indexed))| {
+                let mut row = row(id, display, indexed);
+                row.stack = held.stacks.row(start + i, id);
+                row
+            })
             .collect())
     }
 
     /// `query_ids`: the ids of the tiles at `offset`, at most `limit`, in
-    /// order. There is no cap: Ctrl+A asks for the whole result at once.
+    /// order: the face of a closed stack, never its folded members. There is no cap: Ctrl+A asks for the whole result at once.
     /// Fewer only at the end of the result.
     pub fn ids(&self, token: &str, offset: u32, limit: u32) -> AppResult<Vec<i64>> {
         let held = self.held(token)?;
@@ -307,9 +331,9 @@ impl QueryEngine {
             return Ok(Some(Located::At { index: count(i) }));
         }
         Ok(held
-            .folded
-            .get(&tile)
-            .map(|&stack| Located::Folded { folded_in: stack }))
+            .stacks
+            .folded_in(tile)
+            .map(|stack| Located::Folded { folded_in: stack }))
     }
 
     fn lock(&self) -> MutexGuard<'_, VecDeque<Arc<Held>>> {

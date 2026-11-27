@@ -2,13 +2,9 @@
 //!
 //! The query engine (#13) runs the grid, the timeline (#35) and the map,
 //! in any of the five sorts (#29), with every filter, its chips and its
-//! facets (#31), and search text (#32). The other parts of a [`Query`]
-//! belong to later issues; each is one entry below, so the issue that
-//! builds it removes its entry:
-//!
-//! | Part | Issue | Until then |
-//! |---|---|---|
-//! | `stack`, `open_stacks` | #30 | accepted; nothing folds (no bursts yet), unknown ids are ignored |
+//! facets (#31), search text (#32), and stacks (#131). Every part of a
+//! [`Query`] runs; a part added later that the engine does not run yet
+//! gets an entry here, refused by [`check`], until its issue builds it.
 //!
 //! Values the doc treats as absent (`false`, `null`, empty lists) are
 //! absent here too, so the default page query always runs.

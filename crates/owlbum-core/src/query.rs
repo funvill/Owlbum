@@ -21,12 +21,13 @@ pub mod parse;
 mod search;
 pub mod shape;
 pub mod sort;
+mod stack;
 pub mod support;
 pub mod timeline;
 
 pub use arg::Arg;
 pub use engine::{QueryEngine, TOKENS_KEPT, WINDOW_MAX};
-pub use keep::settle;
+pub use keep::{settle, settle_stacked};
 pub use parse::{ParsedBox, parse_box};
 pub use shape::{
     Chip, Facets, Filter, FolderFacet, Group, GroupUnit, HiddenFilter, Keep, Kept, Located,

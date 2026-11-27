@@ -326,6 +326,7 @@ A stack folds the shots of a burst into one tile with a count.
 | Which bursts fold | A burst with two or more members in the filtered list. A burst with one member passing is a plain tile with no badge. |
 | The face | The first member in sort order that is starred; else the burst's keeper, if it passes the filter; else the first member in sort order. |
 | Position | The stack sits where its face sorts. |
+| Identity | A stack's id is its burst's id (the id of the burst's first member by date), so it stays the same while the face changes; `open_stacks` holds these ids. In an open stack the face comes first and `Row.stack.place` counts in that order: the face is 1, the other members follow in sort order. |
 | Badge | "×N", where N is the number of members passing the filter. Its label and tooltip read "Show N similar photos" when closed and "Fold N similar photos" when open. |
 | Open | A click on the badge opens or closes the stack. When open, the other members follow the face at once, in sort order, and every member carries the stack outline. |
 | Open state | The page keeps the list of open stack ids and sends it in the `Query`. It is forgotten when the album closes. It is not saved in the session. |

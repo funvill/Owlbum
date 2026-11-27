@@ -81,9 +81,14 @@ fn filtered(filter: Filter) -> Query {
     }
 }
 
-/// The ids that pass `filter`, sorted.
+/// The ids that pass `filter`, sorted. Stacking is off, so b and e (a
+/// burst) are each a tile.
 fn passing(engine: &QueryEngine, album: &Album, filter: Filter) -> Vec<i64> {
-    let r = run(engine, album, &filtered(filter));
+    let q = Query {
+        stack: false,
+        ..filtered(filter)
+    };
+    let r = run(engine, album, &q);
     let mut ids = tile_ids(engine, album, &r.token);
     ids.sort_unstable();
     ids

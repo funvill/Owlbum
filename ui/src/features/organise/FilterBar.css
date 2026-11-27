@@ -143,3 +143,8 @@
   font: var(--text-sm);
   color: var(--muted);
 }
+
+.ow-filter-bar__stack {
+  flex: none;
+  white-space: nowrap;
+}

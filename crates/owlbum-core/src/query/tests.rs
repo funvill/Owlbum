@@ -14,6 +14,7 @@ use crate::text;
 
 mod filters;
 mod search;
+mod stacks;
 mod timeline;
 
 // ---- Helpers ----

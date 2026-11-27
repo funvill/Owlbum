@@ -9,6 +9,8 @@ the window's title shows the version that is running.
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-11-27
+
 ### Added
 
 - The photo menu (right-click or the menu key): Show in folder, Copy path,
@@ -63,5 +65,6 @@ The first test build: milestones 0 (foundation), 1 (browse) and 2
   text search, undo, and Tidy.
 - Timeline and map views, and reopening where you were.
 
-[Unreleased]: https://github.com/funvill/Owlbum/compare/7060f13...HEAD
+[Unreleased]: https://github.com/funvill/Owlbum/compare/485f1a7...HEAD
+[0.1.1]: https://github.com/funvill/Owlbum/tree/485f1a7
 [0.1.0]: https://github.com/funvill/Owlbum/tree/7060f13

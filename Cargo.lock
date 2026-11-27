@@ -3378,7 +3378,7 @@ dependencies = [
 
 [[package]]
 name = "owlbum"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "arboard",
  "clipboard-win",
@@ -3401,7 +3401,7 @@ dependencies = [
 
 [[package]]
 name = "owlbum-core"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "chrono",
  "fast_image_resize",
@@ -3430,7 +3430,7 @@ dependencies = [
 
 [[package]]
 name = "owlbum-fixtures"
-version = "0.1.0"
+version = "0.1.1"
 dependencies = [
  "image",
  "jxl-oxide",

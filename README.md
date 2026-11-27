@@ -1,3 +1,5 @@
+<p align="center"><img src="docs/assets/owlbum-icon.png" alt="Owlbum: a gold owl on a dark tile" width="160"></p>
+
 # Owlbum
 
 A free, open-source desktop program for looking through folders of photos: star the best ones, hide the bad ones, find things by what is in them, make simple edits, and drag photos into other programs. It runs on Windows and Linux.

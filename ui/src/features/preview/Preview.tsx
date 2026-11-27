@@ -91,7 +91,15 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
             original={own !== null && own.width > 0 && own.height > 0 ? { width: own.width, height: own.height } : null}
             zoomable={row.kind !== "video"}
             onOpenAtFit={onOpen === undefined ? undefined : () => onOpen(at)}
-            onMenu={onMenu === undefined ? undefined : (e) => onMenu(at, e)}
+            onMenu={
+              onMenu === undefined
+                ? undefined
+                : (e) => {
+                    // Owlbum's menu replaces the webview's own, as on a tile.
+                    e.preventDefault();
+                    onMenu(at, e);
+                  }
+            }
             handle={zoom}
           />
         </StageFor>

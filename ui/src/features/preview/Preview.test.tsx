@@ -409,3 +409,13 @@ describe("zoom keys", () => {
     expect(handle.fit).toHaveBeenCalled();
   });
 });
+
+describe("the photo menu on the preview", () => {
+  it("opens Owlbum's menu and keeps the webview's own menu from showing too", async () => {
+    setup();
+    await show(2);
+    const allowed = fireEvent.contextMenu(stage(), { clientX: 10, clientY: 10 });
+    expect(allowed, "the default (the webview's menu) is prevented").toBe(false);
+    expect(await screen.findByRole("menu")).toBeTruthy();
+  });
+});

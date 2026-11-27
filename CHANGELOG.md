@@ -9,6 +9,11 @@ the window's title shows the version that is running.
 
 ## [Unreleased]
 
+### Fixed
+
+- A right-click on the preview showed two menus on top of each other:
+  Owlbum's photo menu and the window's own. Only the photo menu shows now.
+
 ## [0.1.1] - 2026-11-27
 
 ### Added

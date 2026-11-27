@@ -7,6 +7,8 @@ import type { ScanProgress } from "../../api/bindings/ScanProgress";
 import { showToast } from "../../controls";
 import { albumText } from "../../text/album";
 import { useSettingsStore } from "../app/settings";
+import { restoreSession, type SavedSession } from "../grid";
+import { flushSession, followSession, stopSession } from "./reopen";
 import type { ReadStart } from "./reading";
 
 /** A question `album_open` asked, with what the dialog needs to answer it. */
@@ -94,6 +96,7 @@ let lastRefresh = 0;
 /** Forgets what one session said and timed. For tests. */
 export function resetAlbumSession(): void {
   started = false;
+  stopSession();
   openCalls = 0;
   scansFinished = 0;
   notWatchingSaid = false;
@@ -104,7 +107,14 @@ export function resetAlbumSession(): void {
   lastRefresh = 0;
 }
 
-const idle: ScanProgress = { phase: "walking", found: 0, done: 0, failed: 0, finished: false, cancelled: false };
+const idle: ScanProgress = {
+  phase: "walking",
+  found: 0,
+  done: 0,
+  failed: 0,
+  finished: false,
+  cancelled: false,
+};
 
 export const useAlbumStore = create<AlbumState>()((set, get) => {
   /** The newest progress of a scan whose bar is not shown yet. */
@@ -136,12 +146,23 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         set({ question: { kind: "stale", path, message: e.message } });
         return;
       case "album_damaged": {
-        const date = (e.details as { backup_date?: unknown } | undefined)?.backup_date;
-        set({ question: { kind: "damaged", path, message: e.message, hasBackup: typeof date === "string" } });
+        const date = (e.details as { backup_date?: unknown } | undefined)
+          ?.backup_date;
+        set({
+          question: {
+            kind: "damaged",
+            path,
+            message: e.message,
+            hasBackup: typeof date === "string",
+          },
+        });
         return;
       }
       default:
-        showToast({ kind: "error", message: albumText.couldNotOpen(name, e.message) });
+        showToast({
+          kind: "error",
+          message: albumText.couldNotOpen(name, e.message),
+        });
     }
   };
 
@@ -154,7 +175,9 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
       if (get().status !== null) void get().refresh();
       return;
     }
-    const readStart = get().readStart ?? (p.phase === "reading" ? { done: p.done, at: Date.now() } : null);
+    const readStart =
+      get().readStart ??
+      (p.phase === "reading" ? { done: p.done, at: Date.now() } : null);
     if (get().reading !== null) {
       set({ reading: p, readStart });
       return;
@@ -164,7 +187,8 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
     if (lateScanTimer === null) {
       lateScanTimer = setTimeout(() => {
         lateScanTimer = null;
-        if (get().status !== null || get().opening !== null) set({ reading: latest ?? p });
+        if (get().status !== null || get().opening !== null)
+          set({ reading: latest ?? p });
       }, LATE_SCAN_SHOW_MS);
     }
     latest = p;
@@ -198,6 +222,7 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
     async start() {
       if (started) return;
       started = true;
+      followSession();
       listening = await Promise.all([
         api().listen("scan_progress", onProgress),
         api().listen("album_changed", (e) => onChanged(e.reason)),
@@ -205,7 +230,8 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         api().listen("folder_drop", (e) => {
           if (e.phase === "over") set({ dropOver: true });
           else set({ dropOver: false });
-          if (e.phase === "refused") showToast({ kind: "info", message: albumText.dropAFolder });
+          if (e.phase === "refused")
+            showToast({ kind: "info", message: albumText.dropAFolder });
         }),
       ]);
       let startup;
@@ -223,23 +249,34 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         return;
       }
       const newest = startup.recent[0];
-      if (startup.settings.reopen_last && newest !== undefined && !newest.exists) {
-        showToast({ kind: "info", message: albumText.lastFolderMissing(newest.name) });
+      if (
+        startup.settings.reopen_last &&
+        newest !== undefined &&
+        !newest.exists
+      ) {
+        showToast({
+          kind: "info",
+          message: albumText.lastFolderMissing(newest.name),
+        });
       }
     },
 
     stop() {
+      stopSession();
       for (const unlisten of listening) unlisten();
       listening = [];
     },
 
     async openFolder(path) {
       const open = get().status;
-      if (open !== null && open.folder === path && get().opening === null) return;
+      if (open !== null && open.folder === path && get().opening === null)
+        return;
       await get().open(path);
     },
 
     async open(path, options) {
+      // Where the person was in the album still open, while Rust has it open.
+      if (get().status !== null) await flushSession();
       const call = ++openCalls;
       const finishedBefore = scansFinished;
       set({
@@ -251,12 +288,27 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         conflictHidden: false,
       });
       latest = null;
-      const full: OpenOptions = { take_lock: false, view_only: false, restore_backup: false, ...options };
+      const full: OpenOptions = {
+        take_lock: false,
+        view_only: false,
+        restore_backup: false,
+        ...options,
+      };
       try {
-        const { status } = await api().invoke("album_open", { path, options: full });
+        const { status, session } = await api().invoke("album_open", {
+          path,
+          options: full,
+        });
         if (call !== openCalls) return;
+        // Before the review screen is drawn, so the first query is the restored one.
+        restoreSession(session as SavedSession | null);
         const { phase, found, done, failed: unread } = status.scan;
-        set({ opening: null, reading: status.scanning ? { ...idle, phase, found, done, failed: unread } : null });
+        set({
+          opening: null,
+          reading: status.scanning
+            ? { ...idle, phase, found, done, failed: unread }
+            : null,
+        });
         took(status);
         // A small folder's scan can end before the answer arrives.
         if (scansFinished !== finishedBefore) await get().refresh();
@@ -280,10 +332,17 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
     },
 
     async close() {
+      if (get().status !== null) await flushSession();
       openCalls += 1;
       if (lateScanTimer !== null) clearTimeout(lateScanTimer);
       lateScanTimer = null;
-      set({ opening: null, status: null, reading: null, readStart: null, question: null });
+      set({
+        opening: null,
+        status: null,
+        reading: null,
+        readStart: null,
+        question: null,
+      });
       try {
         await api().invoke("album_close");
       } catch (e) {
@@ -299,7 +358,8 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         const status = await api().invoke("album_status");
         if (call !== openCalls || get().opening !== null) return;
         took(status);
-        if (status !== null && !status.scanning) set({ reading: null, readStart: null });
+        if (status !== null && !status.scanning)
+          set({ reading: null, readStart: null });
       } catch {
         // The banners keep what they showed; the next change reads it again.
       }
@@ -317,7 +377,10 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
       const q = get().question;
       if (q?.kind !== "stale") return;
       set({ question: null });
-      await get().open(q.path, choice === "anyway" ? { take_lock: true } : { view_only: true });
+      await get().open(
+        q.path,
+        choice === "anyway" ? { take_lock: true } : { view_only: true },
+      );
     },
 
     async answerDamaged(choice) {
@@ -327,7 +390,10 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
       const fromBanner = restoringFromBanner;
       restoringFromBanner = false;
       if (choice === "cancel" && !fromBanner) return;
-      await get().open(q.path, choice === "restore" ? { restore_backup: true } : { view_only: true });
+      await get().open(
+        q.path,
+        choice === "restore" ? { restore_backup: true } : { view_only: true },
+      );
     },
 
     async askRestore() {

@@ -5,6 +5,7 @@ use std::path::Path;
 use crate::commands::off_main;
 use crate::session::{Session, open_album};
 use crate::{area, command};
+use owlbum_core::album::reopen;
 use owlbum_core::album::undo::{self, Undone};
 use owlbum_core::album::{Album, AlbumChanged, ChangeReason, OpenOptions};
 use owlbum_core::appdata::AppData;
@@ -63,6 +64,11 @@ command! {
                 album.location().root.display(),
                 album.safety().view_only,
             );
+            // Read before the album moves into the session; a session that
+            // cannot be read opens the folder without it.
+            let saved = app
+                .try_state::<AppData>()
+                .and_then(|data| restored_session(&data, &album, &opened));
             open_album(&app, album);
             if let Some(data) = app.try_state::<AppData>()
                 && let Err(e) = data.touch_recent(&opened, now_ms())
@@ -83,7 +89,7 @@ command! {
             };
             Ok(AlbumOpened {
                 status,
-                session: None,
+                session: saved,
             })
         })
         .await
@@ -172,8 +178,25 @@ command! {
     }
 }
 
+/// The folder's saved session in the page's form, or `None` when it has
+/// none or it cannot be read (docs/04-browsing.md, "Restoring a session").
+fn restored_session(data: &AppData, album: &Album, opened: &str) -> Option<serde_json::Value> {
+    let read = data.session(opened).and_then(|stored| {
+        stored
+            .map(|s| album.db().read(|c| reopen::to_page(c, &s)))
+            .transpose()
+    });
+    match read {
+        Ok(session) => session,
+        Err(e) => {
+            tracing::warn!(target: "album", "the saved session could not be read: {}", e.message);
+            None
+        }
+    }
+}
+
 /// Now, in milliseconds since the epoch.
-fn now_ms() -> i64 {
+pub(crate) fn now_ms() -> i64 {
     std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_or(0, |d| i64::try_from(d.as_millis()).unwrap_or(i64::MAX))

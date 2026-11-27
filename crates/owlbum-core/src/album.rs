@@ -19,6 +19,7 @@ pub mod db;
 pub mod lock;
 pub mod open;
 pub mod read;
+pub mod reopen;
 pub mod root;
 pub mod schema;
 pub mod search;

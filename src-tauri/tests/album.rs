@@ -105,6 +105,42 @@ fn without_an_album_the_status_is_null_and_closing_does_nothing() {
 }
 
 #[test]
+fn a_saved_session_comes_back_when_the_folder_opens_again() {
+    let f = fixture();
+    let other = f.folder("Other");
+    let root = f.folder("Trip");
+    // Without an album, saving does nothing.
+    invoke(
+        &f.window,
+        "app_session_save",
+        json!({ "session": { "view": "map" } }),
+    )
+    .unwrap();
+    assert_eq!(f.data.session(&shown(&root)).unwrap(), None);
+
+    f.open(&root, json!(null)).unwrap();
+    let session = json!({
+        "view": "timeline", "sort": "name", "filter": { "star": "yes" }, "search": null,
+        "selected_id": 99, "scroll": 12,
+    });
+    invoke(&f.window, "app_session_save", json!({ "session": session })).unwrap();
+    f.open(&other, json!(null)).unwrap();
+    assert_eq!(
+        f.data.recent().unwrap()[0].root,
+        shown(&other),
+        "opening moves the other folder to the top"
+    );
+
+    let reopened = f.open(&root, json!(null)).unwrap();
+    // Id 99 names no photo, so nothing is selected.
+    let mut want = session.clone();
+    want["selected_id"] = json!(null);
+    assert_eq!(reopened.session, Some(want));
+    // The other folder has no session.
+    assert_eq!(f.open(&other, json!(null)).unwrap().session, None);
+}
+
+#[test]
 fn opening_a_folder_answers_its_status_and_puts_it_in_the_recent_list() {
     let f = fixture();
     let root = f.folder("Trip");

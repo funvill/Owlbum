@@ -248,8 +248,9 @@ CREATE TABLE settings (key TEXT PRIMARY KEY, value TEXT NOT NULL);   -- JSON val
 CREATE TABLE recent (
   root       TEXT PRIMARY KEY,     -- absolute path of the folder that was opened
   opened_at  INTEGER NOT NULL,
-  session    TEXT                  -- JSON: view, sort, filter, the current photo's rel_path, and the
-                                   -- index of the first photo in view. Unknown fields are kept.
+  session    TEXT                  -- JSON: the Query's per-album fields (view, sort, filter, search),
+                                   -- `selected` (the current photo's rel_path, or null) and `scroll`
+                                   -- (the index of the first photo in view). Unknown fields are kept.
 );
 CREATE TABLE cache_entries (
   thumb_key TEXT NOT NULL, kind TEXT NOT NULL, bytes INTEGER NOT NULL, last_used INTEGER NOT NULL,

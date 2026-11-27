@@ -102,7 +102,7 @@ impl AlbumStatus {
 pub struct AlbumOpened {
     pub status: AlbumStatus,
     /// Where the person left off in this folder, when it has a saved
-    /// session (docs/04-browsing.md, "Restoring a session"). Always null
-    /// until reopening where I was is built (#37).
+    /// session (docs/04-browsing.md, "Restoring a session"), in the page's
+    /// form ([`crate::album::reopen::to_page`]).
     pub session: Option<serde_json::Value>,
 }

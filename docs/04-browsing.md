@@ -372,7 +372,7 @@ Rust settles the current photo in this order. [Organising](05-organising.md#wher
 | `album_changed` (a scan, a star, tags) | The grid scrolls by as many rows as `keep.view` moved (from its index in `keep.view` to its index in `kept.view`), so the photos in view stay where they are on screen while a scan adds or reorders rows above them; the current photo never jumps away. At the very top with the current photo out of view nothing is kept and the scroll stays at 0, so a first scan shows the photos that sort first as they arrive. A re-run with no tile to keep (none in view yet, or its row not fetched) keeps the scroll position in pixels. |
 | The user opened or folded a stack | The pixel position is kept, then the current photo is brought into view if it is not. |
 
-**First selection.** When an album opens with no session to restore, nothing is selected. The first Left, Right, Home or End selects a photo (see [Keys](#keys)). The preview shows the hint "Select a photo to see it here."
+**First selection.** When an album opens with no session to restore, its first photo becomes current once its row arrives (#119), unless the user picked one first. A restored session's photo wins over the first photo (see [Restoring a session](#restoring-a-session)). With nothing current, the preview shows the hint "Select a photo to see it here."
 
 ## The grid
 
@@ -1020,17 +1020,20 @@ Per recent folder, in `recent.session` in `app.sqlite` (see [Data](02-data.md)):
 |---|---|
 | `view` | `grid`, `timeline` or `map`. |
 | `sort` | The chosen sort (see 05). |
-| `filter` | The filter, including the search text (see 05). |
+| `filter` | The filter (see 05). |
+| `search` | The search text (see 05). |
 | `selected` | The current photo, stored as its path relative to the album root. The page sends and receives an id; Rust converts. |
 | `scroll` | The index of the first photo in the top row of the grid or timeline. An index, not pixels, so it still fits after the window or thumbnail size changes. |
 
 Kept for all albums, as settings: `thumb_size`, `panel.grid_width`, `panel.details_width`, `sections`, `stack_similar`, `timeline_unit`, `maps_online`, `reopen_last`, and `view` (the view used for an album that has no session yet).
 
+The session carries the `Query`'s own fields under their own names, so a field the `Query` gains later is kept with no change to the session. The `Query` fields that are not kept are `open_stacks` and `want_facets` (forgotten on close) and `timeline_unit` and `stack` (settings for every album).
+
 Not kept: the rest of a multi-selection, open stacks, zoom, whether the viewer was open, and the map's position.
 
 ### Saving
 
-The page calls `app_session_save(session)` 1,000 ms after the last change to any of the five fields, and at once when the album is closed, another is opened, or the window is asked to close. On a close the shell emits `app_closing`; the page saves the session and then answers with `app_close_ready`, within the 3 seconds that [Desktop, release and tests](08-desktop-and-release.md#closing-and-quitting) allows. Saving also moves the folder to the top of the recent list.
+The page calls `app_session_save(session)` 1,000 ms after the last change to any of these fields, and at once when the album is closed, another is opened, or the window is asked to close. On a close the shell emits `app_closing`; the page saves the session and then answers with `app_close_ready`, within the 3 seconds that [Desktop, release and tests](08-desktop-and-release.md#closing-and-quitting) allows. Saving also moves the folder to the top of the recent list.
 
 ### At start
 
@@ -1051,13 +1054,14 @@ The check for whether a folder exists must never hold up the start. Rust checks 
 
 ### Restoring a session
 
-`album_open` answers with `session` when the folder has one: `{ view, sort, filter, selected_id, scroll }`. `selected_id` is null when the saved photo is no longer in the album.
+`album_open` answers with `session` when the folder has one: `{ view, sort, filter, search, selected_id, scroll }`. `selected_id` is null when the saved photo is no longer in the album (no row with that path, or the row is missing). Rust checks the stored values on the way out: each `Query` field and each filter is tried on its own, and one that is not allowed (from a newer or older Owlbum) is dropped, so a stored session can never stop the folder opening; a session that cannot be read at all opens the folder without one.
 
-1. The page sets the view, sort and filter, and runs the query, before drawing the review screen. The start screen is not shown in between.
-2. If `selected_id` is set and `kept`/`query_locate` finds it in the result, it becomes the current photo and is brought into view. That is the scroll position: by photo, not by offset.
-3. If nothing is selected, the view scrolls so the photo at index `scroll` (clamped to the result) is in the top row.
-4. If the album is still being scanned and the selected photo's row exists from an earlier scan, step 2 works at once, because rows persist in the album database. A photo that is gone selects nothing, with no message.
+1. The page sets the view, sort, filter and search, and runs the query, before drawing the review screen. The start screen is not shown in between. The map is not built yet (#36): a saved `map` view shows the grid.
+2. If `selected_id` is set and `query_locate` finds it in the result, it becomes the current photo and is brought into view. That is the scroll position: by photo, not by offset. (`keep` is not used for this: its settling replaces a missing photo with its neighbour.)
+3. If nothing is selected, or the photo is gone, the photo at index `scroll` (clamped to the result) becomes current once its row arrives and is brought into view, so the album opens where it was, with no message. This replaces the first photo of **First selection** (see [When the result changes](#when-the-result-changes)).
+4. If the album is still being scanned and the selected photo's row exists from an earlier scan, step 2 works at once, because rows persist in the album database.
 5. A filter that now matches nothing is still restored; the filtered row's **Clear filter** is the way out.
+6. A photo the user picks before the restore settles wins. Saving starts once the restore has settled, so a quick close never overwrites the stored session with the defaults.
 
 Opening a folder from the recent list, by drop, or from the dialog restores its session in the same way.
 
@@ -1148,11 +1152,10 @@ type PhotoDetail = {
   // The score breakdown is not here: it is read with photo_score (05).
 };
 
-type Session = {
-  view: 'grid' | 'timeline' | 'map';
-  sort: unknown; filter: unknown;   // shapes defined in 05
+type Session = Partial<Query> & {   // the Query's own fields (05), less open_stacks,
+                                     // want_facets, timeline_unit and stack
   selected_id: number | null;
-  scroll: number;
+  scroll?: number;
 };
 ```
 

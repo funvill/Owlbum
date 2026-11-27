@@ -15,6 +15,7 @@ import { QueryClient, defaultQuery, rerunFor } from "../../api/query";
 import { useSettingsStore } from "../app";
 import { BlockStore } from "./blocks";
 import { clampThumbSize, THUMB_DEFAULT } from "./layout";
+import { withSession, type SavedSession } from "./session";
 
 /** Re-runs after `album_changed` are at most this often while a scan or tagging runs… */
 export const RERUN_BUSY_MS = 1000;
@@ -95,6 +96,14 @@ export interface GridState extends Selected {
   pending: Pending | null;
   /** Moves on when the formats from `app_formats` arrive. */
   formats: number;
+  /** The index of the first photo in view, as the grid last reported it. */
+  top: number;
+  /**
+   * The album's session has been restored (or there was none) and the first
+   * result is in: from now on a change is saved (docs/04-browsing.md,
+   * "Saving"). False while no album is open.
+   */
+  restored: boolean;
   /** Runs the query and follows `album_changed`. Calling it again does nothing. */
   start(options?: GridOptions): Promise<void>;
   /** Stops following the album and forgets its result (the album closed). */
@@ -142,9 +151,29 @@ interface Session {
    * current already (kept, or picked before the rows came).
    */
   pickFirst: boolean;
+  /** The saved session to restore with the first result; see `restoreSession`. */
+  restore: SavedSession | null;
 }
 
 let session: Session | null = null;
+/** The session `album_open` answered, waiting for the grid to start. */
+let toRestore: SavedSession | null = null;
+
+/**
+ * Hands the grid the session `album_open` answered (docs/04-browsing.md,
+ * "Restoring a session"), or null for none. The next `start` puts its view,
+ * sort, filter and search into the first query, and makes its photo current
+ * when the first result holds it, instead of the first photo (#119).
+ */
+export function restoreSession(saved: SavedSession | null): void {
+  toRestore = saved;
+}
+
+/** The grid reports the first photo in view; saved with the session. */
+export function setGridTop(index: number): void {
+  if (useGridStore.getState().top !== index)
+    useGridStore.setState({ top: index });
+}
 let saveTimer: ReturnType<typeof setTimeout> | undefined;
 /** Whether the size was chosen on the page, so the stored setting no longer applies. */
 let sizeChosen = false;
@@ -176,12 +205,18 @@ function newBlocks(): BlockStore {
         // The token expired: run the query again. The new result's rows are
         // then asked for again, which repeats the call. The re-run is spaced
         // like any other, so a backend that keeps expiring cannot spin.
-        if (isAppError(e) && e.code === "query_expired" && token === blocks.token) rerunExpired();
+        if (
+          isAppError(e) &&
+          e.code === "query_expired" &&
+          token === blocks.token
+        )
+          rerunExpired();
         throw e;
       }
     },
     (e) => {
-      if (!(isAppError(e) && e.code === "query_expired")) useGridStore.setState({ error: toAppError(e) });
+      if (!(isAppError(e) && e.code === "query_expired"))
+        useGridStore.setState({ error: toAppError(e) });
     },
   );
 }
@@ -192,14 +227,20 @@ let animatedLabels = new Map<string, string>();
 /** The label of the animated format of `fileName`, such as "GIF"; null when none is known. */
 export function animatedLabel(fileName: string): string | null {
   const dot = fileName.lastIndexOf(".");
-  return dot < 0 ? null : (animatedLabels.get(fileName.slice(dot).toLowerCase()) ?? null);
+  return dot < 0
+    ? null
+    : (animatedLabels.get(fileName.slice(dot).toLowerCase()) ?? null);
 }
 
 async function loadFormats(): Promise<void> {
   try {
     const formats = await api().invoke("app_formats");
     animatedLabels = new Map(
-      formats.filter((f) => f.animated).flatMap((f) => f.extensions.map((e) => [e.toLowerCase(), f.label] as const)),
+      formats
+        .filter((f) => f.animated)
+        .flatMap((f) =>
+          f.extensions.map((e) => [e.toLowerCase(), f.label] as const),
+        ),
     );
     useGridStore.setState((s) => ({ formats: s.formats + 1 }));
   } catch {
@@ -215,33 +256,126 @@ export function gridBlocks(): BlockStore {
 const empty: Selected = { current: null, anchor: null, selection: [] };
 
 export const useGridStore = create<GridState>()((set, get) => {
-  const nextScroll = (to: ScrollRequest["to"]): ScrollRequest => ({ to, seq: (get().scroll?.seq ?? 0) + 1 });
+  const nextScroll = (to: ScrollRequest["to"]): ScrollRequest => ({
+    to,
+    seq: (get().scroll?.seq ?? 0) + 1,
+  });
 
   const applyResult = (s: Session, result: QueryResult) => {
     if (session !== s) return;
     blocks.reset(result.token, result.count);
     const kept = result.kept ?? null;
     const selected: Partial<Selected> =
-      kept === null ? {} : { current: kept.current, anchor: kept.anchor, selection: kept.selection };
+      kept === null
+        ? {}
+        : {
+            current: kept.current,
+            anchor: kept.anchor,
+            selection: kept.selection,
+          };
     const current = kept === null ? get().current : kept.current;
-    const scroll = s.cause === "user" ? nextScroll(current === null ? "top" : "current") : get().scroll;
+    const scroll =
+      s.cause === "user"
+        ? nextScroll(current === null ? "top" : "current")
+        : get().scroll;
     const to = result.kept?.view ?? null;
     const from = s.view;
     const follow =
-      s.cause === "change" && from !== null && to !== null && to.index !== from.index
+      s.cause === "change" &&
+      from !== null &&
+      to !== null &&
+      to.index !== from.index
         ? { from: from.index, to: to.index, seq: (get().follow?.seq ?? 0) + 1 }
         : get().follow;
-    const facets = result.facets ?? (get().query.want_facets ? get().facets : null);
-    set({ result, error: null, ...selected, scroll, follow, pending: null, facets });
+    const facets =
+      result.facets ?? (get().query.want_facets ? get().facets : null);
+    set({
+      result,
+      error: null,
+      ...selected,
+      scroll,
+      follow,
+      pending: null,
+      facets,
+    });
     // The panel opened while this run was on its way: ask for its facets now.
-    if (get().query.want_facets && result.facets === undefined) void get().wantFacets(true);
-    if (s.pickFirst) {
-      if (current !== null) s.pickFirst = false;
-      else if (result.count > 0) {
-        set({ pending: { index: 0, first: 0, last: 0, add: false, wait: "row" } });
-        settleStep();
+    if (get().query.want_facets && result.facets === undefined)
+      void get().wantFacets(true);
+    if (s.restore !== null) {
+      const saved = s.restore;
+      s.restore = null;
+      // An empty first result (a filter that now matches nothing) keeps the
+      // restored query; there is no photo to restore.
+      if (result.count > 0) {
+        void restoreCurrent(s, saved, result);
+        return;
       }
     }
+    if (s.pickFirst) {
+      if (current !== null) s.pickFirst = false;
+      else if (result.count > 0) pickAt(0, false);
+    }
+    // With no photo to restore, saving starts with the first result.
+    if (!get().restored) set({ restored: true });
+  };
+
+  /** The photo at `index` becomes current once its row arrives; `show` scrolls to it. */
+  const pickAt = (index: number, show: boolean) => {
+    const pending: Pending = {
+      index,
+      first: index,
+      last: index,
+      add: false,
+      wait: "row",
+    };
+    set(show ? { pending, scroll: nextScroll("current") } : { pending });
+    settleStep();
+  };
+
+  /**
+   * Restores the session's current photo: found in the result, it becomes
+   * current and is brought into view. Gone, or none was saved, the photo at
+   * the saved scroll index (the first one in view) becomes current, so the
+   * view opens where it was. A photo the user picked meanwhile wins.
+   */
+  const restoreCurrent = async (
+    s: Session,
+    saved: SavedSession,
+    result: QueryResult,
+  ) => {
+    let index: number | null = null;
+    if (saved.selected_id !== null) {
+      try {
+        const at = await api().invoke("query_locate", {
+          token: result.token,
+          id: saved.selected_id,
+        });
+        if (at !== null && "index" in at) index = at.index;
+      } catch {
+        // An expired token: fall back to the scroll index.
+      }
+    }
+    if (session !== s) return;
+    if (s.pickFirst && get().current === null && get().pending === null) {
+      s.pickFirst = false;
+      if (index !== null) {
+        const at = { id: saved.selected_id!, index };
+        set({
+          current: at,
+          anchor: at,
+          selection: [at.id],
+          scroll: nextScroll("current"),
+        });
+      } else {
+        const count = s.client.result?.count ?? result.count;
+        if (count > 0)
+          pickAt(
+            Math.min(Math.max(0, Math.floor(saved.scroll ?? 0)), count - 1),
+            true,
+          );
+      }
+    }
+    set({ restored: true });
   };
 
   const run = async (s: Session, cause: Cause) => {
@@ -260,14 +394,16 @@ export const useGridStore = create<GridState>()((set, get) => {
       s.lastRerun = Date.now();
       void run(s, "change");
     };
-    const wait = s.lastRerun + (s.busy() ? RERUN_BUSY_MS : RERUN_IDLE_MS) - Date.now();
+    const wait =
+      s.lastRerun + (s.busy() ? RERUN_BUSY_MS : RERUN_IDLE_MS) - Date.now();
     if (wait <= 0) fire();
     else s.rerunTimer = setTimeout(fire, wait);
   };
 
   const changed = (s: Session, change: AlbumChanged) => {
     const held = s.client.result;
-    if (session !== s || held === null || change.revision <= held.revision) return;
+    if (session !== s || held === null || change.revision <= held.revision)
+      return;
     switch (rerunFor(change.reason, get().query)) {
       case "run":
         rerun(s);
@@ -305,6 +441,8 @@ export const useGridStore = create<GridState>()((set, get) => {
     follow: null,
     formats: 0,
     pending: null,
+    top: 0,
+    restored: false,
     ...empty,
 
     start(options = {}) {
@@ -315,7 +453,12 @@ export const useGridStore = create<GridState>()((set, get) => {
             const { current, anchor, selection } = get();
             // Only a re-run for album_changed keeps the place by a tile.
             s.view = s.cause === "change" ? gridView() : null;
-            return { current, anchor_id: anchor?.id ?? null, selection, view: s.view };
+            return {
+              current,
+              anchor_id: anchor?.id ?? null,
+              selection,
+              view: s.view,
+            };
           },
           onResult: (result) => applyResult(s, result),
         }),
@@ -329,7 +472,9 @@ export const useGridStore = create<GridState>()((set, get) => {
         rerunTimer: undefined,
         frame: undefined,
         pickFirst: true,
+        restore: toRestore,
       };
+      toRestore = null;
       session = s;
       s.ready = (async () => {
         const settings = useSettingsStore.getState();
@@ -337,16 +482,32 @@ export const useGridStore = create<GridState>()((set, get) => {
         if (session !== s) return;
         if (animatedLabels.size === 0) await loadFormats();
         if (session !== s) return;
-        if (!sizeChosen) set({ thumbSize: clampThumbSize(useSettingsStore.getState().settings?.thumb_size) });
+        if (!sizeChosen)
+          set({
+            thumbSize: clampThumbSize(
+              useSettingsStore.getState().settings?.thumb_size,
+            ),
+          });
         // The view and timeline unit last chosen, for an album with no session
         // (docs/02-data.md, "Settings"). The map is not built yet (#36): a
         // saved map shows the grid.
         const saved = useSettingsStore.getState().settings;
         if (saved !== null) {
           const view = saved.view === "timeline" ? "timeline" : "grid";
-          set({ query: { ...get().query, view, timeline_unit: saved.timeline_unit ?? "auto" } });
+          set({
+            query: {
+              ...get().query,
+              view,
+              timeline_unit: saved.timeline_unit ?? "auto",
+            },
+          });
         }
-        const unlisten = await api().listen("album_changed", (change) => changed(s, change));
+        // The album's own session wins over the settings (docs/04-browsing.md, "Restoring a session").
+        if (s.restore !== null)
+          set({ query: withSession(get().query, s.restore) });
+        const unlisten = await api().listen("album_changed", (change) =>
+          changed(s, change),
+        );
         if (session !== s) {
           unlisten();
           return;
@@ -368,7 +529,18 @@ export const useGridStore = create<GridState>()((set, get) => {
       }
       blocks.clear();
       gridView = () => null;
-      set({ result: null, error: null, query: defaultQuery(), facets: null, scroll: null, follow: null, pending: null, ...empty });
+      set({
+        result: null,
+        error: null,
+        query: defaultQuery(),
+        facets: null,
+        scroll: null,
+        follow: null,
+        pending: null,
+        top: 0,
+        restored: false,
+        ...empty,
+      });
     },
 
     setQuery(query) {
@@ -382,12 +554,16 @@ export const useGridStore = create<GridState>()((set, get) => {
     },
 
     async wantFacets(on) {
-      set({ query: { ...get().query, want_facets: on }, ...(on ? {} : { facets: null }) });
+      set({
+        query: { ...get().query, want_facets: on },
+        ...(on ? {} : { facets: null }),
+      });
       const token = get().result?.token;
       if (!on || token === undefined) return;
       try {
         const facets = await api().invoke("query_facets", { token });
-        if (get().query.want_facets && get().result?.token === token) set({ facets });
+        if (get().query.want_facets && get().result?.token === token)
+          set({ facets });
       } catch {
         // An expired token: the next run carries the facets.
       }
@@ -409,8 +585,14 @@ export const useGridStore = create<GridState>()((set, get) => {
       const before = get().current;
       const moved =
         selected.current !== null &&
-        (before === null || before.id !== selected.current.id || before.index !== selected.current.index);
-      set({ ...selected, pending: null, scroll: moved ? nextScroll("current") : get().scroll });
+        (before === null ||
+          before.id !== selected.current.id ||
+          before.index !== selected.current.index);
+      set({
+        ...selected,
+        pending: null,
+        scroll: moved ? nextScroll("current") : get().scroll,
+      });
     },
 
     setPending(pending) {
@@ -431,6 +613,7 @@ export const useGridStore = create<GridState>()((set, get) => {
 /** Stops the grid and puts its store back as it started. For tests and closing the page. */
 export function resetGrid(): void {
   useGridStore.getState().stop();
+  toRestore = null;
   clearTimeout(saveTimer);
   saveTimer = undefined;
   sizeChosen = false;

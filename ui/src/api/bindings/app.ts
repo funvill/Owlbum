@@ -21,6 +21,7 @@ export type AppCommands = {
   app_place_search: { args: { text: string }; result: Array<CountryMatch> };
   app_recent_list: { args: Record<string, never>; result: Array<Recent> };
   app_recent_remove: { args: { root: string }; result: Array<Recent> };
+  app_session_save: { args: { session: JsonValue }; result: null };
   app_settings_get: { args: Record<string, never>; result: Settings };
   app_settings_set: { args: { patch: { [key in string]: JsonValue } }; result: Settings };
   app_startup: { args: Record<string, never>; result: Startup };

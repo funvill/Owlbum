@@ -102,21 +102,22 @@ export const fakeCountries: CountryMatch[] = [
 
 /** Lower case without accents, as Rust's `info::country` compares names. */
 const fold = (text: string) =>
-  text
-    .normalize("NFD")
-    .replace(/\p{M}/gu, "")
-    .toLowerCase();
+  text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
 
 const compare = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
 
 /** `app_place_search`'s rule (docs/04-browsing.md, "How typed fields save"). */
-export function placeSearch(countries: CountryMatch[], text: string): CountryMatch[] {
+export function placeSearch(
+  countries: CountryMatch[],
+  text: string,
+): CountryMatch[] {
   const wanted = fold(text.trim());
   if (wanted === "") return [];
   const rank = (name: string) => {
     const folded = fold(name);
     if (folded.startsWith(wanted)) return 0;
-    if (folded.split(/[^\p{L}\p{N}]+/u).some((word) => word.startsWith(wanted))) return 1;
+    if (folded.split(/[^\p{L}\p{N}]+/u).some((word) => word.startsWith(wanted)))
+      return 1;
     return folded.includes(wanted) ? 2 : -1;
   };
   return countries
@@ -131,20 +132,28 @@ export function placeSearch(countries: CountryMatch[], text: string): CountryMat
 export const appHandlers: AreaHandlers<AppCommands> = {
   // An empty cache at the default limit. A test that needs a size replaces these.
   app_cache_clear: () => ({ bytes_freed: 0 }),
-  app_cache_usage: () => ({ bytes: 0, limit_bytes: defaultSettings["cache.limit_gb"] * 1_000_000_000 }),
-  app_formats: () => fakeFormats.map((f) => ({ ...f, extensions: [...f.extensions] })),
+  app_cache_usage: () => ({
+    bytes: 0,
+    limit_bytes: defaultSettings["cache.limit_gb"] * 1_000_000_000,
+  }),
+  app_formats: () =>
+    fakeFormats.map((f) => ({ ...f, extensions: [...f.extensions] })),
   // The dialog was cancelled. A test that picks a folder replaces this.
   app_pick_folder: () => null,
   app_place_search: ({ text }) => placeSearch(fakeCountries, text),
   app_recent_list: () => [],
   app_recent_remove: () => [],
+  app_session_save: () => null,
   app_settings_get: () => structuredClone(defaultSettings),
   // Stateless: answers the defaults with the patch applied. A test that
   // needs settings to persist between calls replaces these handlers.
   app_settings_set: ({ patch }) => {
     for (const [key, value] of Object.entries(patch)) {
       const range = ranges[key as keyof Settings];
-      if (range !== undefined && (typeof value !== "number" || value < range[0] || value > range[1])) {
+      if (
+        range !== undefined &&
+        (typeof value !== "number" || value < range[0] || value > range[1])
+      ) {
         const refused: AppError = {
           code: "setting_out_of_range",
           message: `That value can't be used for the setting ${key}.`,

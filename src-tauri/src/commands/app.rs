@@ -4,7 +4,9 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use crate::handoff::Handoff;
+use crate::session::Session;
 use crate::{area, command};
+use owlbum_core::album::reopen;
 use owlbum_core::app::{self, AppVersion, FolderDrop, OpenFolder, Startup};
 use owlbum_core::appdata::{AppData, Recent, Settings};
 use owlbum_core::info::country::{self, CountryMatch};
@@ -24,6 +26,7 @@ area! {
         app_place_search,
         app_recent_list,
         app_recent_remove,
+        app_session_save,
         app_settings_get,
         app_settings_set,
         app_startup,
@@ -82,6 +85,33 @@ command! {
     pub async fn app_recent_remove(root: String; data: State<'_, AppData>) -> Vec<Recent> {
         let data = data.inner().clone();
         blocking(move || data.remove_recent(&root)).await
+    }
+}
+
+command! {
+    /// Saves where the person is in the open album: its view, sort, filter,
+    /// search, current photo (`selected_id`) and scroll index, against the
+    /// folder it was opened at (docs/04-browsing.md, "Saving"). The current
+    /// photo is kept as its path, so the id is turned into the path the row
+    /// has now. Fields of the stored session that this one lacks are kept,
+    /// and the folder moves to the top of the recent list. Nothing happens
+    /// when no album is open.
+    pub async fn app_session_save(
+        session: Value;
+        data: State<'_, AppData>,
+        open: State<'_, Session>
+    ) -> () {
+        let data = data.inner().clone();
+        let Some(scanner) = open.scanner() else {
+            return Ok(());
+        };
+        blocking(move || {
+            let album = scanner.album();
+            let opened = album.location().opened().display().to_string();
+            let stored = album.db().read(|c| reopen::to_stored(c, &session))?;
+            data.save_session(&opened, &stored, crate::commands::album::now_ms())
+        })
+        .await
     }
 }
 

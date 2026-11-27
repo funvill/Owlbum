@@ -85,3 +85,11 @@
   background: var(--marker-unsaved);
   color: var(--marker-ink);
 }
+
+/* The edit actions at the caption's right end. */
+.ow-preview__actions {
+  flex: none;
+  display: flex;
+  gap: var(--space-2);
+  margin-left: auto;
+}

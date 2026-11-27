@@ -20,6 +20,7 @@ export const filesText = {
     copy: (n: number) => (n > 1 ? `Copy ${group(n)} photos` : "Copy"),
     copyPath: (n: number) => (n > 1 ? `Copy ${group(n)} paths` : "Copy path"),
     reveal: "Show in folder",
+    edit: "Edit",
     rotateLeft: "Rotate left",
     rotateRight: "Rotate right",
     flip: "Flip horizontally",

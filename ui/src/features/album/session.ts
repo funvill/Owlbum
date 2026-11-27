@@ -105,6 +105,23 @@ let lateScanTimer: ReturnType<typeof setTimeout> | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let lastRefresh = 0;
 
+/**
+ * What must finish before the open album is left (another album opened,
+ * or this one closed): edit mode ends as Done, so its draft is kept
+ * (docs/06-editing-and-file-actions.md, "Ending edit mode").
+ */
+const beforeLeave = new Set<() => Promise<unknown>>();
+
+/** Runs `fn` before the open album is left, until the answered function is called. */
+export function onLeaveAlbum(fn: () => Promise<unknown>): () => void {
+  beforeLeave.add(fn);
+  return () => beforeLeave.delete(fn);
+}
+
+async function leaving(): Promise<void> {
+  await Promise.all([...beforeLeave].map((fn) => fn().catch(() => {})));
+}
+
 /** Forgets what one session said and timed. For tests. */
 export function resetAlbumSession(): void {
   started = false;
@@ -289,7 +306,10 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
 
     async open(path, options) {
       // Where the person was in the album still open, while Rust has it open.
-      if (get().status !== null) await flushSession();
+      if (get().status !== null) {
+        await leaving();
+        await flushSession();
+      }
       const call = ++openCalls;
       const finishedBefore = scansFinished;
       set({
@@ -346,7 +366,10 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
     },
 
     async close() {
-      if (get().status !== null) await flushSession();
+      if (get().status !== null) {
+        await leaving();
+        await flushSession();
+      }
       openCalls += 1;
       if (lateScanTimer !== null) clearTimeout(lateScanTimer);
       lateScanTimer = null;

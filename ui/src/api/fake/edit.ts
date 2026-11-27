@@ -43,6 +43,7 @@ export const editHandlers: AreaHandlers<EditCommands> = {
     if (op === "flip") return { ...edit, flip: !edit.flip, rotate: (360 - edit.rotate) % 360 };
     return { ...edit, rotate: (edit.rotate + (op === "rotate_right" ? 90 : 270)) % 360 };
   },
+  edit_auto: () => ({ brightness: 12, contrast: 8, saturation: 0, warmth: -5 }),
   edit_set: ({ edit }) => ({ changed: true, plan: edit === null ? null : fakePlan(4032, 3024, edit.rotate), revision: 2 }),
   edit_turn: ({ photo_ids }) => ({ changed: photo_ids, skipped: 0, revision: 2 }),
   edit_revert: ({ photo_ids }) => ({ changed: photo_ids, revision: 2 }),

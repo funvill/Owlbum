@@ -1,0 +1,126 @@
+/* Edit mode: docs/06-editing-and-file-actions.md, "Layout", "The stage and
+   the crop box"; docs/09-visual-design.md for the tokens. */
+
+.ow-edit {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.ow-edit__stage {
+  position: relative;
+  flex: 1;
+  min-height: 0;
+  overflow: hidden;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  outline: none;
+}
+
+.ow-edit__frame {
+  position: relative;
+  flex: none;
+  overflow: hidden;
+}
+
+.ow-edit__original {
+  display: block;
+  flex: none;
+}
+
+/* The crop box: everything outside it is dimmed. */
+.ow-crop {
+  position: absolute;
+  box-sizing: border-box;
+  border: 1px solid var(--crop-line);
+  box-shadow: 0 0 0 9999px var(--crop-shade);
+  cursor: move;
+  touch-action: none;
+}
+
+.ow-crop__third {
+  position: absolute;
+  pointer-events: none;
+  background: var(--crop-line);
+  opacity: 0.5;
+}
+
+.ow-crop__third--v1,
+.ow-crop__third--v2 {
+  top: 0;
+  bottom: 0;
+  width: 1px;
+}
+
+.ow-crop__third--h1,
+.ow-crop__third--h2 {
+  left: 0;
+  right: 0;
+  height: 1px;
+}
+
+.ow-crop__third--v1 { left: 33.333%; }
+.ow-crop__third--v2 { left: 66.667%; }
+.ow-crop__third--h1 { top: 33.333%; }
+.ow-crop__third--h2 { top: 66.667%; }
+
+/* An 18 px hit area with an 8 px visible square. */
+.ow-crop__handle {
+  position: absolute;
+  z-index: var(--z-raised);
+  width: 18px;
+  height: 18px;
+  margin: -9px 0 0 -9px;
+  touch-action: none;
+}
+
+.ow-crop__handle::after {
+  content: "";
+  position: absolute;
+  left: 5px;
+  top: 5px;
+  width: 8px;
+  height: 8px;
+  background: var(--crop-line);
+}
+
+.ow-crop__handle--nw { left: 0; top: 0; cursor: nwse-resize; }
+.ow-crop__handle--ne { left: 100%; top: 0; cursor: nesw-resize; }
+.ow-crop__handle--sw { left: 0; top: 100%; cursor: nesw-resize; }
+.ow-crop__handle--se { left: 100%; top: 100%; cursor: nwse-resize; }
+.ow-crop__handle--n { left: 50%; top: 0; cursor: ns-resize; }
+.ow-crop__handle--s { left: 50%; top: 100%; cursor: ns-resize; }
+.ow-crop__handle--w { left: 0; top: 50%; cursor: ew-resize; }
+.ow-crop__handle--e { left: 100%; top: 50%; cursor: ew-resize; }
+
+/* The toolbar wraps onto more rows in a narrow pane. */
+.ow-edit__toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-top: 1px solid var(--line);
+  background: var(--edit-bar);
+}
+
+.ow-edit__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ow-edit__row > .ow-edit__slider {
+  flex: 1 1 220px;
+}
+
+.ow-edit__slider {
+  display: block;
+  min-width: 0;
+}
+
+.ow-edit__gap {
+  flex: 1;
+}

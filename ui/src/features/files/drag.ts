@@ -6,6 +6,7 @@
 
 import { api, toAppError } from "../../api";
 import { showToast } from "../../controls/toastQueue";
+import { isEditing } from "../edit/mode";
 import { noteEditsNotInFiles } from "./actions";
 import { loadCapabilities, useCapabilities } from "./capabilities";
 import { dragTargets } from "./targets";
@@ -43,7 +44,8 @@ async function start(ids: number[]): Promise<void> {
  */
 export function pressPhoto(id: number, event: { button: number; clientX: number; clientY: number }): void {
   end();
-  if (event.button !== 0) return;
+  // Nothing can be dragged while edit mode is open (docs/06, "Dragging photos out").
+  if (event.button !== 0 || isEditing()) return;
   const known = useCapabilities.getState().capabilities;
   if (known === null) void loadCapabilities();
   if (known?.drag_out !== true) return;

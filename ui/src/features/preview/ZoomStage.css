@@ -76,3 +76,17 @@
   box-shadow: 0 0 0 9999px var(--crop-shade);
   pointer-events: none;
 }
+
+/* Before/after: the caption over the unedited picture. */
+.ow-zoom__original {
+  position: absolute;
+  top: var(--space-4);
+  left: var(--space-4);
+  z-index: var(--z-raised);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-full);
+  background: var(--badge-bg);
+  color: var(--badge-text);
+  font: var(--text-sm);
+  pointer-events: none;
+}

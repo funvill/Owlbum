@@ -6,13 +6,14 @@ use crate::session::Session;
 use crate::{area, command};
 use owlbum_core::album::{AlbumChanged, ChangeReason};
 use owlbum_core::edit::store::{self, EditSet, Reverted, Turned};
-use owlbum_core::edit::{EditInput, EditPlan, PhotoEdit, TurnOp, plan};
-use owlbum_core::text;
+use owlbum_core::edit::{Colour, EditInput, EditPlan, PhotoEdit, TurnOp, auto, plan};
+use owlbum_core::thumbs::{Thumbs, lookup};
+use owlbum_core::{AppError, ErrorCode, text};
 use tauri::{AppHandle, Manager, Runtime};
 
 area! {
     prefix: "edit",
-    commands: [edit_plan, edit_transform, edit_set, edit_turn, edit_revert],
+    commands: [edit_plan, edit_transform, edit_auto, edit_set, edit_turn, edit_revert],
     events: [],
 }
 
@@ -48,6 +49,27 @@ command! {
     /// Pure; edit mode's buttons use it. Errors: `edit_invalid`.
     pub fn edit_transform(edit: EditInput, op: TurnOp) -> PhotoEdit {
         Ok(op.apply(&edit.parse()?))
+    }
+}
+
+command! {
+    /// Auto's light and colour for photo `photo_id`, from its medium
+    /// thumbnail (made first when missing); saturation is always 0. Edit
+    /// mode's Auto button keeps the rest of its draft. Errors:
+    /// `photo_not_found`, `internal` when no thumbnail can be made.
+    pub async fn edit_auto<R: Runtime>(photo_id: i64; app: AppHandle<R>) -> Colour {
+        let scanner = app.state::<Session>().queries()?.0;
+        let thumbs = app
+            .try_state::<Thumbs>()
+            .map(|t| t.inner().clone())
+            .ok_or_else(|| AppError::internal(text::edit::AUTO))?;
+        off_main(text::edit::AUTO, move || {
+            let open = scanner.open();
+            let photo = lookup::by_id(open.album, open.overlay, photo_id)?
+                .ok_or_else(|| AppError::new(ErrorCode::PhotoNotFound, text::photo::NOT_FOUND))?;
+            auto::of_photo(&thumbs, &photo)
+        })
+        .await
     }
 }
 

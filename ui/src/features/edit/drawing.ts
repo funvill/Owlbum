@@ -52,3 +52,22 @@ export function drawPlan(plan: EditPlan, boxW: number, boxH: number, fit: Fit): 
 
 /** The id of the SVG filter for an edit key. */
 export const filterId = (key: string) => `owlbum-colour-${key}`;
+
+const escapeHtml = (text: string) => text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
+
+/**
+ * The same drawing as `EditedImage`, as HTML text, for pictures drawn
+ * outside React (the map's markers). The caller holds the colour filter
+ * (`holdColourFilter`) while the HTML is shown.
+ */
+export function editedHtml(plan: EditPlan, src: string, boxW: number, boxH: number, fit: Fit): string {
+  const d = drawPlan(plan, boxW, boxH, fit);
+  const filter = d.filter === null ? "" : `filter:url(#${filterId(plan.key)});`;
+  return (
+    `<div class="ow-edited" data-edit-key="${escapeHtml(plan.key)}" ` +
+    `style="width:${d.outerW}px;height:${d.outerH}px;overflow:hidden;position:relative">` +
+    `<img src="${escapeHtml(src)}" alt="" draggable="false" ` +
+    `style="position:absolute;left:0;top:0;transform-origin:0 0;width:${d.width}px;height:${d.height}px;` +
+    `max-width:none;transform:${d.transform};${filter}"></div>`
+  );
+}

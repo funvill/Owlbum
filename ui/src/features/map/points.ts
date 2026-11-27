@@ -1,5 +1,5 @@
 // What changes on the map when a new result arrives (docs/04-browsing.md,
-// "What the map holds"): markers whose id, place and thumbnail are
+// "What the map holds"): markers whose id, place, thumbnail and edit are
 // unchanged are kept; the rest are added or removed.
 
 import type { MapPoint } from "../../api/bindings/MapPoint";
@@ -12,7 +12,14 @@ export interface PointChange {
 
 /** Whether a marker drawn for `a` still serves `b`. */
 export function samePoint(a: MapPoint, b: MapPoint): boolean {
-  return a[0] === b[0] && a[1] === b[1] && a[2] === b[2] && a[3] === b[3] && a[4] === b[4];
+  return (
+    a[0] === b[0] &&
+    a[1] === b[1] &&
+    a[2] === b[2] &&
+    a[3] === b[3] &&
+    a[4] === b[4] &&
+    (a[5]?.key ?? null) === (b[5]?.key ?? null)
+  );
 }
 
 /**

@@ -7,6 +7,7 @@
 
 import { create } from "zustand";
 import type { PhotoAt } from "../../api/bindings/PhotoAt";
+import { isEditing } from "../edit/mode";
 import { useGridStore } from "../grid";
 
 export interface ViewerState {
@@ -25,7 +26,8 @@ let opener: HTMLElement | null = null;
  * typed is saved; the photo becomes the current photo if it is not already.
  */
 export function openViewer(at: PhotoAt): void {
-  if (useViewerStore.getState().open) return;
+  // The viewer cannot open over edit mode (docs/06-editing-and-file-actions.md, "Edit mode").
+  if (useViewerStore.getState().open || isEditing()) return;
   const active = document.activeElement;
   opener = active instanceof HTMLElement && active !== document.body ? active : null;
   opener?.blur();

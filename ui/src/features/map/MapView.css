@@ -112,6 +112,20 @@
   object-fit: cover;
 }
 
+/* An edited photo: drawn through its plan, centred; the pin cuts the overflow. */
+.ow-map-pin__edited {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+}
+
+.ow-map-pin__edited > .ow-edited {
+  flex: none;
+}
+
 /* The current photo: a 3 px selection border inside a white ring. */
 .ow-map-pin--current {
   border: 3px solid var(--select);

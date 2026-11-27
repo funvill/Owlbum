@@ -55,6 +55,7 @@ export function fakeDetail(id: number, changes: Partial<PhotoDetail> = {}): Phot
     notes: null,
     revision: 1,
     edit_plan: null,
+    edit: null,
     tags: null,
     ...changes,
   };

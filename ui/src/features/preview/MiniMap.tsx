@@ -1,14 +1,19 @@
 // The mini map (docs/04-browsing.md, "Mini map"): the small thumbnail at
-// the stage's top-right, with the visible part outlined. Pressing or
+// the stage's top-right, drawn through the stored edit's plan when there is
+// one, with the visible part outlined. Pressing or
 // dragging on it centres the view there; its pointer events never reach the
 // stage behind.
 
 import { useRef, type PointerEvent as ReactPointerEvent, type SyntheticEvent } from "react";
+import type { EditPlan } from "../../api/bindings/EditPlan";
 import { previewText } from "../../text/preview";
+import { EditedImage } from "../edit/EditedImage";
 import { miniMapSize, visibleRect, type Box, type View } from "./zoom";
 
 export interface MiniMapProps {
   src: string;
+  /** The plan the stage draws through; null for the plain picture. */
+  plan?: EditPlan | null;
   fitted: Box;
   stage: Box;
   view: View;
@@ -19,7 +24,7 @@ export interface MiniMapProps {
 const stop = (e: SyntheticEvent) => e.stopPropagation();
 const unit = (n: number) => Math.min(1, Math.max(0, n));
 
-export function MiniMap({ src, fitted, stage, view, onCentre }: MiniMapProps) {
+export function MiniMap({ src, plan = null, fitted, stage, view, onCentre }: MiniMapProps) {
   const size = miniMapSize(fitted);
   const rect = visibleRect(view, stage, fitted);
   const pressed = useRef<number | null>(null);
@@ -55,7 +60,11 @@ export function MiniMap({ src, fitted, stage, view, onCentre }: MiniMapProps) {
       onDoubleClick={stop}
       onContextMenu={stop}
     >
-      <img className="ow-minimap__img" src={src} alt="" draggable={false} />
+      {plan === null ? (
+        <img className="ow-minimap__img" src={src} alt="" draggable={false} />
+      ) : (
+        <EditedImage plan={plan} src={src} boxW={size.width} boxH={size.height} fit="contain" className="ow-minimap__img" />
+      )}
       <div
         className="ow-minimap__view"
         style={{

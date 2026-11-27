@@ -4,6 +4,7 @@ import type { Clipping } from "./Clipping";
 import type { DateInfo } from "./DateInfo";
 import type { EditPlan } from "./EditPlan";
 import type { MediaKind } from "./MediaKind";
+import type { PhotoEdit } from "./PhotoEdit";
 import type { Place } from "./Place";
 import type { JsonValue } from "./serde_json/JsonValue";
 
@@ -60,6 +61,11 @@ revision: number,
  * The plan for the stored edit, as on `Row`; null for none.
  */
 edit_plan: EditPlan | null, 
+/**
+ * The stored edit itself, where edit mode starts
+ * (docs/06-editing-and-file-actions.md, "Edit mode"); null for none.
+ */
+edit: PhotoEdit | null, 
 /**
  * What tagging found (`PhotoTags`, docs/07-tagging.md). Always null
  * until the "What's in it" section is built (#55), which gives it its

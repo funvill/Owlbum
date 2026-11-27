@@ -126,6 +126,18 @@ function isTextField(el: Element): boolean {
   return !!editable && editable.getAttribute("contenteditable") !== "false";
 }
 
+/** Whether edit mode is open, which silences the review screen's own rows. */
+let editing = false;
+
+/**
+ * Edit mode opened or closed (docs/06-editing-and-file-actions.md, "Keys in
+ * edit mode"): while it is open the `browse` rows match nothing, so every
+ * other review key does nothing; edit mode listens with place `edit`.
+ */
+export function setEditing(on: boolean): void {
+  editing = on;
+}
+
 /**
  * Finds the row a keydown reaches in this place, or null. Menu rows never
  * match: the shell's menu owns them.
@@ -136,6 +148,7 @@ export function matchKey(event: KeyLike, context: MatchContext): KeyMatch | null
   if (focus === "dialog") return null;
   for (const r of KEYMAP) {
     if (r.menu) continue;
+    if (editing && r.place === "browse") continue;
     if (r.place !== context.place && r.place !== "everywhere") continue;
     if (focus === "typing" && !r.typing) continue;
     for (const text of r.keys) {

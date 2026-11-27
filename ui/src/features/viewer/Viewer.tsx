@@ -19,6 +19,7 @@ import { formatLength, formatSize, formatTaken } from "../details";
 import { step, stepToEnd, useGridStore } from "../grid";
 import { fileKeyHandlers } from "../files/keys";
 import { isRotateKey, rotateKeyHandlers } from "../edit";
+import { holdBefore, useBeforeStore } from "../edit/before";
 import { FlagMark, ScoreToast, flagKeyHandlers, isFlagKey } from "../organise";
 import { CachedZoomStage, stagePictures, usePreload, useShownRow, zoomKeyHandlers, type ZoomHandle } from "../preview";
 import { closeViewer, toggleDetails, useViewerStore } from "./store";
@@ -80,6 +81,7 @@ function OpenViewer({ detail }: ViewerProps) {
   const count = useGridStore((s) => s.result?.count ?? 0);
   const details = useViewerStore((s) => s.details);
   const editTarget = useSettingsStore((s) => s.settings?.edit_target ?? "album");
+  const before = useBeforeStore((s) => s.held);
   const root = useRef<HTMLDivElement>(null);
   const zoom = useRef<ZoomHandle>(null);
   const index = pending?.index ?? current?.index ?? null;
@@ -134,6 +136,8 @@ function OpenViewer({ detail }: ViewerProps) {
       if (match !== null && match.act && match.id === "viewer.copy") fileKeyHandlers()["viewer.copy"]();
       // [ and ] turn the shown photo (docs/06-editing-and-file-actions.md).
       if (match !== null && match.act && isRotateKey(match.id)) rotateKeyHandlers()[match.id]();
+      // Holding \ shows the original (docs/06-editing-and-file-actions.md, "Before and after").
+      if (match !== null && match.act && match.id === "viewer.before") holdBefore();
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
@@ -161,6 +165,7 @@ function OpenViewer({ detail }: ViewerProps) {
             pictures={stagePictures(row)}
             aspect={row.aspect}
             plan={row.edit_plan}
+            showOriginal={before}
             original={own !== null && own.width > 0 && own.height > 0 ? { width: own.width, height: own.height } : null}
             zoomable={row.kind !== "video"}
             actualSizeAtFit

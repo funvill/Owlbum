@@ -13,7 +13,11 @@ import type { MouseEvent as ReactMouseEvent, Ref } from "react";
 import type { PhotoAt } from "../../api/bindings/PhotoAt";
 import type { PhotoDetail } from "../../api/bindings/PhotoDetail";
 import { previewText as t } from "../../text/preview";
+import { useAlbumStore, viewOnlyReason } from "../album";
 import { useSettingsStore } from "../app";
+import { EditMode } from "../edit/EditMode";
+import { useBeforeStore } from "../edit/before";
+import { notEditable, openEdit, useEditStore } from "../edit/mode";
 import { useGridStore } from "../grid";
 import { FlagMark, ScoreToast } from "../organise";
 import { Caption } from "./Caption";
@@ -38,6 +42,9 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
   const { current, pending, row } = useShownRow();
   const selected = useGridStore((s) => s.selection.length);
   const editTarget = useSettingsStore((s) => s.settings?.edit_target ?? "album");
+  const editing = useEditStore((s) => s.photoId);
+  const before = useBeforeStore((s) => s.held);
+  const viewOnly = useAlbumStore((s) => (s.status === null ? null : viewOnlyReason(s.status)));
   usePreload(pending?.index ?? current?.index ?? null);
 
   if (current === null && pending === null) {
@@ -60,6 +67,15 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
 
   const own = detail !== null && detail.id === row.id ? detail : null;
   const at = current;
+  if (editing === row.id) {
+    return (
+      <section className="ow-preview" aria-label={t.region}>
+        <EditMode />
+        <Caption row={row} selected={selected} fullPath={own?.abs_path ?? null} editTarget={editTarget} />
+      </section>
+    );
+  }
+  const editBlocked = viewOnly ?? notEditable(row) ?? undefined;
   return (
     <section className="ow-preview" aria-label={t.region}>
       <div className="ow-preview__stage">
@@ -69,6 +85,7 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
           pictures={stagePictures(row)}
           aspect={row.aspect}
           plan={row.edit_plan}
+          showOriginal={before}
           original={own !== null && own.width > 0 && own.height > 0 ? { width: own.width, height: own.height } : null}
           zoomable={row.kind !== "video"}
           onOpenAtFit={onOpen === undefined ? undefined : () => onOpen(at)}
@@ -78,7 +95,13 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
         <FlagMark place="preview" />
         <ScoreToast place="preview" />
       </div>
-      <Caption row={row} selected={selected} fullPath={own?.abs_path ?? null} editTarget={editTarget} />
+      <Caption
+        row={row}
+        selected={selected}
+        fullPath={own?.abs_path ?? null}
+        editTarget={editTarget}
+        actions={{ editBlocked, onEdit: () => void openEdit(row.id) }}
+      />
     </section>
   );
 }

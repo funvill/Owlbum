@@ -11,4 +11,11 @@ export const previewText = {
   editedAlbum: "Edited",
   editedFile: "Edited · not saved",
   miniMap: "Where the view is in the photo",
+  /** Before/after: the caption over the unedited picture (docs/06). */
+  original: "Original",
+  /** The caption's edit actions (docs/06-editing-and-file-actions.md, "Edit mode"). */
+  edit: "Edit",
+  editShortcut: "E",
+  before: "Before",
+  beforeTooltip: "Hold to see the original (\\)",
 };

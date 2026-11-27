@@ -65,6 +65,9 @@ pub struct PhotoDetail {
     pub revision: u64,
     /// The plan for the stored edit, as on `Row`; null for none.
     pub edit_plan: Option<crate::edit::EditPlan>,
+    /// The stored edit itself, where edit mode starts
+    /// (docs/06-editing-and-file-actions.md, "Edit mode"); null for none.
+    pub edit: Option<crate::edit::PhotoEdit>,
     /// What tagging found (`PhotoTags`, docs/07-tagging.md). Always null
     /// until the "What's in it" section is built (#55), which gives it its
     /// type.
@@ -303,6 +306,7 @@ fn build(
         notes: t.notes,
         revision,
         edit_plan: crate::edit::store::stored_plan(id, f.width, f.height, t.edit.as_deref()),
+        edit: crate::edit::store::read_stored(id, t.edit.as_deref()),
         tags: None,
     }
 }

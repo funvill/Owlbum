@@ -15,22 +15,35 @@ interface Held {
 
 export const useColourFilters = create<{ held: Record<string, Held> }>(() => ({ held: {} }));
 
+/**
+ * Holds the filter for `key` until the answered function is called, for
+ * pictures drawn outside React (the map's markers). Each hold is released
+ * once.
+ */
+export function holdColourFilter(key: string, values: string): () => void {
+  useColourFilters.setState(({ held }) => ({
+    held: { ...held, [key]: { values, users: (held[key]?.users ?? 0) + 1 } },
+  }));
+  let released = false;
+  return () => {
+    if (released) return;
+    released = true;
+    useColourFilters.setState(({ held }) => {
+      const h = held[key];
+      if (h === undefined) return { held };
+      const next = { ...held };
+      if (h.users <= 1) delete next[key];
+      else next[key] = { ...h, users: h.users - 1 };
+      return { held: next };
+    });
+  };
+}
+
 /** Keeps the filter for `key` while the calling component is mounted. */
 export function useColourFilter(key: string | null, values: string | null): void {
   useEffect(() => {
     if (key === null || values === null) return;
-    useColourFilters.setState(({ held }) => ({
-      held: { ...held, [key]: { values, users: (held[key]?.users ?? 0) + 1 } },
-    }));
-    return () =>
-      useColourFilters.setState(({ held }) => {
-        const h = held[key];
-        if (h === undefined) return { held };
-        const next = { ...held };
-        if (h.users <= 1) delete next[key];
-        else next[key] = { ...h, users: h.users - 1 };
-        return { held: next };
-      });
+    return holdColourFilter(key, values);
   }, [key, values]);
 }
 

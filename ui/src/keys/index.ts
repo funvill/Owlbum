@@ -13,5 +13,5 @@ export {
   rowsFor,
 } from "./table";
 export type { KeyId, KeyRow, KeySpec, Place } from "./table";
-export { focusOf, isRelease, keyMatches, matchKey } from "./match";
+export { focusOf, isRelease, keyMatches, matchKey, setEditing } from "./match";
 export type { Focus, KeyLike, KeyMatch, MatchContext } from "./match";

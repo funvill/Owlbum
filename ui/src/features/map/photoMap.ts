@@ -10,6 +10,8 @@ import "leaflet.markercluster/dist/MarkerCluster.css";
 import type { MapPoint } from "../../api/bindings/MapPoint";
 import { thumbUrl } from "../../api/media";
 import { mapText } from "../../text/map";
+import { editedHtml } from "../edit/drawing";
+import { holdColourFilter } from "../edit/filters";
 import { diffPoints } from "./points";
 
 /** The first view, before any photo is placed. */
@@ -36,10 +38,22 @@ function escape(text: string): string {
   return text.replace(/[&<>"']/g, (c) => `&#${c.charCodeAt(0)};`);
 }
 
+/**
+ * The marker's picture: the small thumbnail, drawn through the stored
+ * edit's plan to cover the pin (docs/06-editing-and-file-actions.md,
+ * "Where edits are shown").
+ */
+function pinPicture(point: MapPoint): string {
+  const src = thumbUrl(point[3], "s");
+  const plan = point[5];
+  if (plan === null) return `<img src="${escape(src)}" alt="" draggable="false">`;
+  return `<span class="ow-map-pin__edited">${editedHtml(plan, src, PIN, PIN, "cover")}</span>`;
+}
+
 function pinIcon(point: MapPoint, current: boolean): L.DivIcon {
   return L.divIcon({
     className: current ? "ow-map-pin ow-map-pin--current" : "ow-map-pin",
-    html: `<img src="${escape(thumbUrl(point[3], "s"))}" alt="" draggable="false">`,
+    html: pinPicture(point),
     iconSize: [PIN, PIN],
     iconAnchor: [PIN / 2, PIN / 2],
   });
@@ -61,6 +75,8 @@ export class PhotoMap {
   private readonly clusters: L.MarkerClusterGroup;
   private readonly markers = new Map<number, L.Marker>();
   private readonly points = new Map<number, MapPoint>();
+  /** The colour filters the markers' edited pictures hold, by photo id. */
+  private readonly filters = new Map<number, () => void>();
   private tiles: L.TileLayer | null = null;
   private failing = false;
   private current: number | null = null;
@@ -106,6 +122,8 @@ export class PhotoMap {
     for (const id of remove) {
       this.markers.delete(id);
       this.points.delete(id);
+      this.filters.get(id)?.();
+      this.filters.delete(id);
     }
     this.clusters.removeLayers(gone);
     const fresh = add.map((p) => {
@@ -123,6 +141,8 @@ export class PhotoMap {
       });
       this.markers.set(p[0], marker);
       this.points.set(p[0], p);
+      const colour = p[5]?.colour ?? null;
+      if (p[5] && colour !== null) this.filters.set(p[0], holdColourFilter(p[5].key, colour.svg.map(String).join(" ")));
       return marker;
     });
     this.clusters.addLayers(fresh);
@@ -188,6 +208,8 @@ export class PhotoMap {
 
   destroy(): void {
     this.map.remove();
+    for (const release of this.filters.values()) release();
+    this.filters.clear();
     this.markers.clear();
     this.points.clear();
     this.tiles = null;

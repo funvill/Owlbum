@@ -13,12 +13,14 @@ use ts_rs::TS;
 
 use super::engine::QueryEngine;
 use crate::album::{Album, sqlite_error};
+use crate::edit::EditPlan;
+use crate::edit::store::stored_plan;
 use crate::error::AppResult;
 use crate::scan::memory::Overlay;
 use crate::text;
 
-/// One located photo: `[id, lat, lon, thumb_key, file_name]`. Compact, as
-/// a whole album's worth crosses to the page at once.
+/// One located photo: `[id, lat, lon, thumb_key, file_name, edit_plan]`.
+/// Compact, as a whole album's worth crosses to the page at once.
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
 pub struct MapPoint(
     /// The photo's id.
@@ -31,6 +33,10 @@ pub struct MapPoint(
     pub String,
     /// The file name, the marker's tooltip.
     pub String,
+    /// The plan for the stored edit, which the marker's thumbnail is drawn
+    /// through (docs/06-editing-and-file-actions.md, "Where edits are
+    /// shown"); null for none.
+    pub Option<EditPlan>,
 );
 
 /// What `query_map` answers.
@@ -50,6 +56,8 @@ struct Place {
     gps: Option<(f64, f64)>,
     thumb_key: String,
     file_name: String,
+    /// The stored edit's plan.
+    plan: Option<EditPlan>,
 }
 
 impl Place {
@@ -76,6 +84,8 @@ impl QueryEngine {
                     gps: row.facts.gps_lat.zip(row.facts.gps_lon),
                     thumb_key: row.facts.thumb_key.clone(),
                     file_name: row.file_name().to_owned(),
+                    // A row held in memory has no stored edit.
+                    plan: None,
                 },
             );
         }
@@ -90,6 +100,7 @@ impl QueryEngine {
                     lon,
                     place.thumb_key.clone(),
                     place.file_name.clone(),
+                    place.plan.clone(),
                 ))
             })
             .collect();
@@ -104,7 +115,8 @@ fn read_places(album: &Album) -> AppResult<HashMap<i64, Place>> {
         let failed = sqlite_error(text::query::READING_ROWS);
         let mut stmt = conn
             .prepare_cached(
-                "SELECT id, loc_lat, loc_lon, gps_lat, gps_lon, thumb_key, file_name FROM photos
+                "SELECT id, loc_lat, loc_lon, gps_lat, gps_lon, thumb_key, file_name, width, height, edit
+                   FROM photos
                   WHERE (loc_lat IS NOT NULL AND loc_lon IS NOT NULL)
                      OR (gps_lat IS NOT NULL AND gps_lon IS NOT NULL)",
             )
@@ -114,13 +126,19 @@ fn read_places(album: &Album) -> AppResult<HashMap<i64, Place>> {
                 let pair = |a: usize, b: usize| -> rusqlite::Result<Option<(f64, f64)>> {
                     Ok(r.get::<_, Option<f64>>(a)?.zip(r.get::<_, Option<f64>>(b)?))
                 };
+                let id = r.get::<_, i64>(0)?;
+                let size = |i: usize| -> rusqlite::Result<u32> {
+                    Ok(u32::try_from(r.get::<_, Option<i64>>(i)?.unwrap_or(0)).unwrap_or(0))
+                };
+                let edit: Option<String> = r.get(9)?;
                 Ok((
-                    r.get::<_, i64>(0)?,
+                    id,
                     Place {
                         typed: pair(1, 2)?,
                         gps: pair(3, 4)?,
                         thumb_key: r.get(5)?,
                         file_name: r.get(6)?,
+                        plan: stored_plan(id, size(7)?, size(8)?, edit.as_deref()),
                     },
                 ))
             })

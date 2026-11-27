@@ -19,6 +19,9 @@ pub const TOO_LARGE: &str = "This photo is too large to edit.";
 /// `edit_render_failed`: a JPEG side is limited to 65,535 pixels.
 pub const TOO_WIDE_FOR_JPEG: &str = "the picture is too large for a JPEG";
 
+/// What was being done, for an `internal` error from `edit_auto`.
+pub const AUTO: &str = "working out Auto for this photo";
+
 /// What was being done, for an `internal` error while reading edits.
 pub const READING: &str = "reading this photo's edit";
 

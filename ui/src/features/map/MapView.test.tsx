@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
 import { setApi } from "../../api";
 import { appError, createFakeApi, type FakeApi } from "../../api/fake";
+import { fakePlan } from "../../api/fake/edit";
 import { createQueryFake, type FakePhoto } from "../../api/fake/query";
 import type { MapPoint } from "../../api/bindings/MapPoint";
 import { useToasts } from "../../controls";
@@ -10,6 +11,8 @@ import { read, sourceFiles, srcDir } from "../../test/sources";
 import { mapText } from "../../text/map";
 import { timelineText } from "../../text/timeline";
 import { useSettingsStore } from "../app";
+import { drawPlan } from "../edit/drawing";
+import { useColourFilters } from "../edit/filters";
 import { resetGrid, useGridStore } from "../grid";
 import { ViewBar } from "../timeline";
 import { MapView, resetMapPlace } from "./MapView";
@@ -157,7 +160,7 @@ describe("the map view", () => {
 });
 
 describe("the map's markers", () => {
-  const point = (id: number, lat = 1, lon = 2, key = `tk-${id}`): MapPoint => [id, lat, lon, key, `${id}.jpg`];
+  const point = (id: number, lat = 1, lon = 2, key = `tk-${id}`): MapPoint => [id, lat, lon, key, `${id}.jpg`, null];
 
   it("keeps markers whose id, place and thumbnail are unchanged", () => {
     const shown = new Map([point(1), point(2), point(3)].map((p) => [p[0], p]));
@@ -187,6 +190,27 @@ describe("the map's markers", () => {
     expect(map.marker(1)).toBeDefined();
     map.destroy();
     el.remove();
+  });
+
+  it("draws an edited photo through its plan, with its colour filter held while the marker is shown", () => {
+    const el = document.createElement("div");
+    const map = new PhotoMap(el, { onPick: () => {}, onTiles: () => {} });
+    const plan = fakePlan(4000, 2000, 90, {
+      key: "k1",
+      colour: { m: [1, 0, 0, 0, 1, 0, 0, 0, 1], offset: [0.2, 0.2, 0.2], svg: [1, 0, 0, 0, 0.2, 0, 1, 0, 0, 0.2, 0, 0, 1, 0, 0.2, 0, 0, 0, 1, 0] },
+    });
+    const edited: MapPoint = [1, 1, 2, "tk-1", "1.jpg", plan];
+    map.setPoints([edited]);
+    const html = (map.marker(1)!.options.icon!.options as { html?: string }).html!;
+    const d = drawPlan(plan, 36, 36, "cover");
+    expect(html).toContain(`transform:${d.transform}`);
+    expect(html).toContain("filter:url(#owlbum-colour-k1)");
+    expect(useColourFilters.getState().held.k1?.users).toBe(1);
+    // An edit that changes replaces the marker; one that goes releases the filter.
+    expect(diffPoints(map.shown(), [point(1)]).remove).toEqual([1]);
+    map.setPoints([point(1)]);
+    expect(useColourFilters.getState().held.k1).toBeUndefined();
+    map.destroy();
   });
 
   it("never uses the library's default marker image", () => {

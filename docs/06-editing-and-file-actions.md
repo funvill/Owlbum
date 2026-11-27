@@ -292,8 +292,8 @@ Three tests together pin "what you see is what gets saved".
 | Place | How the edit shows |
 |---|---|
 | Grid and timeline tiles | `EditedImage`, cover, on the small thumbnail. A marker shows the photo is edited. |
-| Map thumbnails | `EditedImage`, cover. |
-| Preview | `EditedImage`, contain, zoomable; the full-size picture is swapped in for zooming with the same plan. A badge names the state. |
+| Map thumbnails | `EditedImage`'s drawing, cover, written as HTML for the marker (`editedHtml`); each point of `query_map` carries its `edit_plan`. |
+| Preview | `EditedImage`, contain, zoomable; the full-size picture is swapped in for zooming with the same plan, and the zoom's mini map draws the small thumbnail through the same plan. A badge names the state. |
 | Full-screen viewer | `EditedImage`, contain, with the same zoom as the preview. The viewer always shows the edit. |
 | Edit mode | The whole-frame plan, with the crop box over it. |
 | Before/after | The plain upright picture, with no plan at all. |
@@ -318,7 +318,7 @@ Edit mode edits one photo inside the preview pane. It opens with the E key, the 
 | Rule | Detail |
 |---|---|
 | What can be edited | Still images and RAW files. Not video, not an animated picture. A file that could not be read (a row with `scan_error`) is in no result, so it can never be chosen. See [Formats](#formats). |
-| Starting point | The stored edit, or identity. The aspect starts at Free, not swapped. |
+| Starting point | The stored edit, or identity, read from the detail record's `edit` (`photo_detail`) when edit mode opens. The aspect starts at Free, not swapped. |
 | One at a time | Opening edit mode on another photo first ends the current one as Done. |
 | While a save runs | Edit mode cannot open on a photo that is being saved to its file. |
 | The viewer | The viewer cannot open over edit mode. |
@@ -416,7 +416,9 @@ These end edit mode **as Done would**, using the current draft:
 - opening another album, or closing this one;
 - closing the window or quitting.
 
-If `edit_set` fails, edit mode stays open and a toast says "Couldn't keep the edit: <reason>".
+If `edit_set` fails, a toast says "Couldn't keep the edit: <reason>". After Done (the button or Enter) edit mode stays open. When it was ending because the photo is no longer shown (another photo selected, the photo left the result, the album left) it closes anyway, since the stage could no longer show that photo.
+
+While edit mode is open, the review screen's own key rows (`browse` in the key table) match nothing, so every other review key, Ctrl+Z, Delete and Ctrl+C included, does nothing; edit mode listens with place `edit`. Closing the window has no close handshake yet (`app_closing`, [Desktop, release and tests](08-desktop-and-release.md)); until it exists, a draft open when the window closes is lost, and the stored edit is as it was.
 
 ### Before and after
 
@@ -425,7 +427,7 @@ Holding `\`, or pressing and holding the **Before** button, shows the photo with
 | Rule | Detail |
 |---|---|
 | Where | The preview, the viewer and edit mode. In edit mode the crop box is hidden while the original shows. |
-| The button | Under the preview while the photo has an edit, and in the edit toolbar. It works with the pointer (down to show, up or leave to hide) and with the keyboard (Space or Enter held). |
+| The button | At the right end of the preview's caption (before Edit) while the photo has an edit, and in the edit toolbar. It works with the pointer (down to show, up or leave to hide) and with the keyboard (Space or Enter held). |
 | Losing focus | If the window loses focus while the key or button is held, the edit shows again. |
 | Not while | Typing, or with a dialog or menu open. |
 

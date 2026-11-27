@@ -6,8 +6,8 @@ import { filesText } from "../../text/files";
 import { useAlbumStore, viewOnlyReason } from "../album";
 import { BLOCK, gridBlocks, useGridStore } from "../grid";
 import { turn } from "../edit/turn";
+import { notEditable, openEdit } from "../edit/mode";
 import { toggleFlag } from "../organise";
-import { editText } from "../../text/edit";
 import { bin, copyPaths, copyPhotos, revealPhoto, trashPhotos } from "./actions";
 import { selectedTargets } from "./targets";
 
@@ -38,8 +38,8 @@ export interface PhotoMenuProps {
 
 /**
  * The photo menu (docs/06-editing-and-file-actions.md, "The photo menu"):
- * rotate and flip, copy, copy path, show in folder, star, hide and move to
- * the bin. Edit and the save items join it with edit mode and saving.
+ * edit, rotate and flip, copy, copy path, show in folder, star, hide and
+ * move to the bin. The save items join it with saving (#47).
  */
 export function PhotoMenu({ at, photoId, onClose }: PhotoMenuProps) {
   const status = useAlbumStore((s) => s.status);
@@ -55,9 +55,7 @@ export function PhotoMenu({ at, photoId, onClose }: PhotoMenuProps) {
   // from the first that cannot (docs/06-editing-and-file-actions.md, "Formats").
   const why = (id: number): string | null => {
     const r = rowOf(id);
-    if (r === undefined) return null;
-    if (r.kind === "video") return editText.video;
-    return r.duration_ms !== null ? editText.animated : null;
+    return r === undefined ? null : notEditable(r);
   };
   const reasons = all.map(why);
   const turnBlocked = blocked ?? (reasons.every((r) => r !== null) ? (reasons[0] ?? undefined) : undefined);
@@ -81,6 +79,14 @@ export function PhotoMenu({ at, photoId, onClose }: PhotoMenuProps) {
   }, [onClose]);
 
   const entries: MenuEntry[] = [
+    {
+      id: "edit",
+      label: t.edit,
+      icon: "crop",
+      shortcut: primaryKey("browse.edit"),
+      disabledReason: blocked ?? why(photoId) ?? undefined,
+      onSelect: () => void openEdit(photoId),
+    },
     {
       id: "rotate-left",
       label: t.rotateLeft,

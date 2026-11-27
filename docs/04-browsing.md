@@ -910,7 +910,7 @@ The **Map** button replaces the thumbnails with a map. The preview and the detai
 
 ### What the map holds
 
-The map is the one view that needs every matching photo at once, so it does not use row windows. With `view: "map"` the result is every photo that passes the filter, in the chosen sort order, with stacks unfolded. The page then calls `query_map(token)`, which answers with `{ points, unlocated }`. `points` is one compact entry per located photo: `[id, lat, lon, thumb_key, file_name]` (the file name is the marker's tooltip). For 100,000 photos that is a few megabytes, sent once per result.
+The map is the one view that needs every matching photo at once, so it does not use row windows. With `view: "map"` the result is every photo that passes the filter, in the chosen sort order, with stacks unfolded. The page then calls `query_map(token)`, which answers with `{ points, unlocated }`. `points` is one compact entry per located photo: `[id, lat, lon, thumb_key, file_name, edit_plan]` (the file name is the marker's tooltip; `edit_plan` is the stored edit's plan, or null, which the marker's thumbnail is drawn through). For 100,000 photos that is a few megabytes, sent once per result.
 
 - **Located** means the effective place (typed, else GPS) has a latitude from −90 to 90 and a longitude from −180 to 180.
 - **Note.** "1 photo has no location" or "N photos have no location", shown only when `unlocated` is above 0.
@@ -1087,7 +1087,7 @@ Names follow the prefixes in [Architecture](01-architecture.md). Every command a
 | `album_close` | none | nothing | Releases the lock. Drops every token. Like `album_open`, it runs off the main thread, and the two never overlap: an open waits for a close, so the old album's lock is gone before the new one is taken. |
 | `album_status` | none | `AlbumStatus \| null` | Null when no album is open. |
 | `query_ids` | `token`, `offset`, `limit` | `number[]` | The ids at those places of the token's list, in order: one id per tile, so the face of a closed stack and not its folded members, and the meaning segment when the range reaches it. For Shift ranges, heading clicks and Ctrl+A. No limit on `limit`. Error: `query_expired`. |
-| `query_map` | `token` | `{ points: [id, lat, lon, thumb_key, file_name][], unlocated }` | For a token made with `view: "map"`. Error: `query_expired`. |
+| `query_map` | `token` | `{ points: [id, lat, lon, thumb_key, file_name, edit_plan][], unlocated }` | For a token made with `view: "map"`. Error: `query_expired`. |
 | `photo_detail` | `id` | `PhotoDetail` | Error: `photo_not_found`. |
 | `photo_set_info` | `ids`, `patch` | `{ changed: number[], revision }` | Validates again in Rust; errors `invalid_date`, `invalid_location`, and the shared `view_only` and `photo_not_found`. `changed` lists the photos whose values changed. The patch fields `star` and `hidden` are defined in 05. |
 | `photo_histogram` | `id` | `{ l, r, g, b }`, each 64 numbers | |
@@ -1149,7 +1149,8 @@ type PhotoDetail = {
   star: boolean; hidden: boolean;
   people: string[]; description: string | null; notes: string | null;
   revision: number;          // the album revision when this detail was read (read before the row, as query_run does)
-  edit_plan: object | null;  // EditPlan for the stored edit, as on Row; defined in 06; null until the edit model (#43)
+  edit_plan: object | null;  // EditPlan for the stored edit, as on Row; defined in 06
+  edit: object | null;       // PhotoEdit, the stored edit itself, where edit mode starts (06); null for none
   tags: object | null;       // PhotoTags; defined in 07; null until "What's in it" (#55), which hides its section until then
   // The score breakdown is not here: it is read with photo_score (05).
 };

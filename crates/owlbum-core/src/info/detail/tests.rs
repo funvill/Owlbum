@@ -88,7 +88,23 @@ fn a_photo_answers_its_facts_camera_and_clipping() {
     assert!(d.people.is_empty());
     assert_eq!((d.description.as_deref(), d.notes.as_deref()), (None, None));
     assert_eq!(d.edit_plan, None);
+    assert_eq!(d.edit, None);
     assert_eq!(d.tags, None);
+}
+
+#[test]
+fn a_stored_edit_comes_with_its_plan() {
+    let tmp = tempfile::tempdir().unwrap();
+    let album = album(tmp.path());
+    let id = write(&album, PARIS);
+    let edit = crate::edit::PhotoEdit {
+        rotate: 90,
+        ..crate::edit::IDENTITY
+    };
+    crate::edit::store::set(&album, id, Some(edit)).unwrap();
+    let d = detail(&album, id).unwrap();
+    assert_eq!(d.edit, Some(edit));
+    assert_eq!(d.edit_plan.map(|p| p.out.w), Some(3024));
 }
 
 #[test]

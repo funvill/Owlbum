@@ -200,6 +200,7 @@ describe("the photo menu", () => {
       .getAllByRole("menuitem")
       .map((i) => i.querySelector(".ow-menu__label")?.textContent);
     expect(labels).toEqual([
+      "Edit",
       "Rotate left",
       "Rotate right",
       "Flip horizontally",

@@ -1,6 +1,7 @@
 //! The edit model, rendering and saving (`edit_`;
 //! docs/06-editing-and-file-actions.md).
 //!
+//! - [`auto`]: Auto's statistics, measured on the medium thumbnail.
 //! - [`model`]: `PhotoEdit`, parsing, the stored form, identity, keys, and
 //!   the quarter turns and flip.
 //! - [`plan`]: `edit_plan`, `colour_matrix`, `auto_colour`, and the drawing
@@ -9,6 +10,7 @@
 //! - [`store`]: `photos.edit`, `edit_set`, `edit_turn`, `edit_revert` and
 //!   their undo steps.
 
+pub mod auto;
 pub mod model;
 pub mod plan;
 pub mod render;

@@ -40,8 +40,22 @@ fn points_are_the_located_photos_in_the_result_order() {
     assert_eq!(
         m.points,
         [
-            MapPoint(ids[1], -33.9, 151.2, "tk-a.jpg".into(), "a.jpg".into()),
-            MapPoint(ids[0], 49.25, -123.1, "tk-c.jpg".into(), "c.jpg".into()),
+            MapPoint(
+                ids[1],
+                -33.9,
+                151.2,
+                "tk-a.jpg".into(),
+                "a.jpg".into(),
+                None
+            ),
+            MapPoint(
+                ids[0],
+                49.25,
+                -123.1,
+                "tk-c.jpg".into(),
+                "c.jpg".into(),
+                None
+            ),
         ]
     );
     assert_eq!(m.unlocated, 2);
@@ -108,11 +122,33 @@ fn a_dropped_token_answers_query_expired() {
 #[test]
 fn the_points_serialise_as_compact_arrays() {
     let m = MapPoints {
-        points: vec![MapPoint(7, 1.5, -2.0, "k".into(), "a.jpg".into())],
+        points: vec![MapPoint(7, 1.5, -2.0, "k".into(), "a.jpg".into(), None)],
         unlocated: 3,
     };
     assert_eq!(
         serde_json::to_value(&m).unwrap(),
-        json!({ "points": [[7, 1.5, -2.0, "k", "a.jpg"]], "unlocated": 3 })
+        json!({ "points": [[7, 1.5, -2.0, "k", "a.jpg", null]], "unlocated": 3 })
     );
+}
+
+#[test]
+fn a_point_carries_the_plan_of_its_stored_edit() {
+    let tmp = tempfile::tempdir().unwrap();
+    let album = album(tmp.path());
+    let ids = add(&album, &[p("a.jpg", None), p("b.jpg", None)]);
+    change(
+        &album,
+        &format!(
+            r#"UPDATE photos SET gps_lat = 1, gps_lon = 2, width = 300, height = 200;
+               UPDATE photos SET edit = '{{"rotate":90}}' WHERE id = {a};"#,
+            a = ids[0],
+        ),
+        &ids,
+    );
+    let engine = QueryEngine::new();
+    let r = run(&engine, &album, &map_query());
+    let m = engine.map(&album, &Overlay::default(), &r.token).unwrap();
+    let plan = m.points[0].5.as_ref().expect("a has an edit");
+    assert_eq!((plan.out.w, plan.out.h), (200, 300));
+    assert_eq!(m.points[1].5, None);
 }

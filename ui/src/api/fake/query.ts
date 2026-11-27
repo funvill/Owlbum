@@ -411,7 +411,7 @@ export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
         if (p === undefined || place === undefined || place === null) continue;
         const [lat, lon] = place;
         if (Math.abs(lat) > 90 || Math.abs(lon) > 180) continue;
-        points.push([id, lat, lon, `tk-${id}`, fileName(p.rel_path)]);
+        points.push([id, lat, lon, `tk-${id}`, fileName(p.rel_path), p.edit_plan ?? null]);
       }
       return { points, unlocated: tiles.length - points.length };
     },

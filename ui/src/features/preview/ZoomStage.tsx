@@ -18,6 +18,7 @@ import {
 } from "react";
 import type { EditPlan } from "../../api/bindings/EditPlan";
 import type { KeyId } from "../../keys";
+import { previewText } from "../../text/preview";
 import { editedStyles } from "../edit/EditedImage";
 import { useColourFilter } from "../edit/filters";
 import { MiniMap } from "./MiniMap";
@@ -70,6 +71,11 @@ export interface ZoomStageProps {
    * stage takes the edited shape. Null or absent for no edit.
    */
   plan?: EditPlan | null;
+  /**
+   * Before/after (docs/06-editing-and-file-actions.md, "Before and after"):
+   * the plain upright picture, with no plan at all, captioned "Original".
+   */
+  showOriginal?: boolean;
   /** The original's upright size in pixels, once known; until then the largest zoom is 8 and no full picture is asked for. */
   original: Box | null;
   /** False while the photo has no thumbnail yet: the stage stays empty. */
@@ -118,7 +124,8 @@ export function ZoomStage({
   pictures,
   ready = true,
   aspect: photoAspect,
-  plan = null,
+  plan: storedPlan = null,
+  showOriginal = false,
   original: photoOriginal,
   zoomable,
   mediumCached = false,
@@ -139,6 +146,14 @@ export function ZoomStage({
   const [animatedReady, setAnimatedReady] = useState(false);
   const animated = pictures.animated ?? null;
   const [grabbing, setGrabbing] = useState(false);
+
+  const plan = showOriginal ? null : storedPlan;
+  // Showing the original changes the shape: back to fit.
+  const [shownOriginal, setShownOriginal] = useState(showOriginal);
+  if (shownOriginal !== showOriginal) {
+    setShownOriginal(showOriginal);
+    setView(null);
+  }
 
   // An edit gives the stage the edited picture's shape and size.
   const aspect = plan === null ? photoAspect : plan.out.w / plan.out.h;
@@ -318,12 +333,14 @@ export function ZoomStage({
       {zoomable && known && shown.zoom > 1 && (
         <MiniMap
           src={pictures.small}
+          plan={plan}
           fitted={fitted}
           stage={stage}
           view={shown}
           onCentre={(point) => setView(centreOn(live.current.shown, point, live.current.stage, live.current.fitted))}
         />
       )}
+      {showOriginal && storedPlan !== null && <span className="ow-zoom__original">{previewText.original}</span>}
     </div>
   );
 }

@@ -696,7 +696,7 @@ A Content-Security-Policy is fixed when the program is built, so the tile host i
 
 Tile requests are made by the webview, so they carry what the webview sends. To follow OpenStreetMap's tile rules and to send as little as possible:
 
-- the webview's user agent ends in ` Owlbum/<version>`, so the tile servers can tell which program is asking. Tauri can only replace a user agent, not add to it, so the shell builds the main window itself (its configuration has `create: false`) with a browser-like user agent for the platform, such as `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Owlbum/<version>`. It keeps the `Windows` token, which the page reads to address its custom scheme;
+- the webview's user agent names Owlbum, so the tile servers can tell which program is asking. OpenStreetMap's tile policy asks for a user agent that names the app and never poses as a browser, and Tauri can only replace a user agent, not add to it, so the shell builds the main window itself (its configuration has `create: false`) with the user agent `Owlbum/<version> (<platform>; +https://github.com/funvill/Owlbum)`, for example `Owlbum/0.1.0 (Windows NT 10.0; Win64; x64; +https://github.com/funvill/Owlbum)`. It keeps the `Windows` token, which the page reads to address its custom scheme;
 - tiles are cached by the webview's own HTTP cache, as the tile servers' headers say; the page never prefetches or bulk-loads tiles;
 - the page sets `<meta name="referrer" content="no-referrer">`, so no referring address is sent;
 - the map shows the "© OpenStreetMap contributors" credit.

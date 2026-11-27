@@ -170,17 +170,18 @@ fn main_window<R: Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
     Ok(())
 }
 
-/// The webview's user agent: a browser-like one for the platform, with
-/// `Owlbum/<version>` added. Tauri can only replace the user agent, not add
-/// to it, so the platform part is written here. It keeps the `Windows`
-/// token, which the page reads to address its custom scheme.
+/// The webview's user agent: `Owlbum/<version>`, the platform and the
+/// project's address. OpenStreetMap's tile policy asks for a user agent
+/// that names the app and never poses as a browser, so the webview's own
+/// is replaced. It keeps the `Windows` token, which the page reads to
+/// address its custom scheme.
 pub fn user_agent(os: &str, version: &str) -> String {
     let platform = match os {
         "windows" => "Windows NT 10.0; Win64; x64",
-        "macos" => "Macintosh; Intel Mac OS X 10_15_7",
+        "macos" => "Macintosh; Mac OS X",
         _ => "X11; Linux x86_64",
     };
-    format!("Mozilla/5.0 ({platform}) AppleWebKit/537.36 (KHTML, like Gecko) Owlbum/{version}")
+    format!("Owlbum/{version} ({platform}; +https://github.com/funvill/Owlbum)")
 }
 
 /// The native folder dialog, over the main window.
@@ -207,8 +208,9 @@ mod tests {
     #[test]
     fn the_user_agent_names_owlbum_and_keeps_the_platform() {
         let windows = user_agent("windows", "1.2.3");
-        assert!(windows.ends_with(" Owlbum/1.2.3"));
+        assert!(windows.starts_with("Owlbum/1.2.3 ("));
         assert!(windows.contains("Windows"));
+        assert!(!windows.contains("Mozilla"));
         assert!(user_agent("linux", "1.2.3").contains("Linux"));
     }
 

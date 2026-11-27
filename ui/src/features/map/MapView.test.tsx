@@ -135,6 +135,20 @@ describe("the map view", () => {
     await waitFor(() => expect(grid().current).toEqual({ id: 4, index: 3 }));
   });
 
+  it("steps onto a photo whose row was not fetched yet", async () => {
+    const many: FakePhoto[] = Array.from({ length: 450 }, (_, i) => ({
+      id: i + 1,
+      rel_path: `p${String(i).padStart(3, "0")}.jpg`,
+    }));
+    fake = createFakeApi(createQueryFake(many).handlers);
+    setApi(fake);
+    await openMap();
+    await waitFor(() => expect(grid().current).toEqual({ id: 1, index: 0 }));
+    fireEvent.keyDown(window, { key: "End" });
+    await waitFor(() => expect(grid().current).toEqual({ id: 450, index: 449 }));
+    expect(grid().pending).toBeNull();
+  });
+
   it("asks for the rows around the current photo, as the grid would", async () => {
     await openMap();
     await screen.findByText("2 photos have no location");

@@ -57,6 +57,9 @@ export function MapView({ album, onOpen }: MapViewProps) {
   const stageRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<PhotoMap | null>(null);
   const fitted = useRef(false);
+  // The result shown when the view opened was made for the grid or the
+  // timeline; switching re-runs the query, so the map waits for that answer.
+  const [before] = useState(() => useGridStore.getState().result?.token ?? null);
 
   // The map itself, for as long as the view is shown.
   useEffect(() => {
@@ -96,7 +99,7 @@ export function MapView({ album, onOpen }: MapViewProps) {
 
   // The located photos of each new result.
   useEffect(() => {
-    if (token === null) return;
+    if (token === null || token === before) return;
     let live = true;
     api()
       .invoke("query_map", { token })
@@ -111,7 +114,7 @@ export function MapView({ album, onOpen }: MapViewProps) {
     return () => {
       live = false;
     };
-  }, [token]);
+  }, [token, before]);
 
   // Markers follow the answer; the first points of an album are fitted once.
   useEffect(() => {

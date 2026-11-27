@@ -1056,7 +1056,7 @@ The check for whether a folder exists must never hold up the start. Rust checks 
 
 `album_open` answers with `session` when the folder has one: `{ view, sort, filter, search, selected_id, scroll }`. `selected_id` is null when the saved photo is no longer in the album (no row with that path, or the row is missing). Rust checks the stored values on the way out: each `Query` field and each filter is tried on its own, and one that is not allowed (from a newer or older Owlbum) is dropped, so a stored session can never stop the folder opening; a session that cannot be read at all opens the folder without one.
 
-1. The page sets the view, sort, filter and search, and runs the query, before drawing the review screen. The start screen is not shown in between. The map is not built yet (#36): a saved `map` view shows the grid.
+1. The page sets the view, sort, filter and search, and runs the query, before drawing the review screen. The start screen is not shown in between.
 2. If `selected_id` is set and `query_locate` finds it in the result, it becomes the current photo and is brought into view. That is the scroll position: by photo, not by offset. (`keep` is not used for this: its settling replaces a missing photo with its neighbour.)
 3. If nothing is selected, or the photo is gone, the photo at index `scroll` (clamped to the result) becomes current once its row arrives and is brought into view, so the album opens where it was, with no message. This replaces the first photo of **First selection** (see [When the result changes](#when-the-result-changes)).
 4. If the album is still being scanned and the selected photo's row exists from an earlier scan, step 2 works at once, because rows persist in the album database.

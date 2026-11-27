@@ -90,6 +90,14 @@ fn fixture() -> Fixture {
     }
 }
 
+/// Closes the album before the folders go, so no scan or thumbnail work
+/// still holds a file in them when the temporary folder is deleted.
+impl Drop for Fixture {
+    fn drop(&mut self) {
+        let _ = invoke(&self.window, "album_close", json!({}));
+    }
+}
+
 impl Fixture {
     /// Makes an album of three PNGs, opens it and waits for its scan.
     fn open(&self) -> PathBuf {

@@ -93,7 +93,8 @@ fn session(dir: &Path, file: &str, threads: usize) -> Result<Session, BackendErr
 }
 
 fn tokenizer(dir: &Path) -> Result<Tokenizer, BackendError> {
-    Tokenizer::from_file(dir.join("tokenizer.json")).map_err(|e| load_err(format!("tokenizer.json: {e}")))
+    Tokenizer::from_file(dir.join("tokenizer.json"))
+        .map_err(|e| load_err(format!("tokenizer.json: {e}")))
 }
 
 fn read_json(dir: &Path, file: &str) -> Result<serde_json::Value, BackendError> {
@@ -229,7 +230,8 @@ impl Preprocess {
                 let nw = ((w as f32 * s).round() as u32).max(crop);
                 let nh = ((h as f32 * s).round() as u32).max(crop);
                 let resized = image::imageops::resize(rgb, nw, nh, FilterType::CatmullRom);
-                image::imageops::crop_imm(&resized, (nw - crop) / 2, (nh - crop) / 2, crop, crop).to_image()
+                image::imageops::crop_imm(&resized, (nw - crop) / 2, (nh - crop) / 2, crop, crop)
+                    .to_image()
             }
             None => image::imageops::resize(rgb, self.width, self.height, FilterType::CatmullRom),
         };
@@ -269,8 +271,15 @@ impl ClipText {
     }
 
     /// Unit vectors of several texts, run as one padded batch.
-    fn embed_batch(&self, texts: &[String], deadline: &Deadline) -> Result<Vec<Vec<f32>>, BackendError> {
-        let ids: Vec<Vec<i64>> = texts.iter().map(|t| self.ids(t)).collect::<Result<_, _>>()?;
+    fn embed_batch(
+        &self,
+        texts: &[String],
+        deadline: &Deadline,
+    ) -> Result<Vec<Vec<f32>>, BackendError> {
+        let ids: Vec<Vec<i64>> = texts
+            .iter()
+            .map(|t| self.ids(t))
+            .collect::<Result<_, _>>()?;
         let len = ids.iter().map(Vec::len).max().unwrap_or(1);
         let mut flat = Vec::with_capacity(ids.len() * len);
         for row in &ids {
@@ -287,13 +296,22 @@ impl ClipText {
             .map_err(run_err(deadline))?;
         let o = extract(&out, "text_embeds")?;
         let dim = (*o.shape.last().unwrap_or(&1)).max(1) as usize;
-        Ok(o.data.chunks(dim).map(|c| results::unit(c.to_vec())).collect())
+        Ok(o.data
+            .chunks(dim)
+            .map(|c| results::unit(c.to_vec()))
+            .collect())
     }
 }
 
 impl TextEmbedder for ClipText {
     fn embed(&self, text: &str, deadline: &Deadline) -> Result<Vec<f32>, BackendError> {
-        if let Some((_, v)) = self.cache.lock().unwrap_or_else(|p| p.into_inner()).iter().find(|(t, _)| t == text) {
+        if let Some((_, v)) = self
+            .cache
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .iter()
+            .find(|(t, _)| t == text)
+        {
             return Ok(v.clone());
         }
         let v = self
@@ -342,7 +360,9 @@ impl Clip {
         let dim = model.dim.unwrap_or(0) as usize;
         let mut vocab = Vec::with_capacity(vocabulary.len());
         for batch in vocabulary.chunks(64) {
-            deadline.check().map_err(|_| load_err("loading took too long"))?;
+            deadline
+                .check()
+                .map_err(|_| load_err("loading took too long"))?;
             let prompts: Vec<String> = batch.iter().map(|w| format!("a photo of {w}")).collect();
             let vs = text.embed_batch(&prompts, deadline).map_err(load_err)?;
             vocab.extend(vs);
@@ -360,7 +380,11 @@ impl Clip {
         })
     }
 
-    fn keywords(&mut self, image: &TagImage, deadline: &Deadline) -> Result<Keyworded, BackendError> {
+    fn keywords(
+        &mut self,
+        image: &TagImage,
+        deadline: &Deadline,
+    ) -> Result<Keyworded, BackendError> {
         let (shape, data) = self.pre.tensor(image.rgb);
         let input = Tensor::from_array((shape, data)).map_err(lost)?;
         let dog = Watchdog::start(deadline)?;
@@ -372,7 +396,10 @@ impl Clip {
         let words: Vec<&str> = self.words.iter().map(String::as_str).collect();
         let threshold = self.model.keyword_threshold.unwrap_or(1.0);
         let keywords = results::keywords(&v, &self.vocab, &words, threshold);
-        Ok(Keyworded { keywords, vector: v })
+        Ok(Keyworded {
+            keywords,
+            vector: v,
+        })
     }
 }
 
@@ -402,7 +429,10 @@ const EOS: u32 = 2;
 pub enum Pick {
     Greedy,
     /// Temperature, then one of the `top_k` likeliest at random.
-    Sampled { temperature: f32, top_k: usize },
+    Sampled {
+        temperature: f32,
+        top_k: usize,
+    },
 }
 
 /// Regenerate's sampling (docs/07-tagging.md, "Description").
@@ -411,7 +441,10 @@ pub const SAMPLED: Pick = Pick::Sampled {
     top_k: 50,
 };
 
-type Inputs<'a> = Vec<(std::borrow::Cow<'a, str>, ort::session::SessionInputValue<'a>)>;
+type Inputs<'a> = Vec<(
+    std::borrow::Cow<'a, str>,
+    ort::session::SessionInputValue<'a>,
+)>;
 
 impl Florence {
     fn load(dir: &Path, threads: usize) -> Result<Self, BackendError> {
@@ -427,7 +460,9 @@ impl Florence {
             .unwrap_or_default();
         for task in ["<MORE_DETAILED_CAPTION>", "<OD>"] {
             if !prompts.contains_key(task) {
-                return Err(load_err(format!("preprocessor_config.json has no prompt for {task}")));
+                return Err(load_err(format!(
+                    "preprocessor_config.json has no prompt for {task}"
+                )));
             }
         }
         let no_repeat = read_json(dir, "generation_config.json")
@@ -445,7 +480,9 @@ impl Florence {
             .iter()
             .find(|i| i.name().ends_with(".decoder.key"))
             .and_then(|i| match i.dtype() {
-                ort::value::ValueType::Tensor { shape, .. } if shape.len() == 4 => Some((shape[1], shape[3])),
+                ort::value::ValueType::Tensor { shape, .. } if shape.len() == 4 => {
+                    Some((shape[1], shape[3]))
+                }
                 _ => None,
             })
             .ok_or_else(|| load_err("the decoder has no cache inputs"))?;
@@ -465,7 +502,12 @@ impl Florence {
         })
     }
 
-    fn features(&mut self, rgb: &RgbImage, dog: &Watchdog, deadline: &Deadline) -> Result<Owned, BackendError> {
+    fn features(
+        &mut self,
+        rgb: &RgbImage,
+        dog: &Watchdog,
+        deadline: &Deadline,
+    ) -> Result<Owned, BackendError> {
         let (shape, data) = self.pre.tensor(rgb);
         let input = Tensor::from_array((shape, data)).map_err(lost)?;
         let out = self
@@ -475,7 +517,12 @@ impl Florence {
         extract(&out, "image_features")
     }
 
-    fn embed(&mut self, ids: &[i64], dog: &Watchdog, deadline: &Deadline) -> Result<Owned, BackendError> {
+    fn embed(
+        &mut self,
+        ids: &[i64],
+        dog: &Watchdog,
+        deadline: &Deadline,
+    ) -> Result<Owned, BackendError> {
         let input = Tensor::from_array((vec![1, ids.len() as i64], ids.to_vec())).map_err(lost)?;
         let out = self
             .embed
@@ -533,11 +580,15 @@ impl Florence {
                 ("encoder_hidden_states".into(), memory.tensor()?.into()),
                 (
                     "encoder_attention_mask".into(),
-                    Tensor::from_array((vec![1, n], mask.clone())).map_err(lost)?.into(),
+                    Tensor::from_array((vec![1, n], mask.clone()))
+                        .map_err(lost)?
+                        .into(),
                 ),
                 (
                     "use_cache_branch".into(),
-                    Tensor::from_array((vec![1i64], vec![!first])).map_err(lost)?.into(),
+                    Tensor::from_array((vec![1i64], vec![!first]))
+                        .map_err(lost)?
+                        .into(),
                 ),
             ];
             for l in 0..self.layers {
@@ -682,11 +733,23 @@ impl OnnxBackend {
 
     /// A caption with any picking, for the prototype and the real-model
     /// tests.
-    pub fn caption_with(&mut self, image: &TagImage, pick: Pick, deadline: &Deadline) -> Result<String, BackendError> {
+    pub fn caption_with(
+        &mut self,
+        image: &TagImage,
+        pick: Pick,
+        deadline: &Deadline,
+    ) -> Result<String, BackendError> {
         let f = self.florence()?;
         let dog = Watchdog::start(deadline)?;
         let features = f.features(image.rgb, &dog, deadline)?;
-        let raw = f.task(&features, "<MORE_DETAILED_CAPTION>", 100, pick, &dog, deadline)?;
+        let raw = f.task(
+            &features,
+            "<MORE_DETAILED_CAPTION>",
+            100,
+            pick,
+            &dog,
+            deadline,
+        )?;
         Ok(results::clean_caption(&raw).unwrap_or_default())
     }
 }
@@ -730,11 +793,22 @@ impl TagBackend for OnnxBackend {
         }
     }
 
-    fn describe(&mut self, image: &TagImage, deadline: &Deadline) -> Result<Described, BackendError> {
+    fn describe(
+        &mut self,
+        image: &TagImage,
+        deadline: &Deadline,
+    ) -> Result<Described, BackendError> {
         let f = self.florence()?;
         let dog = Watchdog::start(deadline)?;
         let features = f.features(image.rgb, &dog, deadline)?;
-        let caption = f.task(&features, "<MORE_DETAILED_CAPTION>", 100, Pick::Greedy, &dog, deadline)?;
+        let caption = f.task(
+            &features,
+            "<MORE_DETAILED_CAPTION>",
+            100,
+            Pick::Greedy,
+            &dog,
+            deadline,
+        )?;
         let od = f.task(&features, "<OD>", 256, Pick::Greedy, &dog, deadline)?;
         Ok(Described {
             description: results::clean_caption(&caption),
@@ -746,7 +820,11 @@ impl TagBackend for OnnxBackend {
         self.caption_with(image, SAMPLED, deadline)
     }
 
-    fn keywords(&mut self, image: &TagImage, deadline: &Deadline) -> Result<Keyworded, BackendError> {
+    fn keywords(
+        &mut self,
+        image: &TagImage,
+        deadline: &Deadline,
+    ) -> Result<Keyworded, BackendError> {
         self.keywords
             .as_mut()
             .ok_or_else(|| BackendError::Lost("no keywords model is loaded".into()))?
@@ -787,7 +865,9 @@ mod tests {
             temperature: 0.7,
             top_k: 5,
         };
-        let seen: std::collections::HashSet<u32> = (0..200).map(|_| choose(&row, &[], pick, &mut rng)).collect();
+        let seen: std::collections::HashSet<u32> = (0..200)
+            .map(|_| choose(&row, &[], pick, &mut rng))
+            .collect();
         assert!(seen.iter().all(|t| *t >= 95));
         assert!(seen.len() > 1);
     }
@@ -806,7 +886,10 @@ mod tests {
         let cat = super::super::catalogue::Catalogue::real();
         let long = || Deadline::after(Duration::from_secs(600));
         let lake = owlbum_fixtures::picture::lake(640, 480);
-        let img = TagImage { rgb: &lake, name: "lake.jpg" };
+        let img = TagImage {
+            rgb: &lake,
+            name: "lake.jpg",
+        };
         for m in cat.all() {
             let mdir = dir.join(m.id);
             if !mdir.is_dir() {
@@ -819,8 +902,14 @@ mod tests {
                 m.id
             );
             let t = std::time::Instant::now();
-            b.load(m, &mdir, default_threads(), super::super::vocabulary::VOCABULARY, &long())
-                .expect("loads");
+            b.load(
+                m,
+                &mdir,
+                default_threads(),
+                super::super::vocabulary::VOCABULARY,
+                &long(),
+            )
+            .expect("loads");
             println!("{}: loaded in {:.1} s", m.id, t.elapsed().as_secs_f32());
             match m.part {
                 Part::Describe => {
@@ -828,9 +917,16 @@ mod tests {
                     let d = b.describe(&img, &long()).unwrap();
                     println!("{}: {:.1} s a photo", m.id, t.elapsed().as_secs_f32());
                     let text = d.description.unwrap();
-                    assert!(text.len() > 20 && !text.contains('<') && !text.contains('>'), "{text}");
+                    assert!(
+                        text.len() > 20 && !text.contains('<') && !text.contains('>'),
+                        "{text}"
+                    );
                     let again = b.describe(&img, &long()).unwrap();
-                    assert_eq!(again.description.as_deref(), Some(text.as_str()), "greedy is repeatable");
+                    assert_eq!(
+                        again.description.as_deref(),
+                        Some(text.as_str()),
+                        "greedy is repeatable"
+                    );
                     let sampled: std::collections::HashSet<String> =
                         (0..3).map(|_| b.caption(&img, &long()).unwrap()).collect();
                     assert!(sampled.len() > 1, "sampled captions vary");

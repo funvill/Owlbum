@@ -196,7 +196,12 @@ impl FakeBackend {
         }
     }
 
-    fn run(&mut self, part: Part, image: &TagImage, deadline: &Deadline) -> Result<&Loaded, BackendError> {
+    fn run(
+        &mut self,
+        part: Part,
+        image: &TagImage,
+        deadline: &Deadline,
+    ) -> Result<&Loaded, BackendError> {
         let delay = {
             let mut s = self.control.state();
             s.runs.push((part, image.name.to_owned()));
@@ -221,7 +226,9 @@ impl FakeBackend {
             }
         }
         if name.starts_with("fail-") {
-            return Err(BackendError::Photo("The fake model refused this picture.".into()));
+            return Err(BackendError::Photo(
+                "The fake model refused this picture.".into(),
+            ));
         }
         self.slots[part.index()]
             .as_ref()
@@ -247,7 +254,9 @@ pub fn vector_of(words: &[String]) -> Vec<f32> {
             "seaside" | "port" => "harbour",
             other => other,
         };
-        let h = w.bytes().fold(7u32, |h, b| h.wrapping_mul(31).wrapping_add(u32::from(b)));
+        let h = w
+            .bytes()
+            .fold(7u32, |h, b| h.wrapping_mul(31).wrapping_add(u32::from(b)));
         v[(h % FAKE_DIM) as usize] += 1.0;
     }
     if v.iter().all(|x| *x == 0.0) {
@@ -294,14 +303,23 @@ impl TagBackend for FakeBackend {
         self.slots[part.index()].as_ref().map(|l| l.model.id)
     }
 
-    fn describe(&mut self, image: &TagImage, deadline: &Deadline) -> Result<Described, BackendError> {
+    fn describe(
+        &mut self,
+        image: &TagImage,
+        deadline: &Deadline,
+    ) -> Result<Described, BackendError> {
         self.run(Part::Describe, image, deadline)?;
         let w = words(image.name);
         Ok(Described {
             description: Some(format!("A picture of {}.", w.join(" "))),
             objects: w
                 .first()
-                .map(|f| vec![ObjectCount { label: f.clone(), count: 2 }])
+                .map(|f| {
+                    vec![ObjectCount {
+                        label: f.clone(),
+                        count: 2,
+                    }]
+                })
                 .unwrap_or_default(),
         })
     }
@@ -313,10 +331,17 @@ impl TagBackend for FakeBackend {
             s.captions += 1;
             s.captions
         };
-        Ok(format!("Another look at {} ({n}).", words(image.name).join(" ")))
+        Ok(format!(
+            "Another look at {} ({n}).",
+            words(image.name).join(" ")
+        ))
     }
 
-    fn keywords(&mut self, image: &TagImage, deadline: &Deadline) -> Result<Keyworded, BackendError> {
+    fn keywords(
+        &mut self,
+        image: &TagImage,
+        deadline: &Deadline,
+    ) -> Result<Keyworded, BackendError> {
         let loaded = self.run(Part::Keywords, image, deadline)?;
         let w = words(image.name);
         let found: Vec<&String> = w.iter().filter(|x| loaded.vocabulary.contains(x)).collect();
@@ -324,7 +349,10 @@ impl TagBackend for FakeBackend {
         let mut keywords: Vec<KeywordScore> = Vec::new();
         for f in found {
             if !keywords.iter().any(|k| &k.label == f) {
-                keywords.push(KeywordScore { label: f.clone(), score });
+                keywords.push(KeywordScore {
+                    label: f.clone(),
+                    score,
+                });
             }
         }
         keywords.truncate(results::MAX_KEYWORDS);
@@ -383,7 +411,9 @@ mod tests {
 
     #[test]
     fn seaside_is_near_harbour() {
-        let t = FakeText.embed("seaside", &Deadline::after(Duration::from_secs(1))).unwrap();
+        let t = FakeText
+            .embed("seaside", &Deadline::after(Duration::from_secs(1)))
+            .unwrap();
         let h = vector_of(&words("harbour-boats.jpg"));
         let l = vector_of(&words("lake.jpg"));
         assert!(results::dot(&t, &h) > 0.5);

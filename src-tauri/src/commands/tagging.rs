@@ -53,9 +53,8 @@ pub fn tagging<R: Runtime>(app: &AppHandle<R>) -> Option<Tagging> {
             .0
             .get_or_init(|| {
                 let emitter = Arc::new(TauriEmitter(app.clone()));
-                let factory: BackendFactory = Arc::new(|| {
-                    OnnxBackend::new().map(|b| Box::new(b) as Box<dyn TagBackend>)
-                });
+                let factory: BackendFactory =
+                    Arc::new(|| OnnxBackend::new().map(|b| Box::new(b) as Box<dyn TagBackend>));
                 let runtime = TagRuntime::new(
                     factory,
                     data.dir().join("models"),

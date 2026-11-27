@@ -114,11 +114,19 @@ pub trait TagBackend: Send {
     /// The id of the model in a part's slot.
     fn loaded(&self, part: Part) -> Option<&'static str>;
     /// Greedy caption, then objects.
-    fn describe(&mut self, image: &TagImage, deadline: &Deadline) -> Result<Described, BackendError>;
+    fn describe(
+        &mut self,
+        image: &TagImage,
+        deadline: &Deadline,
+    ) -> Result<Described, BackendError>;
     /// A sampled caption only, for Regenerate.
     fn caption(&mut self, image: &TagImage, deadline: &Deadline) -> Result<String, BackendError>;
     /// Keywords and the vector.
-    fn keywords(&mut self, image: &TagImage, deadline: &Deadline) -> Result<Keyworded, BackendError>;
+    fn keywords(
+        &mut self,
+        image: &TagImage,
+        deadline: &Deadline,
+    ) -> Result<Keyworded, BackendError>;
     /// The loaded keywords model's text side, for search by meaning.
     fn text_embedder(&self) -> Option<Arc<dyn TextEmbedder>>;
 }

@@ -54,7 +54,8 @@ pub const COULD_NOT_READ_PHOTO: &str = "Couldn't read the photo.";
 pub const TOOK_TOO_LONG: &str = "Tagging this photo took too long.";
 pub const UNUSABLE_VECTOR: &str = "The model returned an unusable vector.";
 
-pub const NO_DESCRIBE_MODEL: &str = "There is no working descriptions model. Choose one in Settings.";
+pub const NO_DESCRIBE_MODEL: &str =
+    "There is no working descriptions model. Choose one in Settings.";
 
 pub fn not_described_yet(label: &str) -> String {
     format!("{label} has not described this photo yet.")

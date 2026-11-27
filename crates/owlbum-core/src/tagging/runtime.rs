@@ -340,7 +340,11 @@ impl Runtime {
 
     /// The loaded keywords model's text side, and its id.
     pub fn text_embedder(&self) -> Option<(&'static str, Arc<dyn TextEmbedder>)> {
-        self.shared.text.lock().unwrap_or_else(|p| p.into_inner()).clone()
+        self.shared
+            .text
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
     }
 
     /// Stops the thread and unloads the models (Owlbum closes).
@@ -359,7 +363,9 @@ impl Runtime {
 
 impl std::fmt::Debug for Runtime {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.debug_struct("Runtime").field("status", &self.status()).finish()
+        f.debug_struct("Runtime")
+            .field("status", &self.status())
+            .finish()
     }
 }
 
@@ -377,7 +383,11 @@ impl Shared {
     fn progress(&self, s: &State) -> TaggingProgress {
         let any_active = s.active.iter().any(Option::is_some);
         let counted = s.album.as_ref().is_some_and(|a| !a.album.is_view_only()) && any_active;
-        let (total, done, failed) = if counted { s.counts.unwrap_or_default() } else { (0, 0, 0) };
+        let (total, done, failed) = if counted {
+            s.counts.unwrap_or_default()
+        } else {
+            (0, 0, 0)
+        };
         TaggingProgress {
             total,
             done,
@@ -422,7 +432,9 @@ impl Shared {
             if !s.tags_pending {
                 return;
             }
-            let due = s.last_tags_at.is_none_or(|t| t.elapsed() >= self.limits.tags_event);
+            let due = s
+                .last_tags_at
+                .is_none_or(|t| t.elapsed() >= self.limits.tags_event);
             if !(now || due) {
                 return;
             }
@@ -469,7 +481,9 @@ fn run(shared: &Arc<Shared>) {
     let mut last_work = Instant::now();
     loop {
         // Unloads asked for.
-        let unload: Vec<Part> = std::mem::take(&mut shared.lock().unload).into_iter().collect();
+        let unload: Vec<Part> = std::mem::take(&mut shared.lock().unload)
+            .into_iter()
+            .collect();
         if let Some(b) = backend.as_mut() {
             for part in unload {
                 b.unload(part);
@@ -490,22 +504,25 @@ fn run(shared: &Arc<Shared>) {
                 shared.flush_tags(true);
                 shared.publish(false);
                 let idle = last_work.elapsed();
-                if idle >= shared.limits.idle_unload {
-                    if let Some(b) = backend.as_mut()
-                        && (b.loaded(Part::Describe).is_some() || b.loaded(Part::Keywords).is_some())
-                    {
-                        b.unload(Part::Describe);
-                        b.unload(Part::Keywords);
-                        shared.set_text(&**b);
-                    }
+                if idle >= shared.limits.idle_unload
+                    && let Some(b) = backend.as_mut()
+                    && (b.loaded(Part::Describe).is_some() || b.loaded(Part::Keywords).is_some())
+                {
+                    b.unload(Part::Describe);
+                    b.unload(Part::Keywords);
+                    shared.set_text(&**b);
                 }
                 let s = shared.lock();
                 if s.shutdown {
                     continue;
                 }
-                let wait = limit
-                    .unwrap_or(Duration::from_secs(1))
-                    .min(shared.limits.idle_unload.saturating_sub(idle).max(Duration::from_millis(10)));
+                let wait = limit.unwrap_or(Duration::from_secs(1)).min(
+                    shared
+                        .limits
+                        .idle_unload
+                        .saturating_sub(idle)
+                        .max(Duration::from_millis(10)),
+                );
                 let _ = shared.wake.wait_timeout(s, wait);
             }
             Next::Tag {
@@ -531,7 +548,16 @@ fn run(shared: &Arc<Shared>) {
                     }
                 }
                 let Some(b) = backend.as_mut() else { continue };
-                tag(shared, &mut **b, &work, id, &models, generation, &stop, first_of_focus);
+                tag(
+                    shared,
+                    &mut **b,
+                    &work,
+                    id,
+                    &models,
+                    generation,
+                    &stop,
+                    first_of_focus,
+                );
             }
         }
     }
@@ -571,7 +597,10 @@ fn pick(shared: &Shared) -> Next {
             .read(|c| store::counts(c, &all, &scope))
             .unwrap_or_default();
         s = shared.lock();
-        if s.album.as_ref().is_some_and(|a| Arc::ptr_eq(&a.album, &work.album)) {
+        if s.album
+            .as_ref()
+            .is_some_and(|a| Arc::ptr_eq(&a.album, &work.album))
+        {
             s.counts = Some(counts);
         }
     }
@@ -590,12 +619,16 @@ fn pick(shared: &Shared) -> Next {
             }
         }
         s = shared.lock();
-        if !s.album.as_ref().is_some_and(|a| Arc::ptr_eq(&a.album, &work.album)) {
+        if !s
+            .album
+            .as_ref()
+            .is_some_and(|a| Arc::ptr_eq(&a.album, &work.album))
+        {
             return Next::Wait(Some(Duration::ZERO));
         }
         s.list = Some(set);
     }
-    let list = s.list.as_ref().map(BTreeSet::clone).unwrap_or_default();
+    let list = s.list.clone().unwrap_or_default();
     let mut first_of_focus = true;
     let mut chosen = None;
     while let Some(&f) = s.focus.front() {
@@ -649,12 +682,17 @@ fn ensure_loaded(shared: &Shared, b: &mut dyn TagBackend, model: &'static ModelC
     let deadline = Deadline::after(shared.limits.load);
     let loaded = match install::quick_state(&dir, model) {
         install::InstallState::Ok => {
-            match catch_unwind(AssertUnwindSafe(|| b.load(model, &dir, shared.threads, VOCABULARY, &deadline))) {
+            match catch_unwind(AssertUnwindSafe(|| {
+                b.load(model, &dir, shared.threads, VOCABULARY, &deadline)
+            })) {
                 Ok(r) => r,
                 Err(_) => Err(BackendError::Load("the load panicked".into())),
             }
         }
-        _ => Err(BackendError::Load(words::incomplete(model.label, "files missing or unchecked"))),
+        _ => Err(BackendError::Load(words::incomplete(
+            model.label,
+            "files missing or unchecked",
+        ))),
     };
     match loaded {
         Ok(()) => {
@@ -694,7 +732,12 @@ fn tag(
     let _ = album.db().write(move |tx| store::take_from_copies(tx, id));
     let mut todo = Vec::new();
     for m in models {
-        let has = album.db().read(|c| store::row(c, id, m.id)).ok().flatten().is_some();
+        let has = album
+            .db()
+            .read(|c| store::row(c, id, m.id))
+            .ok()
+            .flatten()
+            .is_some();
         if !has {
             todo.push(*m);
         }
@@ -707,7 +750,13 @@ fn tag(
             Ok(ids)
         })
         .unwrap_or_else(|_| vec![id]);
-    let all: Vec<&'static str> = shared.lock().active.iter().flatten().map(|m| m.id).collect();
+    let all: Vec<&'static str> = shared
+        .lock()
+        .active
+        .iter()
+        .flatten()
+        .map(|m| m.id)
+        .collect();
     let before = states(album, &touched_before, &all, &scope);
     let mut rows = Vec::new();
     if !todo.is_empty() {
@@ -723,7 +772,12 @@ fn tag(
             }
             let made_at = store::now_ms();
             let Some(rgb) = rgb.as_ref() else {
-                rows.push(TagRow::failed(m.part, m.id, words::COULD_NOT_READ_PHOTO, made_at));
+                rows.push(TagRow::failed(
+                    m.part,
+                    m.id,
+                    words::COULD_NOT_READ_PHOTO,
+                    made_at,
+                ));
                 continue;
             };
             if !ensure_loaded(shared, b, m) {
@@ -735,7 +789,9 @@ fn tag(
                 Part::Keywords => shared.limits.keywords,
             };
             let deadline = Deadline::new(limit, Arc::clone(stop));
-            let outcome = catch_unwind(AssertUnwindSafe(|| run_model(b, m, &image, &deadline, made_at)));
+            let outcome = catch_unwind(AssertUnwindSafe(|| {
+                run_model(b, m, &image, &deadline, made_at)
+            }));
             if !current() {
                 return;
             }
@@ -783,7 +839,9 @@ fn tag(
         }
         if let Some((_, done, failed)) = s.counts.as_mut() {
             for (b4, af) in before.iter().zip(&after) {
-                let (Some(b4), Some(af)) = (b4, af) else { continue };
+                let (Some(b4), Some(af)) = (b4, af) else {
+                    continue;
+                };
                 *done = (*done + u64::from(af.0)).saturating_sub(u64::from(b4.0));
                 *failed = (*failed + u64::from(af.1)).saturating_sub(u64::from(b4.1));
             }
@@ -803,12 +861,19 @@ fn states(album: &Album, ids: &[i64], models: &[&str], scope: &str) -> Vec<Optio
             for &id in ids {
                 let eligible = c
                     .query_row(
-                        &format!("SELECT 1 FROM photos p WHERE p.id = ?2 AND {}", store::ELIGIBLE),
+                        &format!(
+                            "SELECT 1 FROM photos p WHERE p.id = ?2 AND {}",
+                            store::ELIGIBLE
+                        ),
                         rusqlite::params![scope, id],
                         |_| Ok(()),
                     )
                     .is_ok();
-                out.push(if eligible { Some(store::photo_state(c, id, models)?) } else { None });
+                out.push(if eligible {
+                    Some(store::photo_state(c, id, models)?)
+                } else {
+                    None
+                });
             }
             Ok(out)
         })
@@ -855,7 +920,12 @@ fn run_model(
         Part::Keywords => {
             let k = b.keywords(image, deadline)?;
             if !results::usable_vector(&k.vector, m.dim.unwrap_or(0)) {
-                return Ok(TagRow::failed(m.part, m.id, words::UNUSABLE_VECTOR, made_at));
+                return Ok(TagRow::failed(
+                    m.part,
+                    m.id,
+                    words::UNUSABLE_VECTOR,
+                    made_at,
+                ));
             }
             row.keywords = k.keywords;
             row.vector = Some(k.vector);

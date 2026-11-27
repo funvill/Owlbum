@@ -48,9 +48,11 @@ impl Pictures for NamedPictures {
             .0
             .db()
             .read(|c| {
-                Ok(c.query_row("SELECT file_name FROM photos WHERE id = ?1 AND missing = 0", [id], |r| {
-                    r.get(0)
-                })
+                Ok(c.query_row(
+                    "SELECT file_name FROM photos WHERE id = ?1 AND missing = 0",
+                    [id],
+                    |r| r.get(0),
+                )
                 .ok())
             })
             .unwrap_or(None);
@@ -103,7 +105,8 @@ impl Fx {
             let calls = Arc::clone(&factory_calls);
             Arc::new(move || {
                 calls.fetch_add(1, Ordering::Relaxed);
-                Ok(Box::new(FakeBackend::new(Arc::clone(&control))) as Box<dyn crate::tagging::backend::TagBackend>)
+                Ok(Box::new(FakeBackend::new(Arc::clone(&control)))
+                    as Box<dyn crate::tagging::backend::TagBackend>)
             })
         };
         let limits = Limits {
@@ -111,9 +114,21 @@ impl Fx {
             tags_event: Duration::from_secs(5),
             ..Limits::default()
         };
-        let runtime = Runtime::new(factory, data.dir().join("models"), 1, events.clone(), limits);
-        let tagging = Tagging::new(data, fake::catalogue(), fetch.clone(), events.clone(), runtime)
-            .with_stall(Duration::from_millis(200));
+        let runtime = Runtime::new(
+            factory,
+            data.dir().join("models"),
+            1,
+            events.clone(),
+            limits,
+        );
+        let tagging = Tagging::new(
+            data,
+            fake::catalogue(),
+            fetch.clone(),
+            events.clone(),
+            runtime,
+        )
+        .with_stall(Duration::from_millis(200));
         Self {
             tagging,
             control,
@@ -130,7 +145,10 @@ impl Fx {
     /// Opens and scans the album, and gives it to the queue.
     fn open(&mut self) {
         let album = Album::open(&self.root, &OpenOptions::default()).unwrap();
-        let scanner = Arc::new(Scanner::new(Arc::new(album), ScanEnv::new(self.events.clone())));
+        let scanner = Arc::new(Scanner::new(
+            Arc::new(album),
+            ScanEnv::new(self.events.clone()),
+        ));
         scanner.scan_and_wait(Request::default());
         let album = Arc::clone(scanner.album());
         let scanning = Arc::clone(&self.scanning);
@@ -149,7 +167,14 @@ impl Fx {
     fn id(&self, name: &str) -> i64 {
         self.album()
             .db()
-            .read(|c| Ok(c.query_row("SELECT id FROM photos WHERE file_name = ?1", [name], |r| r.get(0)).unwrap()))
+            .read(|c| {
+                Ok(
+                    c.query_row("SELECT id FROM photos WHERE file_name = ?1", [name], |r| {
+                        r.get(0)
+                    })
+                    .unwrap(),
+                )
+            })
             .unwrap()
     }
 
@@ -177,7 +202,10 @@ impl Fx {
             if f(&s) {
                 return s;
             }
-            assert!(start.elapsed() < Duration::from_secs(10), "waited for {what}: {s:?}");
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "waited for {what}: {s:?}"
+            );
             std::thread::sleep(Duration::from_millis(10));
         }
     }
@@ -190,13 +218,19 @@ impl Fx {
 
     fn row(&self, name: &str, model: &str) -> Option<store::TagRow> {
         let id = self.id(name);
-        self.album().db().read(|c| store::row(c, id, model)).unwrap()
+        self.album()
+            .db()
+            .read(|c| store::row(c, id, model))
+            .unwrap()
     }
 
     fn rows(&self) -> i64 {
         self.album()
             .db()
-            .read(|c| Ok(c.query_row("SELECT count(*) FROM tags", [], |r| r.get(0)).unwrap()))
+            .read(|c| {
+                Ok(c.query_row("SELECT count(*) FROM tags", [], |r| r.get(0))
+                    .unwrap())
+            })
             .unwrap()
     }
 }
@@ -229,7 +263,16 @@ fn models_state_lists_the_catalogue_and_checks_unverified_models() {
     assert_eq!(k.state, InstallState::Checking);
     assert_eq!(k.bytes_present, m.bytes());
     let start = Instant::now();
-    while fx.tagging.models().models.iter().find(|x| x.id == K).unwrap().state != InstallState::Ok {
+    while fx
+        .tagging
+        .models()
+        .models
+        .iter()
+        .find(|x| x.id == K)
+        .unwrap()
+        .state
+        != InstallState::Ok
+    {
         assert!(start.elapsed() < Duration::from_secs(10));
         std::thread::sleep(Duration::from_millis(10));
     }
@@ -246,24 +289,43 @@ fn set_refuses_every_state_but_ok() {
     };
     assert_eq!(refused(Some(D), None), ErrorCode::ModelNotReady, "absent");
     assert_eq!(refused(Some("nope"), None), ErrorCode::ModelNotReady);
-    assert_eq!(refused(None, Some(D)), ErrorCode::ModelNotReady, "wrong part");
+    assert_eq!(
+        refused(None, Some(D)),
+        ErrorCode::ModelNotReady,
+        "wrong part"
+    );
     let m = fake::catalogue().get(D).unwrap();
     fake::install(fx.tagging.models_dir(), m);
-    assert_eq!(refused(Some(D), None), ErrorCode::ModelNotReady, "unverified");
+    assert_eq!(
+        refused(Some(D), None),
+        ErrorCode::ModelNotReady,
+        "unverified"
+    );
     install::verify(&install::model_dir(fx.tagging.models_dir(), m), m, false);
     let saved = fx.tagging.set(Some(D.into()), None).unwrap();
     assert_eq!(saved.describe.as_deref(), Some(D));
     assert_eq!(fx.tagging.models().settings.describe.as_deref(), Some(D));
-    assert_eq!(fx.tagging.set(None, None).unwrap(), TaggingChoice::default());
+    assert_eq!(
+        fx.tagging.set(None, None).unwrap(),
+        TaggingChoice::default()
+    );
 }
 
 #[test]
 fn a_download_installs_and_reports_progress() {
     let fx = Fx::new(&[]);
-    assert_eq!(fx.tagging.download("nope").unwrap_err().code, ErrorCode::NoSuchModel);
+    assert_eq!(
+        fx.tagging.download("nope").unwrap_err().code,
+        ErrorCode::NoSuchModel
+    );
     fx.tagging.download(K).unwrap();
     let start = Instant::now();
-    while fx.events.named("download_progress").last().is_none_or(|v| v["finished"] != true) {
+    while fx
+        .events
+        .named("download_progress")
+        .last()
+        .is_none_or(|v| v["finished"] != true)
+    {
         assert!(start.elapsed() < Duration::from_secs(10));
         std::thread::sleep(Duration::from_millis(10));
     }
@@ -271,7 +333,10 @@ fn a_download_installs_and_reports_progress() {
     assert_eq!(last["error"], Value::Null);
     assert_eq!(last["received"], last["total"]);
     let s = fx.tagging.models();
-    assert_eq!(s.models.iter().find(|m| m.id == K).unwrap().state, InstallState::Ok);
+    assert_eq!(
+        s.models.iter().find(|m| m.id == K).unwrap().state,
+        InstallState::Ok
+    );
     assert!(s.downloading.is_none());
     fx.tagging.set(None, Some(K.into())).unwrap();
 }
@@ -316,7 +381,10 @@ fn one_download_at_a_time_and_cancel_returns_after_it_stopped() {
 fn remove_deletes_the_files_and_sets_the_part_off() {
     let fx = Fx::new(&[]);
     fx.choose(None, Some(K));
-    assert_eq!(fx.tagging.remove("nope").unwrap_err().code, ErrorCode::NoSuchModel);
+    assert_eq!(
+        fx.tagging.remove("nope").unwrap_err().code,
+        ErrorCode::NoSuchModel
+    );
     fx.tagging.remove(K).unwrap();
     assert_eq!(fx.tagging.choice().keywords, None);
     assert!(!fx.tagging.models_dir().join(K).exists());
@@ -339,19 +407,33 @@ fn the_queue_tags_describe_then_keywords_and_counts() {
     let runs = fx.control.runs();
     assert_eq!(runs[0].0, Part::Describe);
     assert_eq!(runs[1].0, Part::Keywords);
-    assert_eq!(runs[0].1, runs[1].1, "both models run on one photo before the next");
+    assert_eq!(
+        runs[0].1, runs[1].1,
+        "both models run on one photo before the next"
+    );
     // The labels and search follow.
     let id = fx.id("lake.jpg");
     let labels: Vec<String> = fx
         .album()
         .db()
         .read(|c| {
-            let mut st = c.prepare("SELECT label FROM photo_labels WHERE photo_id = ?1 ORDER BY kind").unwrap();
-            Ok(st.query_map([id], |r| r.get(0)).unwrap().map(Result::unwrap).collect())
+            let mut st = c
+                .prepare("SELECT label FROM photo_labels WHERE photo_id = ?1 ORDER BY kind")
+                .unwrap();
+            Ok(st
+                .query_map([id], |r| r.get(0))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect())
         })
         .unwrap();
     assert_eq!(labels, ["lake", "lake"]);
-    assert!(fx.events.named("album_changed").iter().any(|v| v["reason"] == "tags"));
+    assert!(
+        fx.events
+            .named("album_changed")
+            .iter()
+            .any(|v| v["reason"] == "tags")
+    );
     assert!(!fx.events.named("tagging_progress").is_empty());
 }
 
@@ -397,7 +479,11 @@ fn a_view_only_album_is_not_tagged() {
     fx.finished();
     fx.tagging.runtime().attach(None);
     fx.scanner = None;
-    std::fs::write(fx.root.join("b.jpg"), std::fs::read(fx.root.join("a.jpg")).unwrap()).unwrap();
+    std::fs::write(
+        fx.root.join("b.jpg"),
+        std::fs::read(fx.root.join("a.jpg")).unwrap(),
+    )
+    .unwrap();
     let options = OpenOptions {
         view_only: true,
         ..OpenOptions::default()
@@ -424,12 +510,20 @@ fn failures_store_rows_losses_stop_the_part_and_restart_clears() {
     assert_eq!((s.total, s.done, s.failed), (3, 1, 2));
     let r = fx.row("fail-cat.jpg", K).unwrap();
     assert_eq!(r.status, store::Status::Failed);
-    assert_eq!(r.error.as_deref(), Some("The fake model refused this picture."));
-    assert_eq!(fx.row("unreadable.jpg", K).unwrap().error.as_deref(), Some("Couldn't read the photo."));
+    assert_eq!(
+        r.error.as_deref(),
+        Some("The fake model refused this picture.")
+    );
+    assert_eq!(
+        fx.row("unreadable.jpg", K).unwrap().error.as_deref(),
+        Some("Couldn't read the photo.")
+    );
     // Not retried by itself; Try failed photos again clears and re-runs.
     let before = fx.control.runs().len();
     assert_eq!(fx.tagging.runtime().retry_failed().unwrap(), 2);
-    let s = fx.until("the retry", |s| s.failed == 2 && !s.running && fx.control.runs().len() > before);
+    let s = fx.until("the retry", |s| {
+        s.failed == 2 && !s.running && fx.control.runs().len() > before
+    });
     assert_eq!(s.done, 1);
 }
 
@@ -447,7 +541,9 @@ fn three_losses_stop_a_part_and_two_then_a_success_do_not() {
     fx.control.set_lost(100);
     fx.choose(None, Some(K));
     fx.open();
-    let s = fx.until("the part to stop", |s| !s.not_working.is_empty() && !s.running);
+    let s = fx.until("the part to stop", |s| {
+        !s.not_working.is_empty() && !s.running
+    });
     assert_eq!(s.not_working, [Part::Keywords]);
     assert_eq!(fx.rows(), 0, "a loss writes no row");
     fx.control.set_lost(0);
@@ -462,7 +558,10 @@ fn a_timeout_stores_a_failed_row_and_counts_as_a_loss() {
     fx.open();
     let s = fx.finished();
     assert_eq!((s.done, s.failed), (1, 1));
-    assert_eq!(fx.row("slow-a.jpg", D).unwrap().error.as_deref(), Some("Tagging this photo took too long."));
+    assert_eq!(
+        fx.row("slow-a.jpg", D).unwrap().error.as_deref(),
+        Some("Tagging this photo took too long.")
+    );
 }
 
 #[test]
@@ -488,7 +587,10 @@ fn a_copy_takes_its_twins_rows_with_no_run() {
     let s = fx.finished();
     assert_eq!((s.total, s.done), (2, 2));
     assert_eq!(fx.control.runs().len(), 1);
-    assert_eq!(fx.row("lake again.jpg", K).unwrap().keywords[0].label, "lake");
+    assert_eq!(
+        fx.row("lake again.jpg", K).unwrap().keywords[0].label,
+        "lake"
+    );
 }
 
 #[test]
@@ -498,7 +600,10 @@ fn a_photo_added_later_is_tagged_and_closing_mid_run_writes_nothing() {
     fx.open();
     fx.finished();
     write_jpeg(&fx.root.join("new photo.jpg"), 200);
-    fx.scanner.as_ref().unwrap().scan_and_wait(Request::default());
+    fx.scanner
+        .as_ref()
+        .unwrap()
+        .scan_and_wait(Request::default());
     fx.tagging.runtime().album_changed();
     let s = fx.until("the new photo", |s| s.total == 2 && s.done == 2);
     assert!(!s.running || s.done == 2);
@@ -527,7 +632,11 @@ fn reading_the_status_changes_nothing_and_an_earlier_session_counts() {
     assert_eq!(fx.status(), fx.status());
     assert_eq!(s.done, 2);
     std::thread::sleep(Duration::from_millis(100));
-    assert_eq!(fx.control.runs().len(), runs, "photos tagged before are not looked at again");
+    assert_eq!(
+        fx.control.runs().len(),
+        runs,
+        "photos tagged before are not looked at again"
+    );
     assert_eq!(fx.factory_calls.load(Ordering::Relaxed), 1);
 }
 
@@ -563,7 +672,10 @@ fn the_runtime_that_will_not_start_stops_both_parts() {
         std::thread::sleep(Duration::from_millis(10));
     }
     let s = runtime.status();
-    assert_eq!(s.problem.as_deref(), Some("The model runtime would not start: no library"));
+    assert_eq!(
+        s.problem.as_deref(),
+        Some("The model runtime would not start: no library")
+    );
     assert_eq!(s.not_working, [Part::Describe, Part::Keywords]);
     runtime.shutdown();
     runtime.attach(None);

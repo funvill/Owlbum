@@ -21,7 +21,10 @@ fn main() {
     let models = PathBuf::from(args.next().expect("models folder"));
     let mut pictures: Vec<(String, image::RgbImage)> = vec![
         ("lake".into(), owlbum_fixtures::picture::lake(640, 480)),
-        ("harbour".into(), owlbum_fixtures::picture::harbour(640, 480)),
+        (
+            "harbour".into(),
+            owlbum_fixtures::picture::harbour(640, 480),
+        ),
     ];
     for p in args {
         let img = image::open(&p).expect("picture").to_rgb8();
@@ -37,19 +40,34 @@ fn main() {
             continue;
         }
         let t = Instant::now();
-        b.load(cat.get(id).unwrap(), &models.join(id), threads, VOCABULARY, &long())
-            .expect("load");
-        println!("{id}: loaded in {:.2} s with {threads} threads", t.elapsed().as_secs_f32());
+        b.load(
+            cat.get(id).unwrap(),
+            &models.join(id),
+            threads,
+            VOCABULARY,
+            &long(),
+        )
+        .expect("load");
+        println!(
+            "{id}: loaded in {:.2} s with {threads} threads",
+            t.elapsed().as_secs_f32()
+        );
     }
     let text = b.text_embedder();
     let seaside = text.as_ref().map(|t| t.embed("seaside", &long()).unwrap());
     for (name, rgb) in &pictures {
         let img = TagImage { rgb, name };
         println!("== {name}");
-        if b.loaded(owlbum_core::tagging::catalogue::Part::Keywords).is_some() {
+        if b.loaded(owlbum_core::tagging::catalogue::Part::Keywords)
+            .is_some()
+        {
             let t = Instant::now();
             let k = b.keywords(&img, &long()).expect("keywords");
-            println!("  keywords in {:.3} s, dim {}", t.elapsed().as_secs_f32(), k.vector.len());
+            println!(
+                "  keywords in {:.3} s, dim {}",
+                t.elapsed().as_secs_f32(),
+                k.vector.len()
+            );
             for kw in &k.keywords {
                 println!("    {} {:.3}", kw.label, kw.score);
             }
@@ -57,7 +75,9 @@ fn main() {
                 println!("  cosine with \"seaside\": {:.3}", dot(s, &k.vector));
             }
         }
-        if b.loaded(owlbum_core::tagging::catalogue::Part::Describe).is_some() {
+        if b.loaded(owlbum_core::tagging::catalogue::Part::Describe)
+            .is_some()
+        {
             let t = Instant::now();
             let d = b.describe(&img, &long()).expect("describe");
             println!("  describe in {:.2} s", t.elapsed().as_secs_f32());
@@ -65,12 +85,21 @@ fn main() {
             println!("    {:?}", d.objects);
             for _ in 0..3 {
                 let t = Instant::now();
-                let c = b.caption_with(&img, onnx::SAMPLED, &long()).expect("caption");
+                let c = b
+                    .caption_with(&img, onnx::SAMPLED, &long())
+                    .expect("caption");
                 println!("  sampled in {:.2} s: {c}", t.elapsed().as_secs_f32());
             }
             let t = Instant::now();
-            let r = b.caption_with(&img, Pick::Greedy, &Deadline::after(Duration::from_millis(500)));
-            println!("  a 0.5 s deadline: {r:?} after {:.2} s", t.elapsed().as_secs_f32());
+            let r = b.caption_with(
+                &img,
+                Pick::Greedy,
+                &Deadline::after(Duration::from_millis(500)),
+            );
+            println!(
+                "  a 0.5 s deadline: {r:?} after {:.2} s",
+                t.elapsed().as_secs_f32()
+            );
         }
     }
 }

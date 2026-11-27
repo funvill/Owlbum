@@ -89,7 +89,9 @@ impl Fetch for HttpFetch {
         let headers = res
             .headers()
             .iter()
-            .filter_map(|(n, v)| Some((n.as_str().to_ascii_lowercase(), v.to_str().ok()?.to_owned())))
+            .filter_map(|(n, v)| {
+                Some((n.as_str().to_ascii_lowercase(), v.to_str().ok()?.to_owned()))
+            })
             .collect();
         Ok(Response {
             status,
@@ -201,7 +203,12 @@ fn get(fetch: &dyn Fetch, url: &str, range_from: Option<u64>) -> Result<Response
     Err(Stop::Failed(words::TOO_MANY_REDIRECTS.to_owned()))
 }
 
-fn download_file(job: &mut Job<'_>, f: &ModelFile, received: &mut u64, total: u64) -> Result<(), Stop> {
+fn download_file(
+    job: &mut Job<'_>,
+    f: &ModelFile,
+    received: &mut u64,
+    total: u64,
+) -> Result<(), Stop> {
     let target = install::file_path(job.dir, f);
     let part = install::part_path(job.dir, f);
     if let Some(parent) = part.parent() {
@@ -429,7 +436,9 @@ pub mod fake {
             }
             let redirect = |to: Option<&str>| Response {
                 status: 302,
-                headers: to.map(|t| vec![("location".to_owned(), t.to_owned())]).unwrap_or_default(),
+                headers: to
+                    .map(|t| vec![("location".to_owned(), t.to_owned())])
+                    .unwrap_or_default(),
                 body: Box::new(std::io::empty()),
             };
             let (host, path) = url
@@ -471,7 +480,11 @@ pub mod fake {
                         (416, Vec::new(), Vec::new())
                     } else {
                         let cr = format!("bytes {from}-{}/{len}", len - 1);
-                        (206, vec![("content-range".to_owned(), cr)], data[from as usize..].to_vec())
+                        (
+                            206,
+                            vec![("content-range".to_owned(), cr)],
+                            data[from as usize..].to_vec(),
+                        )
                     }
                 }
                 _ => (200, Vec::new(), data),
@@ -649,7 +662,11 @@ mod tests {
             assert_eq!(r.go().0, Outcome::Failed(reason), "{fault:?}");
         }
         assert_eq!(
-            write_error("a.onnx", &std::io::Error::from(std::io::ErrorKind::StorageFull)).msg(),
+            write_error(
+                "a.onnx",
+                &std::io::Error::from(std::io::ErrorKind::StorageFull)
+            )
+            .msg(),
             "Not enough disk space for a.onnx. Free some space and download again."
         );
         assert_eq!(

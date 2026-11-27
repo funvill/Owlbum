@@ -123,7 +123,12 @@ fn unvouch(dir: &Path, file: &ModelFile) {
 }
 
 /// True when the marker vouches for `file` as it is on disk.
-fn vouched(marker: &Marker, model: &ModelChoice, file: &ModelFile, meta: &std::fs::Metadata) -> bool {
+fn vouched(
+    marker: &Marker,
+    model: &ModelChoice,
+    file: &ModelFile,
+    meta: &std::fs::Metadata,
+) -> bool {
     marker.revision == model.revision
         && marker.files.get(file.path).is_some_and(|e| {
             e.bytes == meta.len() && e.mtime_ms == mtime_ms(meta) && e.sha256 == file.sha256

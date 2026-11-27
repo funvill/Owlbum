@@ -69,7 +69,10 @@ pub fn clean_caption(raw: &str) -> Option<String> {
 /// run of four `<loc_N>` tokens (a run with no text repeats the previous
 /// label), lower case and trimmed, sorted by count descending then label.
 pub fn count_objects(raw: &str) -> Vec<ObjectCount> {
-    let text = raw.replace("<s>", "").replace("</s>", "").replace("<pad>", "");
+    let text = raw
+        .replace("<s>", "")
+        .replace("</s>", "")
+        .replace("<pad>", "");
     let mut labels: Vec<String> = Vec::new();
     let mut pending = String::new();
     let mut locs = 0;
@@ -139,7 +142,12 @@ pub fn dot(a: &[f32], b: &[f32]) -> f32 {
 
 /// The keywords of a picture whose unit vector is `v`, against the unit
 /// vectors of the vocabulary's prompts (`vocab[i]` for `words[i]`).
-pub fn keywords(v: &[f32], vocab: &[Vec<f32>], words: &[&str], threshold: f32) -> Vec<KeywordScore> {
+pub fn keywords(
+    v: &[f32],
+    vocab: &[Vec<f32>],
+    words: &[&str],
+    threshold: f32,
+) -> Vec<KeywordScore> {
     if vocab.is_empty() {
         return Vec::new();
     }
@@ -181,8 +189,10 @@ pub fn vector_bytes(v: &[f32]) -> Vec<u8> {
 pub fn vector_from_bytes(bytes: &[u8], dim: usize) -> Option<Vec<f32>> {
     (bytes.len() == dim * 4).then(|| {
         bytes
-            .chunks_exact(4)
-            .map(|c| f32::from_le_bytes([c[0], c[1], c[2], c[3]]))
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|c| f32::from_le_bytes(*c))
             .collect()
     })
 }
@@ -208,9 +218,18 @@ mod tests {
         assert_eq!(
             count_objects(raw),
             vec![
-                ObjectCount { label: "person".into(), count: 2 },
-                ObjectCount { label: "car".into(), count: 1 },
-                ObjectCount { label: "dog".into(), count: 1 },
+                ObjectCount {
+                    label: "person".into(),
+                    count: 2
+                },
+                ObjectCount {
+                    label: "car".into(),
+                    count: 1
+                },
+                ObjectCount {
+                    label: "dog".into(),
+                    count: 1
+                },
             ]
         );
         assert!(count_objects("<s>nothing here</s>").is_empty());

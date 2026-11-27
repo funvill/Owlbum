@@ -11,9 +11,8 @@ pub fn allowed(url: &str) -> Result<String, String> {
         return Err(host_of(url));
     }
     let host = authority.to_ascii_lowercase();
-    let ok = host == "huggingface.co"
-        || host.ends_with(".huggingface.co")
-        || host.ends_with(".hf.co");
+    let ok =
+        host == "huggingface.co" || host.ends_with(".huggingface.co") || host.ends_with(".hf.co");
     // A host made only of dots and a suffix (".hf.co") is not a name.
     if ok && !host.starts_with('.') && !host.contains("..") {
         Ok(host)
@@ -73,14 +72,23 @@ mod tests {
     #[test]
     fn the_refused_host_is_named() {
         assert_eq!(allowed("https://evil.com/x"), Err("evil.com".into()));
-        assert_eq!(allowed("https://HuggingFace.co/x"), Ok("huggingface.co".into()));
+        assert_eq!(
+            allowed("https://HuggingFace.co/x"),
+            Ok("huggingface.co".into())
+        );
     }
 
     #[test]
     fn locations_resolve_against_the_sender() {
         let base = "https://huggingface.co/r/resolve/abc/onnx/m.onnx";
-        assert_eq!(resolve(base, "https://cdn-lfs.hf.co/x"), "https://cdn-lfs.hf.co/x");
+        assert_eq!(
+            resolve(base, "https://cdn-lfs.hf.co/x"),
+            "https://cdn-lfs.hf.co/x"
+        );
         assert_eq!(resolve(base, "/api/x"), "https://huggingface.co/api/x");
-        assert_eq!(resolve(base, "n.onnx"), "https://huggingface.co/r/resolve/abc/onnx/n.onnx");
+        assert_eq!(
+            resolve(base, "n.onnx"),
+            "https://huggingface.co/r/resolve/abc/onnx/n.onnx"
+        );
     }
 }

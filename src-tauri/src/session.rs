@@ -112,7 +112,12 @@ impl Session {
     /// request still in flight may keep the album itself a moment longer;
     /// it no longer tells the page anything.
     pub fn close(&self) {
-        if let Some(t) = self.tagging.lock().unwrap_or_else(|p| p.into_inner()).as_ref() {
+        if let Some(t) = self
+            .tagging
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+        {
             t.attach(None);
         }
         let old = self.slot().take();
@@ -166,7 +171,11 @@ impl Session {
     /// Gives the open album to the tagging queue
     /// (docs/07-tagging.md, "Album open and close"). Its pictures are the
     /// medium thumbnails; it waits while a scan runs.
-    pub fn tag(&self, tagging: Arc<owlbum_core::tagging::runtime::Runtime>, thumbs: Option<Thumbs>) {
+    pub fn tag(
+        &self,
+        tagging: Arc<owlbum_core::tagging::runtime::Runtime>,
+        thumbs: Option<Thumbs>,
+    ) {
         use owlbum_core::tagging::runtime::{AlbumWork, ThumbPictures};
         *self.tagging.lock().unwrap_or_else(|p| p.into_inner()) = Some(Arc::clone(&tagging));
         let (Some(scanner), Some(thumbs)) = (self.scanner(), thumbs) else {

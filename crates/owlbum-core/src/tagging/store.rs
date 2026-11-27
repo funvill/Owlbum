@@ -106,8 +106,8 @@ fn has_row(tx: &Connection, id: i64, model: &str) -> AppResult<bool> {
 }
 
 fn insert(tx: &Transaction<'_>, id: i64, row: &TagRow) -> AppResult<()> {
-    let objects = (!row.objects.is_empty())
-        .then(|| serde_json::to_string(&row.objects).unwrap_or_default());
+    let objects =
+        (!row.objects.is_empty()).then(|| serde_json::to_string(&row.objects).unwrap_or_default());
     let keywords = (!row.keywords.is_empty())
         .then(|| serde_json::to_string(&row.keywords).unwrap_or_default());
     tx.execute(
@@ -415,7 +415,13 @@ mod tests {
             (2, "b/lake copy.jpg", "k1", "00000000000000aa", 0),
             (3, "a/harbour.jpg", "k3", "00000000000000bb", 0),
             (4, "a/gone.jpg", "k4", "00000000000000cc", 1),
-            (5, "c/same key other picture.jpg", "k1", "00000000000000dd", 0),
+            (
+                5,
+                "c/same key other picture.jpg",
+                "k1",
+                "00000000000000dd",
+                0,
+            ),
         ] {
             let (dir, name) = path.rsplit_once('/').unwrap();
             conn.execute(
@@ -438,7 +444,10 @@ mod tests {
             objects: Vec::new(),
             keywords: words
                 .iter()
-                .map(|w| KeywordScore { label: (*w).into(), score: 0.5 })
+                .map(|w| KeywordScore {
+                    label: (*w).into(),
+                    score: 0.5,
+                })
                 .collect(),
             error: None,
             made_at: 10,
@@ -454,13 +463,23 @@ mod tests {
         tx.commit().unwrap();
         assert_eq!(touched, vec![1, 2], "5 shares the key but not the picture");
         let labels: i64 = conn
-            .query_row("SELECT count(*) FROM photo_labels WHERE kind = 'keyword'", [], |r| r.get(0))
+            .query_row(
+                "SELECT count(*) FROM photo_labels WHERE kind = 'keyword'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(labels, 4);
-        let vectors: i64 = conn.query_row("SELECT count(*) FROM vectors", [], |r| r.get(0)).unwrap();
+        let vectors: i64 = conn
+            .query_row("SELECT count(*) FROM vectors", [], |r| r.get(0))
+            .unwrap();
         assert_eq!(vectors, 2);
         let hit: i64 = conn
-            .query_row("SELECT count(*) FROM search WHERE search MATCH 'keywords:lake'", [], |r| r.get(0))
+            .query_row(
+                "SELECT count(*) FROM search WHERE search MATCH 'keywords:lake'",
+                [],
+                |r| r.get(0),
+            )
             .unwrap();
         assert_eq!(hit, 2);
         assert_eq!(needs_work(&conn, "m", "").unwrap(), vec![3, 5]);
@@ -472,14 +491,19 @@ mod tests {
     #[test]
     fn a_new_photo_takes_its_copys_rows() {
         let mut conn = db();
-        conn.execute("UPDATE photos SET file_key = 'k9' WHERE id = 2", []).unwrap();
+        conn.execute("UPDATE photos SET file_key = 'k9' WHERE id = 2", [])
+            .unwrap();
         let tx = conn.transaction().unwrap();
         write(&tx, 1, &[done_keywords("m", &["lake"])]).unwrap();
-        tx.execute("UPDATE photos SET file_key = 'k1' WHERE id = 2", []).unwrap();
+        tx.execute("UPDATE photos SET file_key = 'k1' WHERE id = 2", [])
+            .unwrap();
         assert_eq!(take_from_copies(&tx, 2).unwrap(), vec!["m".to_owned()]);
         assert!(take_from_copies(&tx, 2).unwrap().is_empty());
         tx.commit().unwrap();
-        assert_eq!(row(&conn, 2, "m").unwrap().unwrap().keywords[0].label, "lake");
+        assert_eq!(
+            row(&conn, 2, "m").unwrap().unwrap().keywords[0].label,
+            "lake"
+        );
     }
 
     #[test]

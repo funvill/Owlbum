@@ -175,7 +175,10 @@ impl Tagging {
     }
 
     fn downloads(&self) -> MutexGuard<'_, Downloads> {
-        self.inner.downloads.lock().unwrap_or_else(|p| p.into_inner())
+        self.inner
+            .downloads
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
     }
 
     fn dir(&self, m: &ModelChoice) -> PathBuf {
@@ -233,7 +236,13 @@ impl Tagging {
         let mut models = Vec::new();
         for m in self.inner.catalogue.all() {
             let mut state = self.state_of(m);
-            if state == InstallState::Unverified && self.downloads().running.as_ref().is_none_or(|r| r.model.id != m.id) {
+            if state == InstallState::Unverified
+                && self
+                    .downloads()
+                    .running
+                    .as_ref()
+                    .is_none_or(|r| r.model.id != m.id)
+            {
                 self.check_in_background(m);
                 state = InstallState::Checking;
             }
@@ -296,7 +305,10 @@ impl Tagging {
     pub fn download(&self, id: &str) -> AppResult<()> {
         let m = self.model(id)?;
         let mut d = self.downloads();
-        if d.running.as_ref().is_some_and(|r| r.thread.as_ref().is_some_and(|t| !t.is_finished())) {
+        if d.running
+            .as_ref()
+            .is_some_and(|r| r.thread.as_ref().is_some_and(|t| !t.is_finished()))
+        {
             return Err(AppError::new(ErrorCode::DownloadBusy, words::DOWNLOAD_BUSY));
         }
         d.error = None;
@@ -374,7 +386,11 @@ impl Tagging {
                 &*self.inner.emitter,
                 &DownloadProgress {
                     model: m.id.to_owned(),
-                    received: if outcome == Outcome::Done { m.bytes() } else { received },
+                    received: if outcome == Outcome::Done {
+                        m.bytes()
+                    } else {
+                        received
+                    },
                     total: m.bytes(),
                     error,
                     finished: true,
@@ -384,7 +400,10 @@ impl Tagging {
         // The thread's handle is taken by whoever waits; a finished
         // download leaves no running entry.
         let mut d = self.downloads();
-        if d.running.as_ref().is_some_and(|r| r.model.id == m.id && !r.cancel.load(Ordering::Relaxed)) {
+        if d.running
+            .as_ref()
+            .is_some_and(|r| r.model.id == m.id && !r.cancel.load(Ordering::Relaxed))
+        {
             d.running = None;
         }
     }
@@ -406,7 +425,12 @@ impl Tagging {
     /// kept.
     pub fn remove(&self, id: &str) -> AppResult<()> {
         let m = self.model(id)?;
-        if self.downloads().running.as_ref().is_some_and(|r| r.model.id == m.id) {
+        if self
+            .downloads()
+            .running
+            .as_ref()
+            .is_some_and(|r| r.model.id == m.id)
+        {
             self.cancel_download();
         }
         let choice = self.choice();
@@ -417,10 +441,14 @@ impl Tagging {
         self.runtime.unload(m.part);
         if chosen {
             let mut patch = serde_json::Map::new();
-            patch.insert(format!("tagging.{}", m.part.as_str()), serde_json::Value::Null);
+            patch.insert(
+                format!("tagging.{}", m.part.as_str()),
+                serde_json::Value::Null,
+            );
             self.inner.data.set_settings(&patch)?;
         }
-        install::remove(&self.dir(m)).map_err(|e| AppError::internal(format!("removing {}: {e}", m.label)))?;
+        install::remove(&self.dir(m))
+            .map_err(|e| AppError::internal(format!("removing {}: {e}", m.label)))?;
         {
             let mut d = self.downloads();
             d.damaged.remove(m.id);
@@ -432,11 +460,20 @@ impl Tagging {
 
     /// `tagging_set`: saves the choice. Each part takes null or a model of
     /// that part whose state is `ok`.
-    pub fn set(&self, describe: Option<String>, keywords: Option<String>) -> AppResult<TaggingChoice> {
+    pub fn set(
+        &self,
+        describe: Option<String>,
+        keywords: Option<String>,
+    ) -> AppResult<TaggingChoice> {
         let refuse = || AppError::new(ErrorCode::ModelNotReady, words::MODEL_NOT_READY);
         for (part, id) in [(Part::Describe, &describe), (Part::Keywords, &keywords)] {
             if let Some(id) = id {
-                let m = self.inner.catalogue.get(id).filter(|m| m.part == part).ok_or_else(refuse)?;
+                let m = self
+                    .inner
+                    .catalogue
+                    .get(id)
+                    .filter(|m| m.part == part)
+                    .ok_or_else(refuse)?;
                 if self.state_of(m) != InstallState::Ok {
                     return Err(refuse());
                 }

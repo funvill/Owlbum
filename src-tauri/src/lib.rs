@@ -173,13 +173,18 @@ fn main_window<R: Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
         .find(|w| w.label == "main")
         .cloned()
         .unwrap_or_default();
+    let version = owlbum_core::app::version().version;
     tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
-        .user_agent(&user_agent(
-            std::env::consts::OS,
-            &owlbum_core::app::version().version,
-        ))
+        .title(window_title(&version))
+        .user_agent(&user_agent(std::env::consts::OS, &version))
         .build()?;
     Ok(())
+}
+
+/// The main window's title: `Owlbum <version>`, so a tester can tell which
+/// build is running (CHANGELOG.md says what each version changed).
+pub fn window_title(version: &str) -> String {
+    format!("Owlbum {version}")
 }
 
 /// The webview's user agent: `Owlbum/<version>`, the platform and the
@@ -216,6 +221,11 @@ fn folder_dialog<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_window_title_carries_the_version() {
+        assert_eq!(window_title("0.1.1"), "Owlbum 0.1.1");
+    }
 
     #[test]
     fn the_user_agent_names_owlbum_and_keeps_the_platform() {

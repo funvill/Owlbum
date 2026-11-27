@@ -13,6 +13,10 @@ The v1 build ran unattended with subagents, one GitHub issue at a time, from 202
 4. Read the open issues, the newest comment on #69 and [roadmap.md](roadmap.md). Next is milestone 3 Edit and act (#38 onward), then the open v1 follow-ups listed on #69.
 5. The owner's standing orders (2026-11-26): at most two agents at a time; agents run `check.sh --quick` plus focused tests, and the orchestrator runs the full gate on `main` every few merges (CI now also runs it on every push to `main`); no over-verifying; Windows only, Linux paused until the owner says otherwise; never publish a release, push a version tag, enable Pages or create signing keys.
 
+## Test builds
+
+Build a test exe with `./scripts/build-test.sh` from an up-to-date `main` in the main checkout (set `OWLBUM_GIT` to the push wrapper). It raises the version, closes the `Unreleased` section of `CHANGELOG.md`, commits and pushes that, and copies the exe to `~/Documents/OwlbumDemo/owlbum-test.exe`. The window title shows the version.
+
 ## Lessons from the build
 
 - All worktrees share one Cargo target directory. Touch the workspace sources before a focused `cargo test` (the brief has the command), or Cargo may test another worktree's build. `check.sh` does this itself and holds a lock so two gates never share the directory at once.
@@ -60,7 +64,7 @@ You are implementing one GitHub issue of Owlbum (repo `funvill/Owlbum`, local `C
    **Speed rules (owner's order, 2026-11-26): do NOT run the full gate.** Before merging run `timeout 900 ./scripts/check.sh --quick` (format, clippy, bindings, page types and lint; about 2 minutes) plus the focused tests for what you changed (`cargo test -p <crate> <module filter>`, `npx vitest run <paths>`). The orchestrator runs the full gate on main every few merges and sends any breakage back. Run each check once; re-run only after you change code, not after a clean rebase. No load loops, repeated runs, benchmarks or extra verification passes unless the issue itself is about performance. Do not over-verify. Aim to finish an issue within about 60–90 minutes of work; if it is much bigger, ship a solid core, file a follow-up issue for the rest, and merge.
    **Before any focused `cargo test`/`cargo build` in a worktree**, mark this checkout's sources newest, or Cargo may quietly run another worktree's build from the shared target: `find crates src-tauri -type f \( -name '*.rs' -o -name '*.sql' -o -name '*.json' -o -name 'Cargo.toml' -o -name 'build.rs' \) -not -path '*/target/*' -not -path '*/gen/*' -print0 | xargs -0 touch` (the same step `check.sh` runs).
    Never wait on an unbounded test run: wrap long runs in `timeout` (e.g. `timeout 1200 ./scripts/check.sh`, `timeout 300 npx vitest run ...`). A run that hits the limit is a hang to debug, not a slow test to wait for.
-5. Keep the design docs true: if the build forced a change, edit the doc in the same branch.
+5. Keep the design docs true: if the build forced a change, edit the doc in the same branch. Add every change a user would notice to the `Unreleased` section of `CHANGELOG.md` (Keep a Changelog: Added, Changed, Fixed, Removed), in plain words.
 6. Push the branch and open a PR with `ghf pr create --repo funvill/Owlbum --base main`. PR body: what changed, how it was tested, decisions; no hard-wrapping (one paragraph per line); `Closes #N`; end with `🤖 Generated with [Claude Code](https://claude.com/claude-code)`.
 7. Merge yourself, never with `gh pr merge` (that would record a human identity). Instead:
    ```

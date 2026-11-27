@@ -125,7 +125,7 @@ export class PhotoMap {
       showCoverageOnHover: false,
       iconCreateFunction: clusterIcon,
       // Added in slices of about 100 ms, each followed by a pause, so a
-      // whole album's markers do not hold the page up (#146).
+      // whole album's markers do not hold the page up (issue 146).
       chunkedLoading: true,
       chunkInterval: 100,
       chunkDelay: 16,

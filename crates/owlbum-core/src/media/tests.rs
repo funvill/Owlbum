@@ -799,28 +799,175 @@ fn cost_follows_format_and_size() {
     assert_eq!(cost("mp4", 1), Cost::Heavy);
 }
 
-// ---- RAW and video wait for their handlers ----
+// ---- Camera RAW ----
+
+fn dng_of(img: &RgbImage, orientation: u16) -> Vec<u8> {
+    let meta = owlbum_fixtures::encode::Meta {
+        make: Some("Owlbum"),
+        model: Some("Test Camera"),
+        orientation,
+        taken: Some("2024:06:12 14:03:00".into()),
+        ..Default::default()
+    };
+    owlbum_fixtures::dng::dng(img, &meta)
+}
 
 #[test]
-fn raw_and_video_rows_are_recognised_but_not_read_yet() {
+fn dng_reads_its_size_and_tags_from_the_headers() {
     let dir = TempDir::new().unwrap();
-    let tiff_head = b"II*\0\x08\0\0\0".to_vec();
-    let path = write(&dir, "IMG_1.CR2", &tiff_head);
+    let path = write(&dir, "IMG_1.DNG", &dng_of(&quadrants(), 0));
+    let f = handler_for(&path);
+    assert_eq!(f.id, "dng");
+    let m = f.handler.metadata(&path).unwrap();
+    assert_eq!((m.width, m.height), (32, 16));
+    let exif = m.exif.expect("EXIF");
+    assert_eq!(exif.text(exif::Dir::Main, 0x010f), Some("Owlbum"));
+    assert_eq!(
+        exif.text(exif::Dir::Exif, 0x9003),
+        Some("2024:06:12 14:03:00")
+    );
+    assert_eq!(f.handler.cost(1), Cost::Heavy);
+}
+
+#[test]
+fn dng_preview_is_the_embedded_picture() {
+    let dir = TempDir::new().unwrap();
+    let path = write(&dir, "IMG_1.dng", &dng_of(&quadrants(), 0));
+    let px = handler_for(&path).handler.preview(&path, 16).unwrap();
+    assert_eq!((px.width, px.height), (32, 16));
+    assert_eq!((px.full_width, px.full_height), (32, 16));
+    assert_corners(&px, [RED, GREEN, BLUE, WHITE], "embedded preview");
+    // Zoom and copy use the embedded picture too: it is the full size.
+    let w = handler_for(&path).handler.working(&path).unwrap();
+    assert_corners(&w, [RED, GREEN, BLUE, WHITE], "working");
+}
+
+#[test]
+fn dng_is_developed_when_no_embedded_picture_is_large_enough() {
+    let dir = TempDir::new().unwrap();
+    let path = write(&dir, "IMG_1.dng", &dng_of(&quadrants(), 0));
+    let px = handler_for(&path).handler.preview(&path, 1600).unwrap();
+    assert_eq!((px.width, px.height), (32, 16));
+    let s = handler_for(&path).handler.source(&path).unwrap();
+    assert_eq!((s.width, s.height, s.layout), (32, 16, Layout::Rgb));
+}
+
+#[test]
+fn raw_orientation_turns_the_picture_upright() {
+    let dir = TempDir::new().unwrap();
+    // Orientation 6: turned a quarter clockwise for display.
+    let path = write(&dir, "IMG_6.dng", &dng_of(&quadrants(), 6));
+    let f = handler_for(&path);
+    let m = f.handler.metadata(&path).unwrap();
+    assert_eq!((m.width, m.height), (16, 32));
+    let px = f.handler.preview(&path, 16).unwrap();
+    assert_eq!((px.width, px.height), (16, 32));
+    assert_eq!((px.full_width, px.full_height), (16, 32));
+    assert_corners(&px, upright_corners(6), "orientation 6");
+}
+
+#[test]
+fn a_damaged_raw_is_a_decode_error() {
+    let dir = TempDir::new().unwrap();
+    let mut bytes = b"II*    ".to_vec();
+    bytes.extend_from_slice(&[0xff; 64]);
+    let path = write(&dir, "IMG_1.CR2", &bytes);
     let f = handler_for(&path);
     assert_eq!(f.id, "cr2");
     let e = f.handler.metadata(&path).unwrap_err();
-    assert_eq!(e.code, MediaErrorCode::Unsupported);
-    assert_eq!(e.message, "This camera's RAW format is not supported yet.");
+    assert_eq!(e.code, MediaErrorCode::Decode);
+    assert_eq!(
+        e.message,
+        "This file is damaged or is not a Canon RAW picture."
+    );
+    assert_eq!(
+        f.handler.preview(&path, 512).unwrap_err().code,
+        MediaErrorCode::Decode
+    );
+}
 
+// ---- Video ----
+
+/// An MP4 of four 32 × 16 Motion JPEG frames, 250 ms each.
+fn mjpeg_mp4(quarter_turn: bool) -> Vec<u8> {
+    let frames: Vec<Vec<u8>> = (0..4).map(|_| jpeg_bytes(&quadrants())).collect();
+    owlbum_fixtures::mp4::mjpeg(&frames, 32, 16, 250, quarter_turn)
+}
+
+#[test]
+fn video_facts_come_from_the_container() {
+    let dir = TempDir::new().unwrap();
+    let path = write(&dir, "clip.mp4", &mjpeg_mp4(false));
+    let f = handler_for(&path);
+    assert_eq!(f.id, "mp4");
+    let info = f.handler.probe(&path).unwrap().unwrap();
+    assert_eq!(
+        info,
+        VideoInfo {
+            duration_ms: 1000,
+            width: 32,
+            height: 16,
+            rotation: 0,
+            video_codec: Some("mjpeg".into()),
+            audio_codec: None,
+        }
+    );
+    let m = f.handler.metadata(&path).unwrap();
+    assert_eq!((m.width, m.height, m.duration_ms), (32, 16, Some(1000)));
+    assert_eq!(f.handler.cost(1), Cost::Heavy);
+}
+
+#[test]
+fn a_rotated_video_reports_its_displayed_size() {
+    let dir = TempDir::new().unwrap();
+    let path = write(&dir, "turned.mov", &mjpeg_mp4(true));
+    let f = handler_for(&path);
+    assert_eq!(f.id, "mov", "the extension picks the id within a family");
+    let info = f.handler.probe(&path).unwrap().unwrap();
+    assert_eq!((info.width, info.height, info.rotation), (16, 32, 90));
+}
+
+#[test]
+fn a_video_container_that_cannot_be_read_is_a_decode_error() {
+    let dir = TempDir::new().unwrap();
     let mut mp4 = 20u32.to_be_bytes().to_vec();
-    mp4.extend_from_slice(b"ftypisom\0\0\0\0isom");
+    mp4.extend_from_slice(b"ftypisom    isom");
     mp4.extend_from_slice(&[0; 16]);
     let path = write(&dir, "clip.mov", &mp4);
     let f = handler_for(&path);
-    assert_eq!(f.id, "mov", "the extension picks the id within a family");
-    let e = f.handler.probe(&path).unwrap_err();
-    assert_eq!(e.code, MediaErrorCode::Unsupported);
-    assert_eq!(e.message, "This video format is not supported yet.");
+    let e = f.handler.metadata(&path).unwrap_err();
+    assert_eq!(e.code, MediaErrorCode::Decode);
+    assert_eq!(
+        e.message,
+        "This file is damaged or is not a QuickTime video."
+    );
+}
+
+#[test]
+fn a_poster_is_the_system_frame_or_unsupported() {
+    let dir = TempDir::new().unwrap();
+    let path = write(&dir, "clip.mp4", &mjpeg_mp4(false));
+    match handler_for(&path).handler.preview(&path, 512) {
+        // Never enlarged past the video's own size.
+        Ok(px) => {
+            assert!(px.width <= 32 && px.height <= 16, "{px:?}");
+            assert_eq!((px.full_width, px.full_height), (32, 16));
+        }
+        Err(e) => assert_eq!(e.code, MediaErrorCode::Unsupported),
+    }
+}
+
+#[test]
+fn iso6709_locations() {
+    assert_eq!(
+        video::iso6709("+48.8577+002.2950+035.000/"),
+        Some((48.8577, 2.295))
+    );
+    assert_eq!(
+        video::iso6709("-33.8688+151.2093/"),
+        Some((-33.8688, 151.2093))
+    );
+    assert_eq!(video::iso6709("nonsense"), None);
 }
 
 // ---- Colour profiles: preview and working are sRGB, source is not ----

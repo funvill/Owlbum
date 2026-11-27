@@ -10,6 +10,12 @@ pub fn decode_error(label: &str) -> String {
     format!("This file is damaged or is not a {label} picture.")
 }
 
+/// `decode` for a video: the bytes are not a video of the format's label
+/// (the label already says "video").
+pub fn video_decode_error(label: &str) -> String {
+    format!("This file is damaged or is not a {label}.")
+}
+
 /// `too_large`: over the pixel limit.
 pub fn too_large(width: u32, height: u32) -> String {
     format!("This picture is too large to open ({width} × {height}).")
@@ -23,3 +29,5 @@ pub const AVIF_UNSUPPORTED: &str = "AVIF photos are not supported yet.";
 pub const RAW_UNSUPPORTED: &str = "This camera's RAW format is not supported yet.";
 /// Reason shown for a video format with no reader.
 pub const VIDEO_UNSUPPORTED: &str = "This video format is not supported yet.";
+/// Why a video has no poster frame: the system could not decode one.
+pub const NO_POSTER: &str = "This computer can't show a frame of this video.";

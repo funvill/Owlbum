@@ -36,7 +36,7 @@ export function originalUrl(photoId: number, thumbKey: string, platform: MediaPl
   return `${base(platform)}original/${photoId}?v=${thumbKey}`;
 }
 
-/** A video, for a `<video>` element. Playback arrives with roadmap #50. */
+/** A video, for a `<video>` element: the file in byte ranges. */
 export function videoUrl(photoId: number, platform: MediaPlatform = mediaPlatform()): string {
   return `${base(platform)}video/${photoId}`;
 }

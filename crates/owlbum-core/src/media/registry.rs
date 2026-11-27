@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::handler::MediaHandler;
-use super::{jxl, pending, sniff, still};
+use super::{jxl, raw, sniff, still, video};
 use crate::text;
 
 /// What kind of photo a format holds (`photos.kind`).
@@ -110,7 +110,7 @@ const fn raw(
         kind: MediaKind::Raw,
         label,
         caps: RAW_CAPS,
-        handler: &pending::RAW,
+        handler: &raw::RAW,
     }
 }
 
@@ -127,7 +127,7 @@ const fn video(
         kind: MediaKind::Video,
         label,
         caps: VIDEO_CAPS,
-        handler: &pending::VIDEO,
+        handler: &video::VIDEO,
     }
 }
 
@@ -426,8 +426,8 @@ mod tests {
             &still::TIFF,
             &still::BMP,
             &jxl::JXL,
-            &pending::RAW,
-            &pending::VIDEO,
+            &raw::RAW,
+            &video::VIDEO,
         ];
         for h in all {
             assert!(used.contains(&handler_addr(h)), "a handler is not used");

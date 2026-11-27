@@ -9,6 +9,7 @@ import { create } from "zustand";
 import type { PhotoAt } from "../../api/bindings/PhotoAt";
 import { isEditing } from "../edit/mode";
 import { useGridStore } from "../grid";
+import { stopVideo } from "../preview/video";
 
 export interface ViewerState {
   open: boolean;
@@ -31,6 +32,8 @@ export function openViewer(at: PhotoAt): void {
   const active = document.activeElement;
   opener = active instanceof HTMLElement && active !== document.body ? active : null;
   opener?.blur();
+  // The preview's player lets go: the viewer starts the video afresh, paused.
+  stopVideo();
   const grid = useGridStore.getState();
   if (grid.current?.id !== at.id) grid.setSelection({ current: at, anchor: at, selection: [at.id] });
   useViewerStore.setState({ open: true });
@@ -39,6 +42,7 @@ export function openViewer(at: PhotoAt): void {
 /** Closes the viewer: the last photo shown becomes the current photo and the whole selection. */
 export function closeViewer(): void {
   if (!useViewerStore.getState().open) return;
+  stopVideo();
   useViewerStore.setState({ open: false });
   const grid = useGridStore.getState();
   // A step still waiting for its row settles to that photo by itself.

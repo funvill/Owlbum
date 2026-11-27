@@ -17,6 +17,8 @@ jpeg-decoder.workspace = true
 jpeg-encoder.workspace = true
 jxl-oxide.workspace = true
 moxcms.workspace = true
+nom-exif.workspace = true
+rawler.workspace = true
 notify.workspace = true
 rusqlite.workspace = true
 serde.workspace = true
@@ -28,6 +30,11 @@ ts-rs.workspace = true
 uuid.workspace = true
 
 [target.'cfg(windows)'.dependencies]
+windows = { workspace = true, features = [
+    "Win32_Graphics_Gdi",
+    "Win32_System_Com",
+    "Win32_UI_Shell",
+] }
 windows-sys = { workspace = true, features = [
     "Win32_Foundation",
     "Win32_Storage_FileSystem",

@@ -85,6 +85,71 @@ impl Fixture {
         let request = Request::builder().uri(url).body(Vec::<u8>::new()).unwrap();
         respond(self.app.handle(), &request)
     }
+
+    fn get_range(&self, url: &str, range: &str) -> tauri::http::Response<Vec<u8>> {
+        let request = Request::builder()
+            .uri(url)
+            .header(header::RANGE, range)
+            .body(Vec::<u8>::new())
+            .unwrap();
+        respond(self.app.handle(), &request)
+    }
+}
+
+impl Drop for Fixture {
+    /// Closes the album before the folder goes, so no temporary files are
+    /// left behind.
+    fn drop(&mut self) {
+        let _ = invoke(&self.window, "album_close", json!({}));
+    }
+}
+
+#[test]
+fn a_video_is_served_in_byte_ranges() {
+    let f = fixture();
+    f.open();
+    let scanner = f.app.state::<Session>().scanner().unwrap();
+    let id: i64 = scanner
+        .album()
+        .db()
+        .read(|c| {
+            Ok(
+                c.query_row("SELECT id FROM photos WHERE kind = 'video'", [], |r| {
+                    r.get(0)
+                })
+                .unwrap(),
+            )
+        })
+        .unwrap();
+    drop(scanner);
+    let bytes = std::fs::read(f.fixture.root.join("video/clip.mp4")).unwrap();
+    let len = bytes.len();
+
+    let whole = f.get(&format!("http://owlbum.localhost/video/{id}"));
+    assert_eq!(whole.status(), 206);
+    assert_eq!(whole.headers()[header::CONTENT_TYPE], "video/mp4");
+    assert_eq!(whole.headers()[header::ACCEPT_RANGES], "bytes");
+    assert_eq!(whole.headers()[header::CACHE_CONTROL], "no-store");
+    assert_eq!(
+        whole.headers()[header::CONTENT_RANGE],
+        format!("bytes 0-{}/{len}", len - 1).as_str()
+    );
+    assert_eq!(whole.body(), &bytes);
+
+    let part = f.get_range(&format!("owlbum://video/{id}"), "bytes=10-19");
+    assert_eq!(part.status(), 206);
+    assert_eq!(part.body(), &bytes[10..20]);
+    assert_eq!(
+        part.headers()[header::CONTENT_RANGE],
+        format!("bytes 10-19/{len}").as_str()
+    );
+
+    let past = f.get_range(&format!("owlbum://video/{id}"), &format!("bytes={len}-"));
+    assert_eq!(past.status(), 416);
+    assert_eq!(
+        past.headers()[header::CONTENT_RANGE],
+        format!("bytes */{len}").as_str()
+    );
 }
 
 #[test]

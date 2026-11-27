@@ -130,9 +130,8 @@ fn opening_scans_and_rescan_scans_again_with_progress_events() {
     invoke(&window, "album_rescan", serde_json::json!({})).expect("album_rescan answers");
     let second = next_finished(&events);
     assert_eq!(second.found, first.found);
-    // A Rescan retries the rows with errors: the corrupt file, the RAW and
-    // the video fail again.
-    assert_eq!(second.failed, 3);
+    // A Rescan retries the rows with errors: the corrupt file fails again.
+    assert_eq!(second.failed, 1);
 
     invoke(&window, "album_scan_cancel", serde_json::json!({})).expect("no error");
     app.state::<owlbum_lib::session::Session>().close();

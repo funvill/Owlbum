@@ -4,20 +4,21 @@
 //!
 //! `registry` is the only module that knows which files Owlbum handles.
 //! Every row names a handler; the still handler (`still`) reads JPEG, PNG,
-//! WebP, GIF, TIFF and BMP, and `jxl` reads JPEG XL. RAW (#49) and video
-//! (#50) rows use the placeholder handlers in `pending` until their
-//! decoders are built. `colour` converts embedded colour profiles to sRGB
-//! (#7).
+//! WebP, GIF, TIFF and BMP, `jxl` reads JPEG XL, `raw` reads camera RAW
+//! with `rawler` (#49) and `video` reads video containers and asks the
+//! operating system for poster frames (#50). `colour` converts embedded
+//! colour profiles to sRGB (#7).
 
 pub mod colour;
 pub mod exif;
 pub mod handler;
 mod headers;
 pub mod jxl;
-pub mod pending;
+pub mod raw;
 pub mod registry;
 mod sniff;
 pub mod still;
+pub mod video;
 
 #[cfg(test)]
 mod tests;

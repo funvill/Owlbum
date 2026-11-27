@@ -24,6 +24,7 @@ import { Caption } from "./Caption";
 import { stagePictures } from "./pictures";
 import { useCachedReady, usePreload } from "./preload";
 import { useShownRow } from "./shownRow";
+import { StageFor } from "./VideoStage";
 import { ZoomStage, type ZoomHandle, type ZoomStageProps } from "./ZoomStage";
 import "./Preview.css";
 
@@ -79,19 +80,21 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
   return (
     <section className="ow-preview" aria-label={t.region}>
       <div className="ow-preview__stage">
-        <CachedZoomStage
-          key={`${row.id}:${row.thumb_key}:${row.edit_plan?.key ?? ""}`}
-          ready={row.thumb_key !== ""}
-          pictures={stagePictures(row)}
-          aspect={row.aspect}
-          plan={row.edit_plan}
-          showOriginal={before}
-          original={own !== null && own.width > 0 && own.height > 0 ? { width: own.width, height: own.height } : null}
-          zoomable={row.kind !== "video"}
-          onOpenAtFit={onOpen === undefined ? undefined : () => onOpen(at)}
-          onMenu={onMenu === undefined ? undefined : (e) => onMenu(at, e)}
-          handle={zoom}
-        />
+        <StageFor kind={row.kind} photoId={row.id} place="preview">
+          <CachedZoomStage
+            key={`${row.id}:${row.thumb_key}:${row.edit_plan?.key ?? ""}`}
+            ready={row.thumb_key !== ""}
+            pictures={stagePictures(row)}
+            aspect={row.aspect}
+            plan={row.edit_plan}
+            showOriginal={before}
+            original={own !== null && own.width > 0 && own.height > 0 ? { width: own.width, height: own.height } : null}
+            zoomable={row.kind !== "video"}
+            onOpenAtFit={onOpen === undefined ? undefined : () => onOpen(at)}
+            onMenu={onMenu === undefined ? undefined : (e) => onMenu(at, e)}
+            handle={zoom}
+          />
+        </StageFor>
         <FlagMark place="preview" />
         <ScoreToast place="preview" />
       </div>

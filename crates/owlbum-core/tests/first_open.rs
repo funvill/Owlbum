@@ -52,6 +52,7 @@ fn ask(scanner: &Scanner, thumbs: &Thumbs, keys: &[String]) -> (Duration, Durati
                         Some(scanner.open()),
                         thumbs,
                         &format!("owlbum://thumb/{key}/s"),
+                        None,
                     );
                     assert_eq!(reply.status, 200, "{key}");
                     start.elapsed()

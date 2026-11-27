@@ -25,7 +25,7 @@ pub enum Route {
     Full { id: i64 },
     /// `original/<photo_id>?v=<thumb_key>`: an animated still's own bytes.
     Original { id: i64 },
-    /// `video/<photo_id>`: video playback, roadmap #50.
+    /// `video/<photo_id>`: the video file, in byte ranges.
     Video { id: i64 },
 }
 
@@ -80,6 +80,10 @@ pub const ONE_HOUR: &str = "private, max-age=3600";
 /// `Cache-Control` of everything else.
 pub const NO_STORE: &str = "no-store";
 
+/// The most bytes of a video one reply carries (docs/03, "Video
+/// playback").
+pub const VIDEO_CHUNK: u64 = 4 << 20;
+
 /// The answer to one URL, before it is HTTP.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Reply {
@@ -87,6 +91,10 @@ pub struct Reply {
     pub content_type: &'static str,
     pub cache_control: &'static str,
     pub body: Vec<u8>,
+    /// `Content-Range`, for a part of a video.
+    pub content_range: Option<String>,
+    /// True when the reply says `Accept-Ranges: bytes` (videos).
+    pub ranges: bool,
 }
 
 impl Reply {
@@ -96,28 +104,71 @@ impl Reply {
             content_type,
             cache_control,
             body,
+            content_range: None,
+            ranges: false,
         }
     }
 
     /// 404 with no body.
     pub fn not_found() -> Self {
-        Self {
-            status: 404,
-            content_type: "text/plain; charset=utf-8",
-            cache_control: NO_STORE,
-            body: Vec::new(),
-        }
+        Self::ok("text/plain; charset=utf-8", NO_STORE, Vec::new()).with_status(404)
     }
 
-    /// 501: video playback is roadmap #50 and is not built yet.
-    fn video_not_yet() -> Self {
-        Self {
-            status: 501,
-            content_type: "text/plain; charset=utf-8",
-            cache_control: NO_STORE,
-            body: b"Video playback is not built yet.".to_vec(),
-        }
+    fn with_status(mut self, status: u16) -> Self {
+        self.status = status;
+        self
     }
+}
+
+/// The first range of a `Range` header (`bytes=a-b`, `bytes=a-` or
+/// `bytes=-n`) for a file of `len` bytes, as an inclusive start and end,
+/// at most [`VIDEO_CHUNK`] long. No header means `bytes=0-`. None when the
+/// range cannot be satisfied.
+pub fn byte_range(header: Option<&str>, len: u64) -> Option<(u64, u64)> {
+    let spec = header.map_or("bytes=0-", str::trim);
+    let first = spec.strip_prefix("bytes=")?.split(',').next()?.trim();
+    let (a, b) = first.split_once('-')?;
+    let last = len.checked_sub(1)?;
+    let (start, end) = match (a.trim(), b.trim()) {
+        ("", n) => {
+            let n: u64 = n.parse().ok()?;
+            if n == 0 {
+                return None;
+            }
+            (len.saturating_sub(n), last)
+        }
+        (a, "") => (a.parse().ok()?, last),
+        (a, b) => (a.parse().ok()?, b.parse::<u64>().ok()?.min(last)),
+    };
+    if start > last || end < start {
+        return None;
+    }
+    Some((start, end.min(start + VIDEO_CHUNK - 1)))
+}
+
+/// A part of a video file: 206 with the bytes asked for, or 416.
+fn video_part(path: &std::path::Path, mime: &'static str, range: Option<&str>) -> Reply {
+    use std::io::{Read, Seek, SeekFrom};
+    let Ok(mut file) = std::fs::File::open(path) else {
+        return Reply::not_found();
+    };
+    let Ok(len) = file.metadata().map(|m| m.len()) else {
+        return Reply::not_found();
+    };
+    let Some((start, end)) = byte_range(range, len) else {
+        let mut r = Reply::ok(mime, NO_STORE, Vec::new()).with_status(416);
+        r.content_range = Some(format!("bytes */{len}"));
+        r.ranges = true;
+        return r;
+    };
+    let mut body = vec![0u8; usize::try_from(end - start + 1).unwrap_or(0)];
+    if file.seek(SeekFrom::Start(start)).is_err() || file.read_exact(&mut body).is_err() {
+        return Reply::not_found();
+    }
+    let mut r = Reply::ok(mime, NO_STORE, body).with_status(206);
+    r.content_range = Some(format!("bytes {start}-{end}/{len}"));
+    r.ranges = true;
+    r
 }
 
 /// The open album, as the handler sees it: the album and the rows the
@@ -128,9 +179,10 @@ pub struct Open<'a> {
     pub overlay: &'a Mutex<Overlay>,
 }
 
-/// Answers `url`. `open` is the open album, None when none is open. Runs
-/// decodes when a picture has to be made, so call it off the main thread.
-pub fn answer(open: Option<Open<'_>>, thumbs: &Thumbs, url: &str) -> Reply {
+/// Answers `url`. `open` is the open album, None when none is open.
+/// `range` is the request's `Range` header, used for a video. Runs decodes
+/// when a picture has to be made, so call it off the main thread.
+pub fn answer(open: Option<Open<'_>>, thumbs: &Thumbs, url: &str, range: Option<&str>) -> Reply {
     let (Some(open), Some(route)) = (open, Route::parse(url)) else {
         return Reply::not_found();
     };
@@ -166,8 +218,12 @@ pub fn answer(open: Option<Open<'_>>, thumbs: &Thumbs, url: &str) -> Reply {
                 _ => Reply::not_found(),
             }
         }
-        Route::Video { .. } if photo.kind == MediaKind::Video => Reply::video_not_yet(),
-        Route::Video { .. } => Reply::not_found(),
+        Route::Video { .. } => match photo.format {
+            Some(format) if photo.kind == MediaKind::Video => {
+                video_part(&photo.path, format.mime, range)
+            }
+            _ => Reply::not_found(),
+        },
     }
 }
 
@@ -210,6 +266,22 @@ mod tests {
             Route::parse("owlbum://localhost/video/3"),
             Some(Route::Video { id: 3 })
         );
+    }
+
+    #[test]
+    fn byte_ranges() {
+        const MB4: u64 = VIDEO_CHUNK;
+        assert_eq!(byte_range(None, 10), Some((0, 9)));
+        assert_eq!(byte_range(Some("bytes=0-"), 10), Some((0, 9)));
+        assert_eq!(byte_range(Some("bytes=2-5"), 10), Some((2, 5)));
+        assert_eq!(byte_range(Some("bytes=2-50"), 10), Some((2, 9)));
+        assert_eq!(byte_range(Some("bytes=-3"), 10), Some((7, 9)));
+        assert_eq!(byte_range(Some("bytes=0-"), 3 * MB4), Some((0, MB4 - 1)));
+        assert_eq!(byte_range(Some("bytes=5-"), 3 * MB4), Some((5, MB4 + 4)));
+        assert_eq!(byte_range(Some("bytes=10-"), 10), None);
+        assert_eq!(byte_range(Some("bytes=5-2"), 10), None);
+        assert_eq!(byte_range(Some("items=0-1"), 10), None);
+        assert_eq!(byte_range(None, 0), None);
     }
 
     #[test]

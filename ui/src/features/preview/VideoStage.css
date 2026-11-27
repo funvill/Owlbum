@@ -1,0 +1,60 @@
+/* A video on the stage (docs/04-browsing.md, "Video"). */
+
+.ow-video {
+  position: relative;
+  width: 100%;
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.ow-video__player {
+  width: 100%;
+  height: 100%;
+  background: var(--viewer-bg);
+}
+
+.ow-video__play {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 64px;
+  height: 64px;
+  margin: -32px 0 0 -32px;
+  z-index: var(--z-raised);
+  border: none;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--badge-bg);
+  color: var(--badge-text);
+  cursor: pointer;
+}
+
+.ow-video__play:hover {
+  color: var(--accent-strong);
+}
+
+.ow-video__failed {
+  position: absolute;
+  left: 50%;
+  bottom: var(--space-7);
+  transform: translateX(-50%);
+  z-index: var(--z-raised);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  background: var(--viewer-panel);
+  color: var(--viewer-text);
+  font: var(--text-md);
+  text-align: center;
+}
+
+.ow-video__failed p {
+  margin: 0;
+}

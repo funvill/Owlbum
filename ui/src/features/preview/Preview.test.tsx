@@ -241,6 +241,34 @@ describe("Preview", () => {
     expect(miniMap()).toBeNull();
   });
 
+  it("shows a video's poster with a play button, and plays only when asked", async () => {
+    setup(photos(5, (p) => ({ ...p, kind: "video", duration_ms: 5000 })));
+    await show(2);
+    expect(preview().querySelector("video")).toBeNull();
+    fireEvent.click(within(preview()).getByRole("button", { name: "Play video" }));
+    const video = preview().querySelector("video")!;
+    expect(video.getAttribute("src")).toMatch(/video\/2$/);
+    expect(video.controls).toBe(true);
+    expect(video.autoplay).toBe(true);
+    // Moving to another photo lets the player go.
+    act(() => grid().setSelection({ current: { id: 3, index: 2 }, anchor: { id: 3, index: 2 }, selection: [3] }));
+    await waitFor(() => expect(preview().querySelector("video")).toBeNull());
+    expect(within(preview()).getByRole("button", { name: "Play video" })).toBeInTheDocument();
+  });
+
+  it("says when a video can't be played, with Show in folder", async () => {
+    setup(photos(5, (p) => ({ ...p, kind: "video", duration_ms: 5000 })));
+    await show(2);
+    fireEvent.click(within(preview()).getByRole("button", { name: "Play video" }));
+    fireEvent.error(preview().querySelector("video")!);
+    expect(preview()).toHaveTextContent("This video can't be played on this computer.");
+    expect(preview().querySelector("video")).toBeNull();
+    expect(stage()).not.toBeNull();
+    fireEvent.click(within(preview()).getByRole("button", { name: "Show in folder" }));
+    await waitFor(() => expect(fake.calls.some((c) => c.command === "file_reveal")).toBe(true));
+    expect(fake.calls.find((c) => c.command === "file_reveal")?.args).toEqual({ photo_id: 2 });
+  });
+
   it("keeps showing the photo when a re-run moves it", async () => {
     await show(3);
     act(() => void album.change((list) => [{ id: 99, rel_path: "day/a0.jpg", width: 4000, height: 2000 }, ...list]));

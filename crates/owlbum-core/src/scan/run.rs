@@ -920,6 +920,17 @@ impl Work<'_, '_> {
                 });
                 self.scan.progress.done(1, 0);
             }
+            // A video whose container was read but whose frames this
+            // computer cannot decode keeps its row: no thumbnail, `{}` for
+            // its analysis, and no error (docs/03, "The video handler").
+            Err(e) if job.format.kind == MediaKind::Video && e.code != MediaErrorCode::Io => {
+                self.send(Op::Pixels {
+                    rel_path: job.rel_path.clone(),
+                    analysis: "{}".to_owned(),
+                    size: None,
+                });
+                self.scan.progress.done(1, 0);
+            }
             Err(e) => {
                 let named = media::format_of(rows::file_name(&job.rel_path));
                 let facts =

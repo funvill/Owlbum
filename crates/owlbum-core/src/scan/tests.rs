@@ -422,14 +422,24 @@ fn a_first_scan_gives_every_supported_trip_file_a_row() {
                 assert_eq!((p.width, p.height), (0, 0));
                 assert_eq!(p.analysis, None);
             }
-            // RAW and video read with placeholder handlers until #49, #50.
-            Kind::Raw | Kind::Video => {
-                assert_eq!(code(&p), Some("unsupported"), "{p:?}");
+            // A video keeps its row whether or not this computer can make
+            // a poster frame: with none its analysis is `{}`.
+            Kind::Video => {
+                assert_eq!(p.scan_error, None, "{p:?}");
+                assert_eq!(p.kind, "video");
+                assert_eq!(Some(p.format.as_str()), f.format);
+                assert_eq!(
+                    (p.width, p.height),
+                    (i64::from(f.width), i64::from(f.height))
+                );
+                assert_eq!(p.duration_ms, Some(2000));
+                assert!(p.analysis.is_some());
             }
             _ => {
                 assert_eq!(p.scan_error, None, "{}", f.rel_path);
                 assert_eq!(p.format, f.format.unwrap(), "{}", f.rel_path);
-                assert_eq!(p.kind, "image");
+                let kind = if f.kind == Kind::Raw { "raw" } else { "image" };
+                assert_eq!(p.kind, kind);
                 assert_eq!(
                     (p.width, p.height),
                     (i64::from(f.width), i64::from(f.height)),
@@ -450,7 +460,7 @@ fn a_first_scan_gives_every_supported_trip_file_a_row() {
     let n = u32::try_from(fx.photos().len()).unwrap();
     assert_eq!(summary.found, n);
     assert_eq!(summary.done, n);
-    assert_eq!(summary.failed, 3, "corrupt, RAW and video");
+    assert_eq!(summary.failed, 1, "the corrupt file");
     assert_eq!(summary.added, n);
     let unsupported: Vec<_> = summary
         .walk
@@ -528,7 +538,14 @@ fn extras_rows_follow_what_each_file_is() {
                     }
                 }
             }
-            Kind::Video => assert_eq!(code(&row.unwrap()), Some("unsupported")),
+            Kind::Video => {
+                let row = row.unwrap();
+                assert_eq!(row.scan_error, None, "{}", f.rel_path);
+                assert_eq!(
+                    (row.width, row.height),
+                    (i64::from(f.width), i64::from(f.height))
+                );
+            }
             Kind::Animated => {
                 let row = row.unwrap();
                 assert_eq!(row.scan_error, None, "{}", f.rel_path);
@@ -1925,10 +1942,18 @@ fn the_facts_pass_reads_date_place_camera_and_exif() {
                 "{}: {camera}",
                 f.rel_path
             );
+            // The fixture's DNG carries only a date and a camera.
+            if f.kind == Kind::Raw {
+                continue;
+            }
             let exif: Value = serde_json::from_str(&exif.unwrap()).unwrap();
             assert_eq!(exif["iso"], 100, "{}", f.rel_path);
             assert_eq!(exif["exposure_time"], 0.004, "{}", f.rel_path);
             assert_eq!(exif["flash"], false, "{}", f.rel_path);
+        } else if f.kind == Kind::Video {
+            // A video's `exif` holds its codecs.
+            assert_eq!(camera, None, "{}", f.rel_path);
+            assert_eq!(exif.as_deref(), Some(r#"{"video_codec":"mjpeg"}"#));
         } else {
             assert_eq!((camera, exif), (None, None), "{}", f.rel_path);
         }

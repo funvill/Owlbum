@@ -173,7 +173,7 @@ impl Fx {
     }
 
     fn get(&self, url: &str) -> Reply {
-        serve::answer(Some(self.scanner().open()), &self.thumbs, url)
+        serve::answer(Some(self.scanner().open()), &self.thumbs, url, None)
     }
 
     /// `(id, thumb_key)` of the photo at `rel_path`, from the database or
@@ -524,7 +524,7 @@ fn every_url_answers_404_for_an_unknown_id_or_key() {
     // No album open.
     let (id, _) = fx.row("big.jpg");
     assert_eq!(
-        serve::answer(None, &fx.thumbs, &format!("owlbum://full/{id}")).status,
+        serve::answer(None, &fx.thumbs, &format!("owlbum://full/{id}"), None).status,
         404
     );
 }
@@ -755,7 +755,7 @@ impl Live {
     }
 
     fn get(&self, url: &str) -> Reply {
-        serve::answer(Some(self.scanner.open()), &self.thumbs, url)
+        serve::answer(Some(self.scanner.open()), &self.thumbs, url, None)
     }
 }
 

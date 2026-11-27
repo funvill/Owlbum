@@ -16,12 +16,21 @@ import { matchKey, type Focus, type KeyId } from "../../keys";
 import { viewerText as t } from "../../text/viewer";
 import { useSettingsStore } from "../app";
 import { formatLength, formatSize, formatTaken } from "../details";
-import { step, stepToEnd, useGridStore } from "../grid";
+import { gridBlocks, step, stepToEnd, useGridStore } from "../grid";
 import { fileKeyHandlers } from "../files/keys";
 import { isRotateKey, rotateKeyHandlers } from "../edit";
 import { holdBefore, useBeforeStore } from "../edit/before";
 import { FlagMark, ScoreToast, flagKeyHandlers, isFlagKey } from "../organise";
-import { CachedZoomStage, stagePictures, usePreload, useShownRow, zoomKeyHandlers, type ZoomHandle } from "../preview";
+import {
+  CachedZoomStage,
+  StageFor,
+  stagePictures,
+  toggleVideo,
+  usePreload,
+  useShownRow,
+  zoomKeyHandlers,
+  type ZoomHandle,
+} from "../preview";
 import { closeViewer, toggleDetails, useViewerStore } from "./store";
 import "./Viewer.css";
 
@@ -53,8 +62,12 @@ export function viewerKeyHandlers(zoom: ZoomHandle | null): Record<ViewerKeyId, 
     "viewer.last": () => stepToEnd("last"),
     "viewer.close": () => closeViewer(),
     "viewer.escape": () => (z.zoomed() ? z.fit() : closeViewer()),
-    // Plays or pauses a video; does nothing for a still photo. The player is the video issue's.
-    "viewer.play": () => {},
+    // Plays or pauses a video; does nothing for a still photo.
+    "viewer.play": () => {
+      const current = useGridStore.getState().current;
+      const row = current === null ? undefined : gridBlocks().row(current.index);
+      if (row !== undefined && row.id === current?.id && row.kind === "video") toggleVideo("viewer", row.id);
+    },
     "viewer.details": () => toggleDetails(),
     ...zoomKeyHandlers(z),
   };
@@ -159,18 +172,20 @@ function OpenViewer({ detail }: ViewerProps) {
     >
       <div className="ow-viewer__stage">
         {row !== undefined && current !== null && (
-          <CachedZoomStage
-            key={`${row.id}:${row.thumb_key}:${row.edit_plan?.key ?? ""}`}
-            ready={row.thumb_key !== ""}
-            pictures={stagePictures(row)}
-            aspect={row.aspect}
-            plan={row.edit_plan}
-            showOriginal={before}
-            original={own !== null && own.width > 0 && own.height > 0 ? { width: own.width, height: own.height } : null}
-            zoomable={row.kind !== "video"}
-            actualSizeAtFit
-            handle={zoom}
-          />
+          <StageFor kind={row.kind} photoId={row.id} place="viewer">
+            <CachedZoomStage
+              key={`${row.id}:${row.thumb_key}:${row.edit_plan?.key ?? ""}`}
+              ready={row.thumb_key !== ""}
+              pictures={stagePictures(row)}
+              aspect={row.aspect}
+              plan={row.edit_plan}
+              showOriginal={before}
+              original={own !== null && own.width > 0 && own.height > 0 ? { width: own.width, height: own.height } : null}
+              zoomable={row.kind !== "video"}
+              actualSizeAtFit
+              handle={zoom}
+            />
+          </StageFor>
         )}
         <FlagMark place="viewer" />
         <ScoreToast place="viewer" />

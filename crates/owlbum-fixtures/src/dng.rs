@@ -65,7 +65,15 @@ pub fn dng(picture: &RgbImage, meta: &Meta) -> Vec<u8> {
     ifd0.long(254, 1);
     strip(&mut ifd0, tw, th, thumb.into_raw());
     ifd0.set(258, Val::Short(vec![8, 8, 8]));
-    ifd0.short(259, 1).short(262, 2).short(277, 3).short(274, 1);
+    ifd0.short(259, 1).short(262, 2).short(277, 3);
+    ifd0.short(
+        274,
+        if meta.orientation == 0 {
+            1
+        } else {
+            meta.orientation
+        },
+    );
     ifd0.ascii(305, "owlbum-fixtures");
     if let Some(m) = meta.make {
         ifd0.ascii(271, m);

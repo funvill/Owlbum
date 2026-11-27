@@ -18,4 +18,7 @@ export const previewText = {
   editShortcut: "E",
   before: "Before",
   beforeTooltip: "Hold to see the original (\\)",
+  play: "Play video",
+  cannotPlay: "This video can't be played on this computer.",
+  showInFolder: "Show in folder",
 };

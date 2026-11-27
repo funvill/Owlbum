@@ -32,3 +32,5 @@ export {
 } from "./cache";
 export { useCachedReady, usePreload } from "./preload";
 export { useShownRow, type ShownRow } from "./shownRow";
+export { StageFor, VideoStage, type VideoStageProps } from "./VideoStage";
+export { playVideo, stopVideo, toggleVideo, useVideoStore, type VideoPlace } from "./video";

@@ -62,8 +62,8 @@ Notes on the capabilities:
 - **TIFF, BMP and GIF** are saved as a PNG copy, which loses nothing and keeps transparency. **JPEG XL** is saved as a JPEG copy because `jxl-oxide` only decodes.
 - **RAW** edits are saved as a JPEG copy only. There are no RAW development controls. The user-facing refusal is "<label> photos can only be saved as a copy."
 - **Video** has no editing at all. Its `save_as` value is never used.
-- `dng` stays in the table only if the RAW prototype confirms `rawler` reads it (see Open questions).
-- **RAW and video rows before their handlers exist.** Until the RAW handler (#49) and the video handler (#50) are built, their rows name placeholder handlers (`media::pending`). These sniff their container family, so the rules below already work, and answer every read with `unsupported` and the reason of the matching "not supported yet" row ("This camera's RAW format is not supported yet.", "This video format is not supported yet."). Such a file therefore gets an error row and is listed with the unreadable files rather than vanishing. The issue that builds the real handler replaces the placeholder.
+- `dng` stays in the table: the RAW prototype (#49) read an uncompressed Bayer DNG laid out like a camera's or Adobe's converter's (the fixture generator's) with `rawler` 0.8, its embedded preview and its development both. Lossy and linear DNG from phones were not checked, for want of sample files in the repository; a file `rawler` cannot read is a `decode` error row like any other.
+- **RAW and video handlers.** The RAW rows use `media::raw` (#49) and the video rows `media::video` (#50). Until they were built, these rows named placeholder handlers that answered `unsupported`; `SCAN_VERSION` 4 reads the error rows they left again.
 - **WebP and JPEG XL encoders, confirmed.** `image` 0.25.10 writes only lossless WebP, and `jxl-oxide` 0.12.6 only decodes, so the save-as values above stand (open question 9).
 
 ### Files recognised but not supported yet
@@ -235,9 +235,9 @@ It uses `rawler` (LGPL-2.1, listed in the third-party notices).
 
 | Call | Behaviour |
 |---|---|
-| `metadata` | Reads the maker's headers only: sensor dimensions after the default crop, orientation, and the EXIF fields below. |
-| `preview(min_side)` | Returns the largest embedded JPEG whose longest side is at least `min_side`, decoded with the still handler and turned upright using the RAW's orientation. If no embedded picture is large enough, it falls back to `working` and scales down. |
-| `working` | Develops the sensor data with `rawler`'s default pipeline: demosaic, the camera's white balance, the camera's colour matrix, sRGB output. No controls are offered. |
+| `metadata` | Reads the maker's headers through `rawler`'s decode without the sensor data (`dummy`): dimensions after the default crop (else the active area), and the orientation from the EXIF tag (`rawler` leaves most decoders' own orientation at "normal"). The EXIF fields come from the file's own TIFF structure when it starts with a TIFF header (CR2, NEF, ARW, DNG), read by `media::exif`; otherwise (CR3, RAF, RW2, ORF) from the fields `rawler` read from the maker's headers. A DNG's uncompressed strips are still copied by `rawler` in this call. |
+| `preview(min_side)` | The largest of the pictures `rawler` finds embedded (its `full_image`, `preview_image` and `thumbnail_image`, decoded by `rawler` with `image`), turned upright with the RAW's orientation, when its longest side is at least `min_side`; `full_width` and `full_height` are the developed size from the headers. Otherwise the sensor data is developed as in `working`, at full size. |
+| `working` | The embedded picture when its longest side is at least 90% of the developed picture's (the zoom rule below); otherwise the sensor data developed with `rawler`'s default pipeline: demosaic, the camera's white balance, the camera's colour matrix, sRGB output. No controls are offered. `source` is the same picture, 16-bit when developed. `rawler` panics on some damaged files; every call into it is caught and becomes a `decode` error. |
 | `cost` | Always heavy. Whether a file has a usable embedded picture is not known until it is opened. |
 
 `photos.width` and `photos.height` are the dimensions of the **working** image, upright, never those of the embedded preview.
@@ -254,13 +254,13 @@ Many cameras embed only a small preview, so zoom then shows `rawler`'s rendering
 
 ### The video handler
 
-Owlbum bundles no video decoder. Poster frames and playback use what the operating system has.
+Owlbum bundles no video decoder. Poster frames and playback use what the operating system has. The facts are read from the container by Owlbum itself, so they need no codec and are the same on every system (#50).
 
 | Call | Windows | Linux |
 |---|---|---|
-| `metadata` | `nom-exif` for MP4, MOV, WebM and MKV containers; Media Foundation attributes for AVI. | `nom-exif`; GStreamer's discoverer for AVI. |
-| `probe` | Media Foundation source reader (through the `windows` crate): duration, frame size, rotation, video and audio codec names. | GStreamer discoverer, through the `gstreamer` crate, linked to the system's libraries. |
-| `preview` (the poster frame) | The shell's thumbnail for the file (`IShellItemImageFactory`, thumbnail only, 1600 px). If the shell has none, a Media Foundation source reader seeks to the poster time and reads one frame. | A GStreamer pipeline (`uridecodebin`, `videoconvert`, `appsink`) seeks to the poster time and pulls one frame. |
+| `metadata` | The probe's size and length; the date, place, make and model from `nom-exif`, given to the photo rules as EXIF tags. | Same. |
+| `probe` | MP4 and MOV: a walk of the box headers to `moov` (at most 64 MB of it read), giving the length from `mvhd`, the displayed size and rotation from the video track's `tkhd` matrix, and the codec names from each track's first `stsd` entry. AVI: the `hdrl` list (`avih`, `strh`, `strf`). MKV and WebM: `nom-exif`'s length and size, no rotation, no codec names. | Same. |
+| `preview` (the poster frame) | The shell's thumbnail for the file (`IShellItemImageFactory`, thumbnail only), asked at 1600 px but never more than the video's own size, so a small video is not enlarged. If the shell has none, `unsupported`: the Media Foundation fallback is not built yet (#155). | None yet: `unsupported`, so videos are listed with placeholders. The GStreamer pipeline (`uridecodebin`, `videoconvert`, `appsink`) waits for Linux work to resume (#156). |
 | `working` | Same as `preview`. | Same as `preview`. |
 | `cost` | Heavy. | Heavy. |
 
@@ -467,7 +467,7 @@ After the last write the scanner emits the final `scan_progress` and starts the 
 
 ### `scan_version`
 
-`SCAN_VERSION` is an integer constant in `owlbum-core`, starting at 1. Version 1 stored `analysis = '{}'` and no metadata facts; version 2 (#10) added the metadata reader and the [image analysis](#image-analysis); version 3 (#114) decodes a large JPEG's preview at a reduced DCT scale, which moves the analysis numbers a little. It is raised in the same commit as any change to the metadata rules, the analysis formulas or the placeholders. On the next scan every row with an older value is treated as changed: facts and analysis are read again. Thumbnails that already exist under the same `thumb_key` are not encoded again.
+`SCAN_VERSION` is an integer constant in `owlbum-core`, starting at 1. Version 1 stored `analysis = '{}'` and no metadata facts; version 2 (#10) added the metadata reader and the [image analysis](#image-analysis); version 3 (#114) decodes a large JPEG's preview at a reduced DCT scale, which moves the analysis numbers a little; version 4 (#49, #50) reads RAW and video files, which version 3 recorded as `unsupported` error rows. It is raised in the same commit as any change to the metadata rules, the analysis formulas or the placeholders. On the next scan every row with an older value is treated as changed: facts and analysis are read again. Thumbnails that already exist under the same `thumb_key` are not encoded again.
 
 ### Concurrency and writes
 
@@ -593,7 +593,7 @@ Latitude and longitude come from GPSLatitude and GPSLongitude with their referen
 | GPS | QuickTime location (`com.apple.quicktime.location.ISO6709` or `©xyz`), with the same checks as photos. |
 | `camera` | QuickTime make and model, by the camera rule above. |
 
-These rules are `scan::metadata::video_captured_at` and the photo rules above; the video handler (#50) supplies the container's values. Until then a video row is an `unsupported` error row with every metadata fact NULL.
+These rules are `scan::metadata::video_captured_at` and the photo rules above; the video handler (#50) supplies the container's values. `nom-exif` gives one creation date: a QuickTime creationdate with its offset when the file has one, else the `mvhd` time as UTC. A date with a non-zero offset is taken as the wall clock; one at UTC is converted to this computer's zone, so a creationdate written at +00:00 is treated as UTC.
 
 Converting a UTC creation time with the local zone is wrong for a video shot in another time zone. The user can correct it with the date in Details; the limit is accepted for version 1.
 
@@ -797,7 +797,7 @@ Both are shared codes listed in [Architecture](01-architecture.md#commands); thi
 | `owlbum://thumb/<thumb_key>/s` and `/m` | JPEG thumbnail, made on demand if absent. `Cache-Control: private, max-age=31536000, immutable`. | 200, 404 |
 | `owlbum://full/<photo_id>?v=<thumb_key>` | The zoom copy. `Cache-Control: private, max-age=3600`. | 200, 404 |
 | `owlbum://original/<photo_id>?v=<thumb_key>` | The original file's bytes, **only** for a still whose `duration_ms` is set (an animated GIF or WebP). `Cache-Control: private, max-age=3600`. | 200, 404 |
-| `owlbum://video/<photo_id>` | The video file in ranges of at most 4 MiB. `Cache-Control: no-store`. Until playback is built (#50) a video's id answers `501` with the text "Video playback is not built yet." | 206, 404, 416 (501 until #50) |
+| `owlbum://video/<photo_id>` | The video file in ranges of at most 4 MiB, `Accept-Ranges: bytes`, `Content-Range` on every part. `Cache-Control: no-store`. | 206, 404, 416 |
 
 Every URL resolves only to a photo of the open album that is in scope, whose row is not missing and has no scan error. A photo id of the wrong kind for the URL answers 404. Every reply carries `Access-Control-Allow-Origin: *` (the page draws edits from a thumbnail on a canvas, which needs the picture readable from the page's origin) and `X-Content-Type-Options: nosniff`. The handler accepts `owlbum://thumb/…`, `owlbum://localhost/thumb/…` and `http://owlbum.localhost/thumb/…` alike. On Windows the webview addresses the scheme as `http://owlbum.localhost/…`; `ui/src/api/` builds the URL for the platform and nothing else does.
 
@@ -848,12 +848,12 @@ Rust tests in `owlbum-core`, using albums made by `owlbum-fixtures` in a tempora
 
 Only things a prototype or a measurement must settle. Each has an issue.
 
-1. **`rawler` and DNG.** Does it read DNG files from phones and from Adobe's converter (including lossy and linear DNG)? If not, DNG moves to "not supported yet".
-2. **RAW embedded previews.** Can the embedded JPEG be pulled from each of the eight formats without developing the sensor data, and how large is it per maker? This decides whether the RAW scan cost is really "read a JPEG" or "heavy".
+1. **`rawler` and DNG.** Partly settled in #49: `rawler` 0.8 reads an uncompressed Bayer DNG with its embedded preview and develops it. Lossy and linear DNG from phones and Adobe's converter are still to be checked against real files.
+2. **RAW embedded previews.** Partly settled in #49: `rawler` hands out embedded pictures without developing (`full_image`, `preview_image`, `thumbnail_image`, per decoder), and the handler takes the largest. Their sizes per maker were not measured (no sample files in the repository); cost stays "heavy".
 3. **RAW zoom look.** When zoom has to use `rawler`'s development, is the colour difference from the camera's embedded preview acceptable, or should zoom stay on the embedded preview and say "Preview only"?
 4. **Tauri issue #3725.** Which of the three Linux playback steps works on current WebKitGTK, and does `<video>` over `owlbum://` with ranges behave on WebView2 for multi-gigabyte files?
 5. **Linux poster frames.** Is the GStreamer pipeline reliable across distributions with only the base plug-ins, and how is its absence detected cleanly at run time?
-6. **Windows poster frames.** Does the shell thumbnail give at least 1600 px, and does it block on cloud or network files? If so, use the Media Foundation path first.
+6. **Windows poster frames.** In #50 the shell thumbnail is the only poster source; whether it gives 1600 px for large videos and whether it blocks on cloud files were not measured. The Media Foundation fallback and a check on real files are #155.
 7. **Thumbnail encoding.** JPEG qualities for 512 px and 1600 px. The encoder is `jpeg-encoder` (#11); `mozjpeg` could still be measured against it if file size matters. (`zune-jpeg` 0.5.15 has no reduced-size decode, checked in #6; a JPEG's preview uses `jpeg-decoder`'s scaled decode instead, #114.)
 8. **Colour conversion.** Settled in #7: `moxcms` 0.8.1, already a dependency of `image`. Measured against `lcms2` 6.3 (Little CMS 2.20) and `qcms` 0.3 on hand-built Display P3, Adobe RGB, sRGB and grey profiles, against values worked out from each profile's own numbers: all three stay within 1.5 levels (`moxcms` at most 1.2, mean 0.2). On five real monitor profiles `moxcms` and `lcms2` differ by at most 2 levels. All three refuse truncated, random and out-of-range profiles without panicking; given a profile whose colorants are all zero, `lcms2` and `qcms` turn every colour black while `moxcms` refuses it. The Windows "sRGB Color Space Profile" is recognised as sRGB and skipped. Converting a 6000 × 4000 picture on one thread: `moxcms` 57 to 77 ms, `qcms` 67 to 71 ms, `lcms2` 520 to 550 ms; building a transform takes 0.6 ms (`lcms2` 4 to 5 ms). The edit renderer in [Editing and file actions](06-editing-and-file-actions.md#rendering) uses `moxcms` too, with its 16-bit transform.
 9. **Encoders and decoders assumed here.** Settled in #6: `jxl-oxide` 0.12.6 has no encoder and `image` 0.25.10 writes only lossless WebP, so the capability table stands.

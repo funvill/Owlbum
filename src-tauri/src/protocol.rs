@@ -1,5 +1,5 @@
 //! The `owlbum://` protocol (docs/01-architecture.md, "The `owlbum://`
-//! protocol"): pictures for the page.
+//! protocol"): pictures and videos for the page.
 //!
 //! It is registered with Tauri's asynchronous handler. The handler itself
 //! runs on the main thread, so it only hands the request to the blocking
@@ -32,12 +32,16 @@ pub fn register<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
 /// Answers one request: the open album's picture the URL names, or 404.
 pub fn respond<R: Runtime, B>(app: &AppHandle<R>, request: &Request<B>) -> Response<Vec<u8>> {
     let url = request.uri().to_string();
+    let range = request
+        .headers()
+        .get(header::RANGE)
+        .and_then(|v| v.to_str().ok());
     let reply = match app.try_state::<Thumbs>() {
         Some(thumbs) => {
             // Hold the open album, not the session's lock, while a picture
             // is made: closing the album does not wait for it.
             let scanner = app.try_state::<Session>().and_then(|s| s.scanner());
-            serve::answer(scanner.as_deref().map(|s| s.open()), &thumbs, &url)
+            serve::answer(scanner.as_deref().map(|s| s.open()), &thumbs, &url, range)
         }
         None => Reply::not_found(),
     };
@@ -46,7 +50,14 @@ pub fn respond<R: Runtime, B>(app: &AppHandle<R>, request: &Request<B>) -> Respo
 
 /// The reply as an HTTP response.
 pub fn to_http(reply: Reply) -> Response<Vec<u8>> {
-    Response::builder()
+    let mut builder = Response::builder();
+    if reply.ranges {
+        builder = builder.header(header::ACCEPT_RANGES, "bytes");
+    }
+    if let Some(range) = &reply.content_range {
+        builder = builder.header(header::CONTENT_RANGE, range);
+    }
+    builder
         .status(reply.status)
         .header(header::CONTENT_TYPE, reply.content_type)
         .header(header::CACHE_CONTROL, reply.cache_control)

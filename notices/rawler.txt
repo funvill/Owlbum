@@ -1,0 +1,12 @@
+rawler
+
+Owlbum reads camera RAW files with rawler 0.8
+(https://github.com/dnglab/dnglab, crate rawler on crates.io), part of the
+dnglab project by Daniel Vogelbacher, Pedro Côrte-Real and contributors.
+rawler is under the GNU Lesser General Public License, version 2.1
+(https://www.gnu.org/licenses/old-licenses/lgpl-2.1.html).
+
+Owlbum links rawler unmodified. Its source code is available from the
+addresses above, at the version named in Owlbum's Cargo.lock, and Owlbum's
+own source is public (https://github.com/funvill/Owlbum), so the program can
+be rebuilt with a modified rawler as the licence allows.

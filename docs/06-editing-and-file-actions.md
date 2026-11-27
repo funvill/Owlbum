@@ -287,6 +287,8 @@ Three tests together pin "what you see is what gets saved".
 2. **Reference preview.** `owlbum-core` has `preview_reference(plan, thumbnail, box)`, a small Rust interpreter of the drawing rules above: the same affine transform with bilinear sampling, then the matrix on 8-bit sRGB values. A Rust test renders each fixture edit twice, once with the renderer at full size scaled down to the box, and once with `preview_reference` on the medium thumbnail. They must agree within a mean absolute difference of 2 levels per channel, with at most 1% of pixels differing by more than 12 levels.
 3. **Colour exactness.** For a flat-colour fixture and each fixture colour edit, the renderer's output pixel must be within 1 level per channel of `apply` on the input colour for PNG, and within 3 levels for JPEG.
 
+As built (#150), tests 2 and 3 are in `owlbum_core::edit::reference`. Test 2 renders a smooth generated scene (a blurred `scene` fixture) at a quarter of each fixture's photo size, with a thumbnail that keeps the medium thumbnail's share of the photo (1600 of 3000), so it runs in seconds; `preview_reference` draws the contained box only.
+
 ## Where edits are shown
 
 | Place | How the edit shows |
@@ -495,7 +497,7 @@ The format registry in [Media and scanning](03-media-and-scanning.md#formats-in-
 | JPEG | Quality 95, 4:4:4 chroma. Transparent parts are flattened onto white. |
 | WebP | Lossless, the only mode the encoder has (see Media and scanning). Transparency kept. This is why a WebP is saved as a copy only. |
 | PNG | Lossless. Bit depth and transparency kept. |
-| Metadata | The original's EXIF block is kept, with three changes: Orientation is set to 1, the pixel-size tags are set to the new size, and the embedded thumbnail is removed (it would show the old picture). XMP is kept as it is. RAW files give their EXIF to the JPEG copy. |
+| Metadata | The original's EXIF block is kept, with three changes: Orientation is set to 1, the pixel-size tags are set to the new size, and the embedded thumbnail is removed (it would show the old picture). XMP is kept as it is. RAW files give their EXIF to the JPEG copy. As built (#150), see [Metadata as built](#metadata-as-built). |
 | Colour profile | See [Rendering](#rendering). |
 | File dates | The new file gets the current modified time. The date shown in Owlbum comes from EXIF and does not change. |
 
@@ -627,7 +629,20 @@ The question is asked only when `edit_target` is `file`. The shell asks Rust for
 | 8. Encode | Encode in the target format with the settings in [Output](#output), with the metadata rules there. |
 | 9. Write | Write to `<out_path>.<uuid>.tmp`, flush to disk, and rename onto `out_path`. The temp file is removed on any failure. Returns the written width and height. |
 
-**Version 1 so far (#43, #47).** `render_edit` decodes through the handler's 8-bit sRGB `working` picture, renders with the steps above, and writes JPEG (quality 95, 4:4:4, transparency on white), PNG or lossless WebP through a temporary file. Saving (#47) uses it as it is. Keeping 16-bit samples and the source profile (the table below), the metadata rules in [Output](#output) (EXIF and XMP are not written yet, so a saved file has none), and agreement tests 2 and 3 are left to #150.
+**As built (#43, #47, #150).** `render_edit` decodes through the handler's `source` call, which keeps the file's own bit depth and its ICC profile, and renders in 8 or 16 bits. A 16-bit source saved as PNG stays 16-bit; JPEG and WebP are 8-bit, so a 16-bit source is rounded to 8 bits for them. Grey pictures become RGB. It writes JPEG (quality 95, 4:4:4, transparency on white), PNG or lossless WebP through a temporary file, with the profile by the table below and the metadata by [Output](#output).
+
+#### Metadata as built
+
+`owlbum_core::edit::metadata` is a small pure-Rust EXIF rewriter (no `little_exif`: it could not drop the embedded thumbnail). It reads the original's EXIF and XMP and rewrites the EXIF block in one of two ways:
+
+| Source | EXIF written |
+|---|---|
+| JPEG (APP1), PNG (`eXIf`), WebP (`EXIF`) | **In place.** The original block's bytes stay where they are, so values stored at an offset, the maker note above all, still read correctly. A new IFD 0 (Orientation 1; ImageWidth and ImageLength set when present) and a new Exif IFD (PixelXDimension and PixelYDimension set, ColorSpace 1 after a colour change) are appended, the header points at the new IFD 0, IFD 1 is unlinked and the thumbnail's bytes are cut off or cleared. |
+| TIFF, DNG and the TIFF-based RAW formats | **Compact.** The file is the EXIF structure, so only IFD 0's descriptive tags (description, make, model, resolution, software, date, artist, copyright), the Exif IFD without the maker note (its offsets cannot be moved) and the GPS IFD are copied into a fresh block, with the same three changes. A TIFF's XMP (tag 700) is kept. |
+| An in-place block over a JPEG segment's 65,527 bytes | Compact, as above, so the maker note is dropped. |
+| RAW formats that are not TIFF-based (CR3, RAF and similar), GIF, BMP, JPEG XL | No EXIF and no XMP. |
+
+XMP is written as it was read: a JPEG APP1 XMP segment (a packet over one segment, extended XMP, is left out), a PNG uncompressed `iTXt` chunk `XML:com.adobe.xmp`, a WebP `XMP ` chunk. Only an uncompressed PNG XMP packet is read.
 
 **Colour profiles.**
 
@@ -954,8 +969,8 @@ Error codes this part adds to `AppError`:
 1. **Is the close question in `file` mode wanted at all?** Nothing is lost by closing, so it is only a reminder. It could be dropped, or shown once per session.
 2. **Does the trash library ever delete for good?** On a Windows drive with no Recycle Bin, a recycle request can turn into a permanent delete unless the right flags are set. A prototype must show that `trash` fails there instead, on Windows and on Linux mounts with no trash folder. If it cannot, the shell needs its own call.
 3. **File lists on the Linux clipboard.** Which mechanism works on both X11 and Wayland, and whether the clipboard keeps the list after the window loses focus, is not known until the prototype.
-4. **Writing metadata.** [Architecture](01-architecture.md#dependencies-chosen) chooses `little_exif` to keep the EXIF block and reset Orientation. Whether it can also set the size tags and drop the embedded thumbnail in JPEG, PNG and WebP output must be confirmed against the pinned version.
-5. **Colour management.** Thumbnails are converted to sRGB by the media handlers (see [Media and scanning](03-media-and-scanning.md#media-handlers)), and the renderer must use the same library for its own conversion (`moxcms` or `lcms2`, chosen in the thumbnail work). The renderer also keeps 16-bit samples and the source profile when there is no colour change, which the handlers' 8-bit sRGB `working` call does not give it; it needs a deeper decode path from the same handlers, to be designed with that work.
+4. **Writing metadata.** Settled in #150: a small pure-Rust rewriter instead of `little_exif`; see [Metadata as built](#metadata-as-built).
+5. **Colour management.** Settled: the renderer decodes through the handlers' `source` call and converts with `moxcms` (8- and 16-bit transforms) by the [Colour profiles](#rendering) table (#150).
 6. **SVG filters on many tiles in WebKitGTK.** A grid in which most tiles carry a colour filter and a transform may scroll slowly on Linux. If it does, tiles with a colour edit need small rendered thumbnails from Rust instead.
 7. **TIFF in place.** TIFF is copy-only in version 1 because writing TIFF with its metadata intact is unproven. Scans kept as TIFF would be better served by saving as TIFF.
 8. **Lossless JPEG turns.** A save whose edit is only a quarter turn or a flip could turn the JPEG without re-encoding. Version 1 re-encodes at quality 95.

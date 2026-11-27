@@ -19,7 +19,7 @@ fn path() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../fixtures/edit-plans.json")
 }
 
-fn cases() -> Vec<(&'static str, PhotoEdit, (u32, u32))> {
+pub(crate) fn cases() -> Vec<(&'static str, PhotoEdit, (u32, u32))> {
     let crop = CropRect {
         x: 0.1,
         y: 0.05,

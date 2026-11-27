@@ -554,6 +554,9 @@ mod tests {
         "crates/owlbum-core/src/info/detail/tests.rs",
         "ui/src/features/details/DetailsPanel.test.tsx",
         "ui/src/features/details/facts.test.ts",
+        // Fake rows of files not shown (`2024/0.heic`), and the notice's
+        // labels, which are what the backend sends.
+        "ui/src/features/album/Notices.test.tsx",
     ];
 
     fn known_extensions() -> HashSet<String> {

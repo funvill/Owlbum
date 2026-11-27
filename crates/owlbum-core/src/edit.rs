@@ -7,6 +7,8 @@
 //! - [`plan`]: `edit_plan`, `colour_matrix`, `auto_colour`, and the drawing
 //!   rules the page's `EditedImage` follows.
 //! - [`render`]: the renderer that writes edited pictures.
+//! - [`save`]: Save into the file, Save all, Save as…, the save record
+//!   and its recovery.
 //! - [`store`]: `photos.edit`, `edit_set`, `edit_turn`, `edit_revert` and
 //!   their undo steps.
 
@@ -14,6 +16,7 @@ pub mod auto;
 pub mod model;
 pub mod plan;
 pub mod render;
+pub mod save;
 pub mod store;
 
 pub use model::{Colour, CropRect, IDENTITY, PhotoEdit, TurnOp, parse_edit};

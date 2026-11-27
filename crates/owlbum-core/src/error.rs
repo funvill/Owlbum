@@ -38,6 +38,20 @@ pub enum ErrorCode {
     EditNotEditable,
     /// The edited photo could not be made.
     EditRenderFailed,
+    /// Save into the file: the format can only be saved as a copy.
+    EditCopyOnly,
+    /// Save into the file: the photo has no edit to save.
+    EditNone,
+    /// Save into the file: the photo is already being saved.
+    EditBusy,
+    /// Save into the file: the original could not go to the bin; nothing
+    /// was changed.
+    EditOriginalNotMoved,
+    /// Save into the file: the original is in the bin and the edited photo
+    /// could not be put in its place.
+    EditNotPlaced,
+    /// Save into the file: the file was saved and could not be read again.
+    EditSavedNotRead,
     /// A photo's file is not there.
     FileMissing,
     /// The path given to `album_open` cannot be read.
@@ -58,6 +72,11 @@ pub enum ErrorCode {
     PhotoNotFound,
     /// The token was dropped; run the query again.
     QueryExpired,
+    /// Save as: the chosen name, after its extension was forced, names a
+    /// file that already exists.
+    SaveAsExists,
+    /// Save as: the chosen file is the original.
+    SaveAsSameFile,
     /// The action must wait for the scan.
     ScanRunning,
     /// `app_settings_set` was given a value outside the setting's range.

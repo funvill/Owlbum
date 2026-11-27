@@ -58,6 +58,16 @@ pub trait Desktop: Send + Sync {
     /// Starts dragging `paths` out with `icon` (PNG bytes), offering copy
     /// only, never move. Only called where the platform offers drag-out.
     fn start_drag(&self, paths: Vec<PathBuf>, icon: Vec<u8>) -> Result<(), String>;
+    /// The native Save dialog of Save as… (docs/06, "Save as…"), modal to
+    /// the window. It asks before replacing a file. None when cancelled.
+    fn save_dialog(&self, _dialog: &owlbum_core::edit::save::SaveAsDialog) -> Option<PathBuf> {
+        None
+    }
+    /// The close question in `file` mode (docs/06, "Closing and
+    /// quitting"). True for "Close anyway".
+    fn confirm_close(&self, _message: &str, _detail: &str) -> bool {
+        true
+    }
 }
 
 /// The app's [`Desktop`], managed as state.

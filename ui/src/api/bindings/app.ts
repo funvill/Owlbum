@@ -1,6 +1,7 @@
 // Generated from the Rust command registry (src-tauri/src/bindings.rs). Do not edit;
 // run scripts/bindings.sh after changing a command, an event or a type.
 
+import type { AppClosing } from "./AppClosing";
 import type { AppVersion } from "./AppVersion";
 import type { CacheCleared } from "./CacheCleared";
 import type { CacheUsage } from "./CacheUsage";
@@ -18,6 +19,7 @@ export type AppCommands = {
   app_cache_clear: { args: Record<string, never>; result: CacheCleared };
   app_cache_usage: { args: Record<string, never>; result: CacheUsage };
   app_capabilities: { args: Record<string, never>; result: Capabilities };
+  app_close_ready: { args: Record<string, never>; result: null };
   app_formats: { args: Record<string, never>; result: Array<FormatInfo> };
   app_pick_folder: { args: Record<string, never>; result: string | null };
   app_place_search: { args: { text: string }; result: Array<CountryMatch> };
@@ -31,6 +33,7 @@ export type AppCommands = {
 };
 
 export type AppEvents = {
+  app_closing: AppClosing;
   folder_drop: FolderDrop;
   open_folder: OpenFolder;
 };

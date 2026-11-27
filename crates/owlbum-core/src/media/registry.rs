@@ -557,6 +557,8 @@ mod tests {
         // Fake rows of files not shown (`2024/0.heic`), and the notice's
         // labels, which are what the backend sends.
         "ui/src/features/album/Notices.test.tsx",
+        // Save tests name the extension Save as forces as test data.
+        "crates/owlbum-core/src/edit/save/tests.rs",
     ];
 
     fn known_extensions() -> HashSet<String> {

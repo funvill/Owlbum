@@ -6,6 +6,7 @@
 //! the updater and single-instance handling.
 
 pub mod bindings;
+pub mod closing;
 pub mod commands;
 pub mod desktop;
 pub mod events;
@@ -29,8 +30,14 @@ pub fn setup<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
         .manage(session::Session::default())
         .manage(handoff::Handoff::default())
         .manage(commands::file::DragPrep::default())
+        .manage(closing::Closing::default())
         .on_window_event(|window, event| match event {
             WindowEvent::Focused(true) => window.state::<session::Session>().focused(),
+            WindowEvent::CloseRequested { api, .. } => {
+                if closing::requested(window.app_handle()) {
+                    api.prevent_close();
+                }
+            }
             WindowEvent::DragDrop(drop) => dropped(window.app_handle(), drop),
             _ => {}
         })

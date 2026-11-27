@@ -56,6 +56,45 @@ impl<R: Runtime> Desktop for NativeDesktop<R> {
         dialog.blocking_show()
     }
 
+    fn save_dialog(&self, d: &owlbum_core::edit::save::SaveAsDialog) -> Option<PathBuf> {
+        use tauri_plugin_dialog::DialogExt;
+        let exts: Vec<&str> = d.extensions.iter().map(String::as_str).collect();
+        let mut dialog = self
+            .app
+            .dialog()
+            .file()
+            .set_title(owlbum_core::text::edit::SAVE_AS_TITLE)
+            .set_directory(&d.folder)
+            .set_file_name(&d.default_name)
+            .add_filter(&d.filter, &exts);
+        if let Some(window) = self.app.get_webview_window("main") {
+            dialog = dialog.set_parent(&window);
+        }
+        dialog.blocking_save_file()?.into_path().ok()
+    }
+
+    fn confirm_close(&self, message: &str, detail: &str) -> bool {
+        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
+        let mut dialog = self
+            .app
+            .dialog()
+            .message(format!(
+                "{message}
+
+{detail}"
+            ))
+            .title("Owlbum")
+            .kind(MessageDialogKind::Warning)
+            .buttons(MessageDialogButtons::OkCancelCustom(
+                owlbum_core::text::edit::CLOSE_ANYWAY.to_owned(),
+                owlbum_core::text::edit::GO_BACK.to_owned(),
+            ));
+        if let Some(window) = self.app.get_webview_window("main") {
+            dialog = dialog.parent(&window);
+        }
+        dialog.blocking_show()
+    }
+
     fn trash(&self, path: &Path) -> Result<(), String> {
         trash::delete(path).map_err(|e| match e {
             trash::Error::Os { description, .. } => description,

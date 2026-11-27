@@ -113,6 +113,8 @@ impl Session {
         let old = self.slot().take();
         if let Some(old) = &old {
             old.album().set_status_listener(Arc::new(|_| {}));
+            // Save all stops after the photo it is saving.
+            old.album().saves().stop();
             old.scanner.cancel();
         }
         drop(old);
@@ -182,5 +184,18 @@ pub fn open_album<R: Runtime>(app: &AppHandle<R>, album: Album) {
     }
     let mut env = ScanEnv::new(emitter);
     env.thumbs = app.try_state::<Thumbs>().map(|t| t.inner().clone());
+    recover_saves(app, &album);
     app.state::<Session>().open(album, env);
+}
+
+/// Settles the save records of a save into a file that did not finish
+/// (docs/06-editing-and-file-actions.md, "The save record and recovery"),
+/// before the album's first scan. Its messages go to the log.
+fn recover_saves<R: Runtime>(app: &AppHandle<R>, album: &Album) {
+    let no_bin = |_: &std::path::Path| Err(String::new());
+    let env =
+        owlbum_core::edit::save::SaveEnv::new(crate::commands::edit::renders_dir(app), &no_bin);
+    for notice in owlbum_core::edit::save::recover(album, &env) {
+        tracing::warn!(target: "edit", "{notice}");
+    }
 }

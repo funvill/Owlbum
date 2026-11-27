@@ -264,10 +264,11 @@ impl QueryEngine {
             // photos on Windows, against 0.4 ms in one (#26).
             let tx = conn.unchecked_transaction().map_err(&failed)?;
             let mut stmt = tx
-                .prepare_cached(
-                    "SELECT rel_path, file_name, thumb_key, kind, width, height, duration_ms, star, hidden, edit
-                       FROM photos WHERE id = ?1",
-                )
+                .prepare_cached(concat!(
+                    "SELECT rel_path, file_name, thumb_key, kind, width, height, duration_ms, star, hidden, ",
+                    crate::edit::save::drawn_edit!(),
+                    " FROM photos WHERE id = ?1",
+                ))
                 .map_err(&failed)?;
             for (slot, &id) in display.iter_mut().zip(ids) {
                 if slot.is_some() {

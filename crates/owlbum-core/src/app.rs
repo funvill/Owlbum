@@ -110,6 +110,17 @@ impl Event for FolderDrop {
     const NAME: &'static str = "folder_drop";
 }
 
+/// The `app_closing` event (docs/08-desktop-and-release.md, "Closing and
+/// quitting"): the window is about to close or the program to quit. The
+/// page ends edit mode as Done, saves the session and answers with
+/// `app_close_ready`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+pub struct AppClosing {}
+
+impl Event for AppClosing {
+    const NAME: &'static str = "app_closing";
+}
+
 /// The folder a path opens: a folder opens itself, a file the folder that
 /// holds it. A path that is neither (gone, unreadable) is kept, so that
 /// opening it shows why it cannot be opened.

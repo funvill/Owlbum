@@ -152,6 +152,9 @@ pub struct Album {
     /// The undo list (docs/05-organising.md, "Undo"): in memory, cleared
     /// when the album closes.
     undo: UndoList,
+    /// The photos being saved into their files now
+    /// (docs/06-editing-and-file-actions.md, "Save into the file").
+    saves: crate::edit::save::Saves,
 }
 
 impl Drop for Album {
@@ -329,6 +332,7 @@ impl Album {
                     state: Arc::default(),
                     backup: Mutex::default(),
                     undo: UndoList::default(),
+                    saves: crate::edit::save::Saves::default(),
                 });
             }
         };
@@ -366,6 +370,7 @@ impl Album {
             state,
             backup: Mutex::new(backup),
             undo: UndoList::default(),
+            saves: crate::edit::save::Saves::default(),
         })
     }
 
@@ -406,6 +411,7 @@ impl Album {
             state: Arc::default(),
             backup: Mutex::default(),
             undo: UndoList::default(),
+            saves: crate::edit::save::Saves::default(),
         })
     }
 
@@ -492,6 +498,12 @@ impl Album {
     /// The album's undo list (docs/05-organising.md, "Undo").
     pub fn undo(&self) -> &UndoList {
         &self.undo
+    }
+
+    /// The saves into files running now: busy photos, paths the scanner
+    /// skips, and the stop flag Save all reads.
+    pub fn saves(&self) -> &crate::edit::save::Saves {
+        &self.saves
     }
 
     /// Runs `job` in a transaction on the writer thread, like

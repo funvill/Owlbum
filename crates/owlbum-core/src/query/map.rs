@@ -114,12 +114,13 @@ fn read_places(album: &Album) -> AppResult<HashMap<i64, Place>> {
     album.db().read(|conn| {
         let failed = sqlite_error(text::query::READING_ROWS);
         let mut stmt = conn
-            .prepare_cached(
-                "SELECT id, loc_lat, loc_lon, gps_lat, gps_lon, thumb_key, file_name, width, height, edit
-                   FROM photos
+            .prepare_cached(concat!(
+                "SELECT id, loc_lat, loc_lon, gps_lat, gps_lon, thumb_key, file_name, width, height, ",
+                crate::edit::save::drawn_edit!(),
+                " FROM photos
                   WHERE (loc_lat IS NOT NULL AND loc_lon IS NOT NULL)
                      OR (gps_lat IS NOT NULL AND gps_lon IS NOT NULL)",
-            )
+            ))
             .map_err(&failed)?;
         let rows = stmt
             .query_map([], |r| {

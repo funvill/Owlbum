@@ -47,4 +47,16 @@ export const editHandlers: AreaHandlers<EditCommands> = {
   edit_set: ({ edit }) => ({ changed: true, plan: edit === null ? null : fakePlan(4032, 3024, edit.rotate), revision: 2 }),
   edit_turn: ({ photo_ids }) => ({ changed: photo_ids, skipped: 0, revision: 2 }),
   edit_revert: ({ photo_ids }) => ({ changed: photo_ids, revision: 2 }),
+  edit_status: () => ({ edited: 0, waiting: 0, saving: 0 }),
+  edit_save_to_file: ({ photo_ids }) => ({ saved: photo_ids, failed: [], skipped: 0, warnings: [], revision: 2 }),
+  edit_save_all: () => ({ saved: [], failed: [], skipped: 0, warnings: [], revision: 2 }),
+  // The dialog was cancelled. A test that saves a copy replaces this.
+  edit_save_as: () => ({
+    cancelled: true,
+    saved_name: null,
+    in_album: false,
+    photo_id: null,
+    warning: null,
+    revision: 1,
+  }),
 };

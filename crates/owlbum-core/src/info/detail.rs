@@ -219,10 +219,11 @@ pub fn photo_detail(album: &Album, overlay: &Mutex<Overlay>, id: i64) -> AppResu
 fn typed(conn: &Connection, id: i64) -> AppResult<Option<Typed>> {
     let failed = sqlite_error(text::photo::READING_DETAIL);
     let typed = conn
-        .prepare_cached(
-            "SELECT star, hidden, date_override, loc_lat, loc_lon, loc_name, description, notes, edit
-               FROM photos WHERE id = ?1",
-        )
+        .prepare_cached(concat!(
+            "SELECT star, hidden, date_override, loc_lat, loc_lon, loc_name, description, notes, ",
+            crate::edit::save::drawn_edit!(),
+            " FROM photos WHERE id = ?1",
+        ))
         .and_then(|mut st| {
             st.query_row([id], |r| {
                 Ok(Typed {

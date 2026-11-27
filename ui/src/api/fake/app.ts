@@ -138,6 +138,7 @@ export const appHandlers: AreaHandlers<AppCommands> = {
   }),
   // Windows: files are dragged out and copied as files.
   app_capabilities: () => ({ drag_out: true, copy_files: "files" }),
+  app_close_ready: () => null,
   app_formats: () =>
     fakeFormats.map((f) => ({ ...f, extensions: [...f.extensions] })),
   // The dialog was cancelled. A test that picks a folder replaces this.

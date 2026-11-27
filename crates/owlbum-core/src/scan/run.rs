@@ -527,6 +527,14 @@ impl Work<'_, '_> {
                 .filter(|k| k.missing || folders.holds(&k.rel_path))
                 .collect(),
         };
+        // A path being saved into is skipped whole, row and file, until its
+        // save lets it go (docs/06-editing-and-file-actions.md, "Save into
+        // the file", step 2): its file may be in the bin for a moment.
+        let saves = self.scan.album.saves();
+        let known: Vec<Known> = known
+            .into_iter()
+            .filter(|k| !saves.skips(&k.rel_path))
+            .collect();
         let mut by_path: HashMap<&str, &Known> =
             known.iter().map(|k| (k.rel_path.as_str(), k)).collect();
 
@@ -535,6 +543,9 @@ impl Work<'_, '_> {
         let mut pixels_jobs: Vec<PixelsJob> = Vec::new();
         let mut new_files: Vec<usize> = Vec::new();
         for (index, file) in walk.files.iter().enumerate() {
+            if saves.skips(&file.rel_path) {
+                continue;
+            }
             match by_path.remove(file.rel_path.as_str()) {
                 Some(row) => self.found(row, file, index, None, &mut facts_jobs, &mut pixels_jobs),
                 None => new_files.push(index),

@@ -7,7 +7,7 @@ use crate::handoff::Handoff;
 use crate::session::Session;
 use crate::{area, command};
 use owlbum_core::album::reopen;
-use owlbum_core::app::{self, AppVersion, FolderDrop, OpenFolder, Startup};
+use owlbum_core::app::{self, AppClosing, AppVersion, FolderDrop, OpenFolder, Startup};
 use owlbum_core::appdata::{AppData, Recent, Settings};
 use owlbum_core::files::Capabilities;
 use owlbum_core::info::country::{self, CountryMatch};
@@ -23,6 +23,7 @@ area! {
         app_cache_clear,
         app_cache_usage,
         app_capabilities,
+        app_close_ready,
         app_formats,
         app_pick_folder,
         app_place_search,
@@ -34,7 +35,7 @@ area! {
         app_startup,
         app_version,
     ],
-    events: [FolderDrop, OpenFolder],
+    events: [AppClosing, FolderDrop, OpenFolder],
 }
 
 command! {
@@ -61,6 +62,18 @@ command! {
     /// "Dragging photos out"). The page asks this, not the user agent.
     pub fn app_capabilities() -> Capabilities {
         Ok(Capabilities::current())
+    }
+}
+
+command! {
+    /// The page's answer to `app_closing`: edit mode has ended as Done and
+    /// the session is saved, so the close can go on
+    /// (docs/08-desktop-and-release.md, "Closing and quitting").
+    pub fn app_close_ready<R: Runtime>(; app: AppHandle<R>) -> () {
+        if let Some(closing) = app.try_state::<crate::closing::Closing>() {
+            closing.ready();
+        }
+        Ok(())
     }
 }
 

@@ -23,6 +23,7 @@ export const fileHandlers: AreaHandlers<FileCommands> = {
     };
   },
   file_copy_image: () => ({ scaled: false, file: false, with_edits: false }),
+  file_copy_text: () => null,
   file_copy_paths: ({ photo_ids }) => {
     const ids = unique(photo_ids);
     return { copied: Math.min(ids.length, FILE_LIMIT), dropped: Math.max(0, ids.length - FILE_LIMIT) };

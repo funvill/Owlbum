@@ -1,19 +1,26 @@
 // The details panel (docs/04-browsing.md, "The details panel"): the
 // current photo's facts, camera, histogram and place, in foldable
-// sections, with the typed-info parts (#24) slotted into their sections.
+// sections, with the typed-info parts (#24) slotted into their sections,
+// and the file's EXIF tags. Its head holds Copy, which puts all of it on
+// the clipboard as plain text; the file name heading and the Close
+// details button were taken out on the owner's feedback (issue 167).
 //
 // The panel holds no current photo of its own. The page's one current
 // photo (the grid's, settled by every `query_run`) is passed in, so the
 // preview and the details never disagree.
 
-import { Fragment, useId, type ReactNode } from "react";
+import { Fragment, useEffect, useId, useState, type ReactNode } from "react";
+import { api } from "../../api";
+import type { ExifField } from "../../api/bindings/ExifField";
 import type { PhotoDetail } from "../../api/bindings/PhotoDetail";
-import { IconButton, Pill, Tooltip } from "../../controls";
+import { Button, IconButton, Pill, Tooltip } from "../../controls";
 import { Icon } from "../../icons";
 import { detailsText as t, type SectionId } from "../../text/details";
 import { useAlbumStore, viewOnlyReason } from "../album";
+import { copyPaths } from "../files/actions";
 import { PickPlaceButton } from "../map/PlacePicker";
 import { ScoreCard } from "../organise/ScoreCard";
+import { copyDetails } from "./copy";
 import { cameraRows, factRows, formatCoordinates, type FactRow } from "./facts";
 import { HistogramSection } from "./HistogramChart";
 import { SECTION_IDS, sectionShown, useSections } from "./sections";
@@ -25,17 +32,11 @@ import "./DetailsPanel.css";
 /** The current photo, as the panel is given it. */
 export interface CurrentPhoto {
   id: number;
-  /** The file name from the photo's row, shown in the head while the details load. */
-  file_name?: string | null;
-  /** The path relative to the album root from the row, the head's tooltip meanwhile. */
-  rel_path?: string | null;
 }
 
 export interface DetailsPanelProps {
   /** The page's current photo, or null when nothing is selected. */
   current: CurrentPhoto | null;
-  /** The close button: clears the selection. */
-  onClose(): void;
   /** `photo_detail` answered `photo_not_found`: re-run the query, which settles the current photo again. */
   onNotFound(): void;
   /**
@@ -94,10 +95,13 @@ function Section({
   );
 }
 
-/** The Photo section: the fact rows, with Taken's "changed" badge. */
+/**
+ * The Photo section: the fact rows, with Taken's "changed" badge, and the
+ * Path row: the file's absolute path with a button that copies it.
+ */
 function PhotoFacts({ detail }: { detail: PhotoDetail }) {
   return (
-    <Rows rows={factRows(detail)}>
+    <Rows rows={[...factRows(detail), { label: t.path, value: detail.abs_path }]}>
       {(row) =>
         row.label === t.taken && detail.date.typed !== null ? (
           <>
@@ -108,9 +112,47 @@ function PhotoFacts({ detail }: { detail: PhotoDetail }) {
               </span>
             </Tooltip>
           </>
+        ) : row.label === t.path ? (
+          <span className="ow-details__path">
+            <span className="ow-details__path-text ow-selectable">{row.value}</span>
+            <IconButton icon="copy" label={t.copyPath} onClick={() => void copyPaths([detail.id])} />
+          </span>
         ) : null
       }
     </Rows>
+  );
+}
+
+/**
+ * The EXIF section: every tag the file carries, in file order, read with
+ * `photo_exif` while the section is open (a folded section reads nothing).
+ */
+function ExifFacts({ id, revision }: { id: number; revision: number }) {
+  const [state, setState] = useState<{ id: number; fields: ExifField[] | null } | null>(null);
+  useEffect(() => {
+    let live = true;
+    api()
+      .invoke("photo_exif", { id })
+      .then((fields) => live && setState({ id, fields }))
+      .catch(() => live && setState({ id, fields: null }));
+    return () => {
+      live = false;
+    };
+  }, [id, revision]);
+  if (state === null || state.id !== id) return null;
+  if (state.fields === null) return <p className="ow-details__muted">{t.exifFailed}</p>;
+  if (state.fields.length === 0) return <p className="ow-details__muted">{t.noExif}</p>;
+  return (
+    <dl className="ow-details__rows ow-details__exif">
+      {state.fields.map((f, i) => (
+        <Fragment key={`${i}:${f.group}:${f.name}`}>
+          <dt className="ow-details__label" title={f.group}>
+            {f.name}
+          </dt>
+          <dd className="ow-details__value ow-selectable">{f.value}</dd>
+        </Fragment>
+      ))}
+    </dl>
   );
 }
 
@@ -174,6 +216,8 @@ function SectionBody({
       return <DateField {...typed} />;
     case "notes":
       return <NotesFields {...typed} />;
+    case "exif":
+      return <ExifFacts id={detail.id} revision={detail.revision} />;
   }
 }
 
@@ -195,7 +239,7 @@ function Body({ detail, sections }: { detail: PhotoDetail; sections: ReturnType<
   );
 }
 
-export function DetailsPanel({ current, onClose, onNotFound, shared }: DetailsPanelProps) {
+export function DetailsPanel({ current, onNotFound, shared }: DetailsPanelProps) {
   const own = useDetail(shared === undefined ? (current?.id ?? null) : null, onNotFound);
   const { detail, error } = shared ?? own;
   const sections = useSections();
@@ -208,18 +252,19 @@ export function DetailsPanel({ current, onClose, onNotFound, shared }: DetailsPa
     );
   }
 
-  const name = detail?.file_name ?? current.file_name ?? "";
-  const path = detail?.rel_path ?? current.rel_path ?? name;
+  // Copy acts on this photo's details only, never on an answer for the one before.
+  const shown = detail !== null && detail.id === current.id ? detail : null;
   return (
     <aside className="ow-details" aria-label={t.region}>
-      <header className="ow-details__head">
-        <Tooltip text={path}>
-          <h2 className="ow-details__name" tabIndex={0}>
-            {name}
-          </h2>
-        </Tooltip>
-        <IconButton icon="x" label={t.close} onClick={onClose} />
-      </header>
+      {shown !== null && (
+        <header className="ow-details__head">
+          <Tooltip text={t.copyAllTooltip}>
+            <Button icon="copy" size="sm" onClick={() => void copyDetails(shown)}>
+              {t.copyAll}
+            </Button>
+          </Tooltip>
+        </header>
+      )}
       {detail !== null && <Body key={detail.id} detail={detail} sections={sections} />}
       {detail === null && error !== null && <p className="ow-details__empty">{t.couldNotRead}</p>}
     </aside>

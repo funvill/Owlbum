@@ -852,6 +852,7 @@ Every command takes photo ids. An unknown id answers `photo_not_found`. A comman
 | `file_copy_image` | `photo_id` | `{ scaled, file, with_edits }` | `file` when a video's file was copied instead; `with_edits` while the copy cannot show the edit yet. |
 | `file_copy_files` | `photo_ids` | `{ copied, dropped, as, with_edits }` | `as` is `files` or `paths`. |
 | `file_copy_paths` | `photo_ids` | `{ copied, dropped }` | |
+| `file_copy_text` | `content` | nothing | Puts plain text on the clipboard: the details panel's Copy ([Browsing](04-browsing.md#the-details-panel)). At most 1 MiB. Errors: `internal` for more, `clipboard_failed`. |
 | `file_prepare_drag` | `photo_ids` | nothing | Never fails; a failure shows at start. |
 | `file_start_drag` | `photo_ids` | `{ dragged, with_edits }` | |
 | `app_capabilities` | | `{ drag_out, copy_files }` | What this platform offers. `copy_files` is `files` or `paths`. |

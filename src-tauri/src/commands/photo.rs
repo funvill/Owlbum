@@ -5,6 +5,7 @@ use crate::session::Session;
 use crate::{area, command};
 use owlbum_core::album::{AlbumChanged, ChangeReason};
 use owlbum_core::info::detail::{self, PhotoDetail};
+use owlbum_core::info::exif_list::{self, ExifField};
 use owlbum_core::info::histogram::{self, Histogram};
 use owlbum_core::info::typed::{self, InfoChanged, InfoPatch};
 use owlbum_core::organise::nudge::{self, Nudged};
@@ -15,7 +16,7 @@ use tauri::{AppHandle, Manager, Runtime, State};
 
 area! {
     prefix: "photo",
-    commands: [photo_detail, photo_histogram, photo_set_info, photo_nudge, photo_score],
+    commands: [photo_detail, photo_exif, photo_histogram, photo_set_info, photo_nudge, photo_score],
     events: [],
 }
 
@@ -28,6 +29,21 @@ command! {
         off_main(text::photo::READING_DETAIL, move || {
             let open = scanner.open();
             detail::photo_detail(open.album, open.overlay, id)
+        })
+        .await
+    }
+}
+
+command! {
+    /// Every EXIF tag of one photo's file, in file order, for the details
+    /// panel's EXIF section (docs/04-browsing.md, "EXIF section"). Read
+    /// from the file each time; empty when it has none. `photo_not_found`
+    /// as for `photo_detail`.
+    pub async fn photo_exif(id: i64; session: State<'_, Session>) -> Vec<ExifField> {
+        let (scanner, _) = session.queries()?;
+        off_main(text::photo::READING_DETAIL, move || {
+            let open = scanner.open();
+            exif_list::photo_exif(open.album, open.overlay, id)
         })
         .await
     }

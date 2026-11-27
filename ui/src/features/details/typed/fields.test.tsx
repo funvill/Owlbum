@@ -32,7 +32,7 @@ afterEach(() => {
 function setup(current: CurrentPhoto | null, overrides: Partial<FakeHandlers> = {}) {
   const fake = createFakeApi(overrides);
   setApi(fake);
-  const view = (c: CurrentPhoto | null) => <DetailsPanel current={c} onClose={() => {}} onNotFound={() => {}} />;
+  const view = (c: CurrentPhoto | null) => <DetailsPanel current={c} onNotFound={() => {}} />;
   const { rerender } = render(view(current));
   return { fake, show: (c: CurrentPhoto | null) => rerender(view(c)) };
 }
@@ -124,7 +124,7 @@ describe("typed fields", () => {
     const box = await screen.findByRole("textbox", { name: "Description" });
     await user.type(box, "Unsaved");
     show({ id: 2 });
-    await screen.findByText("IMG_0002.jpg");
+    await screen.findByText(/IMG_0002\.jpg$/);
     expect(patches(fake)).toEqual([{ ids: [1], patch: { description: "Unsaved" } }]);
   });
 
@@ -141,7 +141,7 @@ describe("typed fields", () => {
     expect(await screen.findByText("That is not a valid date and time. Use YYYY-MM-DD HH:MM.")).toBeInTheDocument();
     expect(patches(fake)).toEqual([]);
     show({ id: 2 });
-    await screen.findByText("IMG_0002.jpg");
+    await screen.findByText(/IMG_0002\.jpg$/);
     expect(patches(fake)).toEqual([]);
   });
 

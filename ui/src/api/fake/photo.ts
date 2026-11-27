@@ -1,3 +1,4 @@
+import type { ExifField } from "../bindings/ExifField";
 import type { Histogram } from "../bindings/Histogram";
 import type { PhotoCommands } from "../bindings/photo";
 import type { PhotoDetail } from "../bindings/PhotoDetail";
@@ -93,9 +94,21 @@ export function fakeScore(changes: Partial<ScoreBreakdown> = {}): ScoreBreakdown
   };
 }
 
+/** The EXIF tags of a fake photo, as `photo_exif` lists them. */
+export function fakeExif(): ExifField[] {
+  return [
+    { group: "Image", name: "Make", value: "Owlbum" },
+    { group: "Image", name: "Model", value: "Fixture One" },
+    { group: "Exif", name: "ExposureTime", value: "1/250" },
+    { group: "Exif", name: "FNumber", value: "56/10" },
+    { group: "GPS", name: "GPSLatitudeRef", value: "N" },
+  ];
+}
+
 /** The fake backend's `photo_` commands. */
 export const photoHandlers: AreaHandlers<PhotoCommands> = {
   photo_detail: ({ id }) => fakeDetail(id),
+  photo_exif: () => fakeExif(),
   photo_histogram: () => fakeHistogram(),
   photo_set_info: ({ ids }) => ({ changed: ids, revision: 2 }),
   photo_nudge: ({ ids }) => ({ changed: ids, total: 55, revision: 2 }),

@@ -400,7 +400,7 @@ When the window narrows, space is taken in this order:
 
 Shrinking this way does not change the widths the user chose. When the window grows again the columns return to them. Dragging a splitter does change them, and a drag cannot push any column below its minimum.
 
-All three columns always show. The details panel's close button clears the selection and leaves the column in place, empty, as [Browsing](04-browsing.md#the-details-panel) says; the preview is never narrower than 300 px.
+All three columns always show. With nothing selected (Ctrl+D) the details column stays in place, empty, as [Browsing](04-browsing.md#the-details-panel) says; the preview is never narrower than 300 px.
 
 ### The bars
 

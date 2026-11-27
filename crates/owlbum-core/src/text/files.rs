@@ -30,6 +30,10 @@ pub fn reveal_failed(reason: &str) -> String {
 }
 
 /// `clipboard_failed` for copy path.
+pub fn copy_text_failed(reason: &str) -> String {
+    format!("Couldn't copy the text: {reason}")
+}
+
 pub fn copy_path_failed(reason: &str) -> String {
     format!("Couldn't copy the path: {reason}")
 }
@@ -57,6 +61,7 @@ pub const READ_FAILED: &str = "Couldn't read that photo.";
 pub const TRASHING: &str = "moving photos to the bin";
 /// What was being done, for an `internal` error.
 pub const COPYING: &str = "copying photos";
+pub const COPYING_TEXT: &str = "copying text";
 /// What was being done, for an `internal` error.
 pub const DRAGGING: &str = "dragging photos";
 /// What was being done, for an `internal` error.

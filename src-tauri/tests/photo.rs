@@ -11,6 +11,7 @@ use image::{Rgb, RgbImage};
 use owlbum_core::album::{Album, OpenOptions};
 use owlbum_core::appdata::AppData;
 use owlbum_core::info::detail::PhotoDetail;
+use owlbum_core::info::exif_list::ExifField;
 use owlbum_core::info::histogram::Histogram;
 use owlbum_core::media::MediaKind;
 use owlbum_core::scan::ScanProgress;
@@ -92,7 +93,7 @@ fn red_album(root: &Path) {
 #[test]
 fn without_an_album_the_photo_commands_answer_no_album() {
     let f = fixture();
-    for command in ["photo_detail", "photo_histogram"] {
+    for command in ["photo_detail", "photo_exif", "photo_histogram"] {
         let err = invoke(&f.window, command, json!({ "id": 1 })).unwrap_err();
         assert_eq!(err["code"], "no_album", "{command}");
     }
@@ -119,7 +120,18 @@ fn a_trip_photo_answers_its_details() {
     // The scan finished, so the analysis is there.
     assert!(d.clipping.is_some());
 
+    // Every EXIF tag of the file, named, for the details panel's EXIF section.
+    let exif: Vec<ExifField> = invoke(&f.window, "photo_exif", json!({ "id": id }))
+        .unwrap()
+        .deserialize()
+        .unwrap();
+    let model = exif.iter().find(|t| t.name == "Model").expect("the Model tag");
+    assert_eq!((model.group.as_str(), model.value.as_str()), ("Image", "Fixture One"));
+    assert!(exif.iter().any(|t| t.group == "GPS"), "{exif:?}");
+
     let err = f.detail(987_654).unwrap_err();
+    assert_eq!(err["code"], "photo_not_found");
+    let err = invoke(&f.window, "photo_exif", json!({ "id": 987_654 })).unwrap_err();
     assert_eq!(err["code"], "photo_not_found");
     let err = f.histogram(987_654).unwrap_err();
     assert_eq!(err["code"], "photo_not_found");

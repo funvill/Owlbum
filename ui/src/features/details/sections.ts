@@ -17,6 +17,7 @@ export const SECTION_IDS: readonly SectionId[] = [
   "people",
   "date",
   "notes",
+  "exif",
 ];
 
 /**

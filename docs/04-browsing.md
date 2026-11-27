@@ -485,7 +485,7 @@ Selecting another photo while a photo is being edited ends edit mode first, as i
 
 When an album opens with no current photo, the first photo of the result becomes current (and the anchor and selection) as soon as its row arrives, so the preview and the details panel show it and the arrow keys work at once (#119). A photo already current, kept from before or picked while the rows were arriving, is left alone, and once any photo has been current the rule does not apply again until the album is opened again.
 
-Ctrl+A selects every photo shown in the result (one `query_ids` call) and leaves the current photo where it is, or makes the first photo current when there was none. "Shown" means the tiles: photos folded inside a closed stack are not included, as [Organising](05-organising.md#stacks) says. Ctrl+D selects nothing: the selection is emptied, there is no current photo and no anchor, the preview shows its hint and the details panel is empty. It does the same as the details panel's close button. Esc, when more than one photo is selected, reduces the selection to the current photo, which also becomes the anchor.
+Ctrl+A selects every photo shown in the result (one `query_ids` call) and leaves the current photo where it is, or makes the first photo current when there was none. "Shown" means the tiles: photos folded inside a closed stack are not included, as [Organising](05-organising.md#stacks) says. Ctrl+D selects nothing: the selection is emptied, there is no current photo and no anchor, the preview shows its hint and the details panel is empty. Esc, when more than one photo is selected, reduces the selection to the current photo, which also becomes the anchor.
 
 ### What acts on what
 
@@ -665,7 +665,7 @@ The panel shows the current photo. With no current photo the column is an empty 
 
 ```text
 +---------------------------------------+   column: default 340px, 260–560px, background --panel, left border
-| IMG_0042.jpg (ellipsis)          [x]  |   head: padding `--space-3` `--space-4`, bottom border
+|                              [Copy]   |   head: padding `--space-3` `--space-4`, bottom border
 +---------------------------------------+
 | +-----------------------------------+ |   body: padding 12px, gap `--space-5`, scrolls
 | | Photo score                    74 | |   score card (see 05)
@@ -678,6 +678,7 @@ The panel shows the current photo. With no current photo the column is an empty 
 |   Shape       Landscape               |
 |   Format      JPEG                    |
 |   Folder      2024/Trip/Day 2         |
+|   Path        D:\Photos\2024\…\IMG_0042.jpg [copy]
 | v What's in it      (see 07)          |
 | v Camera                              |
 |   Camera / Lens / Focal length / Aperture / Shutter / ISO / Exposure / Flash
@@ -699,12 +700,15 @@ The panel shows the current photo. With no current photo the column is an empty 
 | v Description and notes               |
 |   DESCRIPTION [__________]            |
 |   NOTES [text area, 4 rows]           |
+| v EXIF                                |
+|   Make        Owlbum                  |
+|   ExposureTime 1/250 …                |
 +---------------------------------------+
 ```
 
-**Head.** The file name in bold, cut with an ellipsis, with the path relative to the album root as its tooltip. A close button, labelled "Close details", clears the selection.
+**Head.** A small **Copy** button (icon `copy`, tooltip "Copy all of these details as plain text"), shown once the photo's details have arrived. It reads the score (`photo_score`) and the EXIF tags (`photo_exif`) afresh and puts everything the panel shows on the clipboard as plain text with `file_copy_text`: the photo score, then each section that has something to say, its title on a line of its own and one "Label: value" line per row, with a blank line between sections; the EXIF section lists every tag as "Name: value". A score or EXIF read that fails leaves that part out. The toast says "Details copied". The head has no file name and no close button (owner's feedback, #167): the Path row names the file, and Ctrl+D still selects nothing.
 
-**Loading.** The panel calls `photo_detail(id)` when the current photo changes, and again when an `album_changed` event arrives for a revision newer than the detail's `revision` (also when such an event arrived while the detail was being read). While the first answer is on its way, the head shows the file name from the row and the body is empty; the previous photo's facts are never shown under the new name. An answer for a photo that is no longer current is thrown away.
+**Loading.** The panel calls `photo_detail(id)` when the current photo changes, and again when an `album_changed` event arrives for a revision newer than the detail's `revision` (also when such an event arrived while the detail was being read). While the first answer is on its way, the head and the body are empty; the previous photo's facts are never shown for the new one. An answer for a photo that is no longer current is thrown away.
 
 **Notes under the score card.** In a view-only album: "This album is view-only, so nothing here can be changed." When the last save of this photo failed: the error's message, in a note with an `--error` border, until a later save succeeds.
 
@@ -722,6 +726,7 @@ Each section has a header button with a chevron (down when open, right when fold
 | `people` | People | The People field. |
 | `date` | Date and time | The Date and time field. |
 | `notes` | Description and notes | The Description and Notes fields. |
+| `exif` | EXIF | Every EXIF tag the file carries, in file order, one row each: the tag's EXIF name (tooltip: its group, `Image`, `Exif`, `GPS` or `Interop`) and its value as text. Read with `photo_exif(id)` while the section is open; "No EXIF data in this file" when there are none, "The EXIF data could not be read." when the read fails. See [EXIF section](#exif-section). |
 
 ### Facts
 
@@ -734,6 +739,7 @@ Each section has a header button with a chevron (down when open, right when fold
 | Shape | "Square" when the sides differ by less than 1%, else "Landscape" or "Portrait". |
 | Format | The format in upper case ("JPEG", "CR3", "MP4"). |
 | Folder | The photo's folder relative to the album root. Not shown for a photo in the album root. |
+| Path | The file's absolute path on this computer, wrapping anywhere, with a **Copy path** icon button beside it that copies it (`file_copy_paths` with this photo's id, as the photo menu's Copy path does). |
 
 **Ratio names.** The ratio is the long side over the short side. It takes the first name it is within 2% of: 1:1, 5:4, 4:3, 3:2, 16:9, 2:1. Otherwise it is written "r.rr:1".
 
@@ -751,6 +757,10 @@ Each section has a header button with a chevron (down when open, right when fold
 | Flash | "Fired" or "Did not fire". |
 
 **Place rows.** **Country** is the country that contains the photo's effective place, or "…" while it is being looked up, or absent when none is found. A place at sea within 12 nautical miles (22.2 km) of a coast is in that coast's country, which also covers the simplified coastline (see [Country search](#how-typed-fields-save)); farther out there is none. **Coordinates** is latitude then longitude, each to 5 decimals.
+
+### EXIF section
+
+Owner's feedback (#167): the panel lists what is in the file's EXIF, not only the facts Owlbum picks out. `photo_exif(id)` answers `ExifField[]`, `{ group, name, value }`, in file order, read from the file each time and never stored. Rust reads the tags with `nom-exif` (already used for video tracks), which finds the EXIF block in JPEG, HEIF and AVIF, PNG, WebP, TIFF and the TIFF-based RAW files, CR3 and RAF, and names the tags it knows; an unnamed tag is "Tag 0x1234". When `nom-exif` finds nothing (JPEG XL, for one), the media handler's own EXIF reader is asked instead, so a tag the scan used is never missing. The thumbnail IFD (IFD 1) is left out. Values: text as written, numbers, ratios as "1/250" ("35" when the denominator is 1), lists joined with ", ", dates as "2024-06-12 14:03:00", and bytes that are not printable text in hex, at most 32 of them, then "… (N bytes)". A value is cut at 300 characters with "…". Errors: `photo_not_found` as for `photo_detail`.
 
 ### Histogram
 
@@ -1102,6 +1112,7 @@ Names follow the prefixes in [Architecture](01-architecture.md). Every command a
 | `query_ids` | `token`, `offset`, `limit` | `number[]` | The ids at those places of the token's list, in order: one id per tile, so the face of a closed stack and not its folded members, and the meaning segment when the range reaches it. For Shift ranges, heading clicks and Ctrl+A. No limit on `limit`. Error: `query_expired`. |
 | `query_map` | `token` | `{ points: [id, lat, lon, thumb_key, file_name, edit_plan][], unlocated }` | For a token made with `view: "map"`. Error: `query_expired`. |
 | `photo_detail` | `id` | `PhotoDetail` | Error: `photo_not_found`. |
+| `photo_exif` | `id` | `ExifField[]`, `{ group, name, value }` | Every EXIF tag of the file ([EXIF section](#exif-section)). Error: `photo_not_found`. |
 | `photo_set_info` | `ids`, `patch` | `{ changed: number[], revision }` | Validates again in Rust; errors `invalid_date`, `invalid_location`, and the shared `view_only` and `photo_not_found`. `changed` lists the photos whose values changed. The patch fields `star` and `hidden` are defined in 05. |
 | `photo_histogram` | `id` | `{ l, r, g, b }`, each 64 numbers | |
 

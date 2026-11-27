@@ -29,6 +29,9 @@ the window's title shows the version that is running.
   album, the thumbnail cache's size, limit and Clear cache, whether edits
   stay in the album or are saved into the photo file, loading maps from the
   internet, and checking for updates.
+- The details panel has a Copy button that copies everything it shows as
+  plain text, a Path row with the file's full path and a button to copy
+  it, and an EXIF section listing every tag in the file.
 - Press ? for a list of every keyboard shortcut, with the keys for where
   you are first. It has a button that opens Settings.
 - Starting Owlbum again, or opening a folder with it, brings the running
@@ -51,6 +54,11 @@ the window's title shows the version that is running.
   the photo's shown size, so they are much easier to see.
 - In the photo score's pop-up each label sits at the top of its row, and a
   total below zero is shown in red.
+
+### Removed
+
+- The file name at the top of the details panel and its Close details
+  button. Ctrl+D still clears the selection.
 
 ### Fixed
 

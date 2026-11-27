@@ -19,21 +19,28 @@
 .ow-details__head {
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   border-bottom: 1px solid var(--line);
 }
 
-.ow-details__name {
+/* The Path row: the path wraps anywhere, its copy button beside it. */
+.ow-details__path {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--space-1);
+}
+
+.ow-details__path-text {
   flex: 1;
   min-width: 0;
-  margin: 0;
-  font: var(--text-md);
-  font-weight: var(--weight-heading);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  user-select: text;
+  overflow-wrap: anywhere;
+}
+
+/* EXIF values can be long runs with no spaces. */
+.ow-details__exif .ow-details__value {
+  overflow-wrap: anywhere;
 }
 
 .ow-details__body {

@@ -5,7 +5,7 @@ import { albumText } from "../../text/album";
 import { DetailsPanel, useDetail, type CurrentPhoto } from "../details";
 import { PhotoMenu, pressPhoto, useFileKeys } from "../files";
 import { useReviewEdit, useRotateKeys } from "../edit";
-import { BrowseGrid, gridBlocks, selectNone, useGridStore } from "../grid";
+import { BrowseGrid, useGridStore } from "../grid";
 import { MapView } from "../map";
 import { toggleStack, toggleTileStar, useFlagKeys } from "../organise";
 import { Preview } from "../preview";
@@ -71,8 +71,7 @@ function useColumns() {
  * which the grid store holds and every `query_run` settles, so they can
  * never disagree. The details are read once here for both: the panel shows
  * them, the preview takes the original's size (largest zoom, full-size
- * swap) and full path from them. The row's file name, when the grid holds
- * the row, is shown in the panel's head while the details load.
+ * swap) and full path from them.
  *
  * A double-click on a tile or on the preview at fit, or Enter or Space,
  * opens the full-screen viewer, which shows the same current photo and
@@ -80,16 +79,7 @@ function useColumns() {
  */
 export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: PhotoAt) => void }) {
   const current = useGridStore((s) => s.current);
-  const row = current === null ? undefined : gridBlocks().row(current.index);
-  const shown: CurrentPhoto | null =
-    current === null
-      ? null
-      : {
-          id: current.id,
-          // Only a row that is this photo's: the index may be an old result's.
-          file_name: row?.id === current.id ? row.file_name : null,
-          rel_path: row?.id === current.id ? row.rel_path : null,
-        };
+  const shown: CurrentPhoto | null = current === null ? null : { id: current.id };
   const notFound = useCallback(() => void useGridStore.getState().refresh(), []);
   const detail = useDetail(current?.id ?? null, notFound);
   const open = onOpen ?? openViewer;
@@ -156,8 +146,7 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
         onSave={(w) => void save("panel.details_width", w)}
       />
       <div className="ow-review__details" style={{ width: columns.details }}>
-        {/* Close details does what Ctrl+D does: nothing selected. */}
-        <DetailsPanel current={shown} onClose={selectNone} onNotFound={notFound} shared={detail} />
+        <DetailsPanel current={shown} onNotFound={notFound} shared={detail} />
       </div>
       <Viewer detail={detail.detail} />
       {menu !== null && <PhotoMenu at={menu.at} photoId={menu.photoId} onClose={closeMenu} />}

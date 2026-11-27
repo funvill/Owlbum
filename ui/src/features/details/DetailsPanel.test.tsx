@@ -32,7 +32,6 @@ function deferred<T>() {
 
 interface Setup {
   fake: FakeApi;
-  onClose: ReturnType<typeof vi.fn>;
   onNotFound: ReturnType<typeof vi.fn>;
   show(current: CurrentPhoto | null): void;
 }
@@ -40,11 +39,10 @@ interface Setup {
 function setup(current: CurrentPhoto | null, overrides: Partial<FakeHandlers> = {}): Setup {
   const fake = createFakeApi(overrides);
   setApi(fake);
-  const onClose = vi.fn();
   const onNotFound = vi.fn();
-  const view = (c: CurrentPhoto | null) => <DetailsPanel current={c} onClose={onClose} onNotFound={onNotFound} />;
+  const view = (c: CurrentPhoto | null) => <DetailsPanel current={c} onNotFound={onNotFound} />;
   const { rerender } = render(view(current));
-  return { fake, onClose, onNotFound, show: (c) => rerender(view(c)) };
+  return { fake, onNotFound, show: (c) => rerender(view(c)) };
 }
 
 function calls(fake: FakeApi, command: string) {
@@ -74,17 +72,20 @@ describe("DetailsPanel", () => {
   });
 
   it("shows the facts, camera, histogram and place of the current photo", async () => {
-    const { fake } = setup({ id: 42, file_name: "IMG_0042.jpg", rel_path: "2024/Trip/IMG_0042.jpg" });
+    const { fake } = setup({ id: 42 });
     await screen.findByText("Taken");
 
     expect(calls(fake, "photo_detail")).toEqual([{ command: "photo_detail", args: { id: 42 } }]);
-    expect(screen.getByRole("heading", { level: 2, name: "IMG_0042.jpg" })).toBeInTheDocument();
+    // No file name heading over the panel; the Path row holds the file.
+    expect(screen.queryByRole("heading", { level: 2 })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Close details" })).not.toBeInTheDocument();
     expect(row("Taken")).toBe("12 Jun 2024, 14:03");
     expect(row("Size")).toBe("4032 × 3024 px · 3.1 MB");
     expect(row("Resolution")).toBe("12.2 MP · 4:3");
     expect(row("Shape")).toBe("Landscape");
     expect(row("Format")).toBe("JPEG");
     expect(row("Folder")).toBe("2024/Trip");
+    expect(row("Path")).toBe("D:\\Photos\\2024\\Trip\\IMG_0042.jpg");
     expect(row("Lens")).toBe("Fixture 24-70mm F2.8");
     expect(row("Shutter")).toBe("1/250 s");
     expect(row("Country")).toBe("France");
@@ -98,14 +99,23 @@ describe("DetailsPanel", () => {
     const titles = within(panel())
       .getAllByRole("button", { expanded: true })
       .map((b) => b.textContent);
-    expect(titles).toEqual(["Photo", "Camera", "Histogram", "Place", "People", "Date and time", "Description and notes"]);
+    expect(titles).toEqual([
+      "Photo",
+      "Camera",
+      "Histogram",
+      "Place",
+      "People",
+      "Date and time",
+      "Description and notes",
+      "EXIF",
+    ]);
     expect(await seriousFindings(document.body)).toEqual([]);
   });
 
-  it("shows the row's file name and an empty body while the first answer is on its way", async () => {
+  it("shows an empty body, and no Copy, while the first answer is on its way", async () => {
     const answers: ReturnType<typeof deferred<PhotoDetail>>[] = [];
     const { show } = setup(
-      { id: 1, file_name: "a.jpg" },
+      { id: 1 },
       {
         photo_detail: () => {
           const d = deferred<PhotoDetail>();
@@ -114,15 +124,16 @@ describe("DetailsPanel", () => {
         },
       },
     );
-    expect(screen.getByRole("heading", { level: 2, name: "a.jpg" })).toBeInTheDocument();
     expect(screen.queryByText("Taken")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Copy" })).not.toBeInTheDocument();
     await act(async () => answers[0]!.resolve(fakeDetail(1, { file_name: "a.jpg" })));
     expect(screen.getByText("Taken")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "Copy" })).toBeInTheDocument();
 
-    // Another photo: its name at once, and never the old photo's facts.
-    show({ id: 2, file_name: "b.jpg" });
-    expect(screen.getByRole("heading", { level: 2, name: "b.jpg" })).toBeInTheDocument();
+    // Another photo: never the old photo's facts.
+    show({ id: 2 });
     expect(screen.queryByText("Taken")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Copy" })).not.toBeInTheDocument();
   });
 
   it("throws away an answer for a photo that is no longer current", async () => {
@@ -138,10 +149,10 @@ describe("DetailsPanel", () => {
       },
     );
     show({ id: 2 });
-    await act(async () => answers.get(2)!.resolve(fakeDetail(2, { file_name: "two.jpg" })));
-    await act(async () => answers.get(1)!.resolve(fakeDetail(1, { file_name: "one.jpg" })));
-    expect(screen.getByRole("heading", { level: 2, name: "two.jpg" })).toBeInTheDocument();
-    expect(screen.queryByText("one.jpg")).not.toBeInTheDocument();
+    await act(async () => answers.get(2)!.resolve(fakeDetail(2, { abs_path: "D:\\two.jpg" })));
+    await act(async () => answers.get(1)!.resolve(fakeDetail(1, { abs_path: "D:\\one.jpg" })));
+    expect(row("Path")).toBe("D:\\two.jpg");
+    expect(screen.queryByText("D:\\one.jpg")).not.toBeInTheDocument();
   });
 
   it("reads the details again on album_changed for a newer revision only", async () => {
@@ -181,7 +192,7 @@ describe("DetailsPanel", () => {
 
   it("re-runs the query when the photo is not found", async () => {
     const { onNotFound } = setup(
-      { id: 9, file_name: "gone.jpg" },
+      { id: 9 },
       {
         photo_detail: () => {
           throw appError("photo_not_found", "That photo is no longer in this album.");
@@ -194,7 +205,7 @@ describe("DetailsPanel", () => {
 
   it("says so when the details cannot be read", async () => {
     setup(
-      { id: 9, file_name: "x.jpg" },
+      { id: 9 },
       {
         photo_detail: () => {
           throw appError("internal", "Something went wrong.");
@@ -204,11 +215,46 @@ describe("DetailsPanel", () => {
     await screen.findByText("The details of this photo could not be read.");
   });
 
-  it("clears the selection with its close button", async () => {
-    const { onClose } = setup({ id: 1 });
+  it("copies the path with the button beside it", async () => {
+    const { fake } = setup({ id: 7 });
     await screen.findByText("Taken");
-    await userEvent.click(screen.getByRole("button", { name: "Close details" }));
-    expect(onClose).toHaveBeenCalledTimes(1);
+    await userEvent.click(screen.getByRole("button", { name: "Copy path" }));
+    await waitFor(() => expect(calls(fake, "file_copy_paths")).toEqual([{ command: "file_copy_paths", args: { photo_ids: [7] } }]));
+  });
+
+  it("lists the file's EXIF tags in their own section", async () => {
+    const { fake } = setup({ id: 7 });
+    await screen.findByText("ExposureTime");
+    expect(calls(fake, "photo_exif")).toEqual([{ command: "photo_exif", args: { id: 7 } }]);
+    expect(row("Make")).toBe("Owlbum");
+    expect(row("ExposureTime")).toBe("1/250");
+  });
+
+  it("says when the file has no EXIF data", async () => {
+    setup({ id: 7 }, { photo_exif: () => [] });
+    expect(await screen.findByText("No EXIF data in this file")).toBeInTheDocument();
+  });
+
+  it("copies everything the panel shows as plain text", async () => {
+    let copied = "";
+    const { fake } = setup(
+      { id: 42 },
+      {
+        file_copy_text: ({ content }) => {
+          copied = content;
+          return null;
+        },
+      },
+    );
+    await screen.findByText("Taken");
+    await userEvent.click(screen.getByRole("button", { name: "Copy" }));
+    await waitFor(() => expect(calls(fake, "file_copy_text")).toHaveLength(1));
+    expect(copied).toContain("Photo score: 105");
+    expect(copied).toContain("Photo\nTaken: 12 Jun 2024, 14:03");
+    expect(copied).toContain("Path: D:\\Photos\\2024\\Trip\\IMG_0042.jpg");
+    expect(copied).toContain("Camera\nCamera: ");
+    expect(copied).toContain("Country: France");
+    expect(copied).toContain("EXIF\nMake: Owlbum\nModel: Fixture One");
   });
 
   it("folds a section, saves it in the setting, and asks nothing for a folded histogram", async () => {

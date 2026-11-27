@@ -8,7 +8,9 @@ export const detailsText = {
   // The panel
   region: "Details",
   noPhoto: "No photo selected",
-  close: "Close details",
+  copyAll: "Copy",
+  copyAllTooltip: "Copy all of these details as plain text",
+  copiedAll: "Details copied",
   viewOnlyNote: "This album is view-only, so nothing here can be changed.",
   couldNotRead: "The details of this photo could not be read.",
 
@@ -22,6 +24,7 @@ export const detailsText = {
     people: "People",
     date: "Date and time",
     notes: "Description and notes",
+    exif: "EXIF",
   },
 
   // Fact rows
@@ -32,6 +35,8 @@ export const detailsText = {
   shape: "Shape",
   format: "Format",
   folder: "Folder",
+  path: "Path",
+  copyPath: "Copy path",
   unknown: "Unknown",
   changed: "changed",
   changedTooltip: "The date was changed here; the camera's is kept in the photo",
@@ -53,6 +58,11 @@ export const detailsText = {
   flashNotFired: "Did not fire",
   in35mm: (mm: string) => ` (${mm} mm in 35 mm terms)`,
   noCamera: "No camera details in this file",
+
+  // EXIF (owner's feedback, issue 167)
+  noExif: "No EXIF data in this file",
+  exifFailed: "The EXIF data could not be read.",
+  scoreLabel: "Photo score",
 
   // Histogram
   histogramLabel: "Histogram of brightness and the red, green and blue channels",

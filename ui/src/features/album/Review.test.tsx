@@ -1,6 +1,5 @@
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import userEvent from "@testing-library/user-event";
 import { setApi } from "../../api";
 import { appError, createFakeApi, type FakeApi } from "../../api/fake";
 import { fakeDetail } from "../../api/fake/photo";
@@ -38,20 +37,8 @@ describe("Review", () => {
     expect(screen.getByRole("complementary", { name: "Details" })).toHaveTextContent("No photo selected");
 
     act(() => grid().setSelection({ current: { id: 3, index: 2 }, anchor: { id: 3, index: 2 }, selection: [3] }));
-    expect(await screen.findByRole("heading", { level: 2, name: "p3.jpg" })).toBeInTheDocument();
     await screen.findByText("Taken");
     expect(calls("photo_detail").at(-1)?.args).toEqual({ id: 3 });
-  });
-
-  it("clears the selection with Close details", async () => {
-    render(<Review busy={() => false} />);
-    await waitFor(() => expect(grid().result).not.toBeNull());
-    act(() => grid().setSelection({ current: { id: 2, index: 1 }, anchor: { id: 2, index: 1 }, selection: [2] }));
-    await screen.findByText("Taken");
-    await userEvent.click(screen.getByRole("button", { name: "Close details" }));
-    expect(grid().current).toBeNull();
-    expect(grid().selection).toEqual([]);
-    expect(screen.getByRole("complementary", { name: "Details" })).toHaveTextContent("No photo selected");
   });
 
   it("re-runs the query when the photo is not found", async () => {

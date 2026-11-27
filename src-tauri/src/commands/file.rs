@@ -30,6 +30,7 @@ area! {
         file_copy_files,
         file_copy_image,
         file_copy_paths,
+        file_copy_text,
         file_prepare_drag,
         file_reveal,
         file_start_drag,
@@ -188,6 +189,27 @@ command! {
                 .copy_text(&files::path_lines(&targets.photos))
                 .map_err(|r| AppError::new(ErrorCode::ClipboardFailed, text::files::copy_path_failed(&r)))?;
             Ok(CopiedPaths { copied: targets.photos.len(), dropped: targets.dropped })
+        })
+        .await
+    }
+}
+
+/// The most text `file_copy_text` takes, in bytes.
+const MAX_COPY_TEXT: usize = 1 << 20;
+
+command! {
+    /// Puts `content` on the clipboard as plain text: the details panel's
+    /// Copy button (docs/04-browsing.md, "The details panel"). At most
+    /// 1 MiB. Errors: `internal` for more, `clipboard_failed`.
+    pub async fn file_copy_text<R: Runtime>(content: String; app: AppHandle<R>) -> () {
+        if content.len() > MAX_COPY_TEXT {
+            return Err(AppError::internal(text::files::COPYING_TEXT));
+        }
+        let desktop = desktop(&app)?;
+        off_main(text::files::COPYING_TEXT, move || {
+            desktop
+                .copy_text(&content)
+                .map_err(|r| AppError::new(ErrorCode::ClipboardFailed, text::files::copy_text_failed(&r)))
         })
         .await
     }

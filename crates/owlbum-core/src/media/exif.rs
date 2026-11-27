@@ -122,6 +122,12 @@ impl Exif {
         Some(exif)
     }
 
+    /// Every tag read, in the order read: the details panel's EXIF list
+    /// falls back on these (`info::exif_list`).
+    pub fn tags(&self) -> &[(Dir, u16, Value)] {
+        &self.tags
+    }
+
     pub fn get(&self, dir: Dir, tag: u16) -> Option<&Value> {
         self.tags
             .iter()

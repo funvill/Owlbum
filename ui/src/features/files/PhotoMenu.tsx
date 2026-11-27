@@ -4,12 +4,26 @@ import type { Point } from "../../controls/place";
 import { primaryKey } from "../../keys";
 import { filesText } from "../../text/files";
 import { useAlbumStore, viewOnlyReason } from "../album";
-import { gridBlocks, useGridStore } from "../grid";
+import { BLOCK, gridBlocks, useGridStore } from "../grid";
+import { turn } from "../edit/turn";
 import { toggleFlag } from "../organise";
+import { editText } from "../../text/edit";
 import { bin, copyPaths, copyPhotos, revealPhoto, trashPhotos } from "./actions";
 import { selectedTargets } from "./targets";
 
 const t = filesText.menu;
+
+/** The row of photo `id` among the rows the grid holds. */
+function rowOf(id: number) {
+  const blocks = gridBlocks();
+  for (const b of blocks.held()) {
+    for (let i = b * BLOCK; i < (b + 1) * BLOCK; i++) {
+      const row = blocks.row(i);
+      if (row?.id === id) return row;
+    }
+  }
+  return undefined;
+}
 
 /** A scroll this long after the menu opened closes it (one that opening caused does not). */
 const SCROLL_GRACE_MS = 200;
@@ -24,9 +38,8 @@ export interface PhotoMenuProps {
 
 /**
  * The photo menu (docs/06-editing-and-file-actions.md, "The photo menu"):
- * copy, copy path, show in folder, star, hide and move to the bin. The
- * edit items (Edit, rotate, flip, the save items) join it with edit mode
- * and saving.
+ * rotate and flip, copy, copy path, show in folder, star, hide and move to
+ * the bin. Edit and the save items join it with edit mode and saving.
  */
 export function PhotoMenu({ at, photoId, onClose }: PhotoMenuProps) {
   const status = useAlbumStore((s) => s.status);
@@ -38,6 +51,16 @@ export function PhotoMenu({ at, photoId, onClose }: PhotoMenuProps) {
   const starred = row?.star ?? false;
   const hidden = row?.hidden ?? false;
   const blocked = viewOnly ?? undefined;
+  // Rotate and flip need a target that can be edited; the reason comes
+  // from the first that cannot (docs/06-editing-and-file-actions.md, "Formats").
+  const why = (id: number): string | null => {
+    const r = rowOf(id);
+    if (r === undefined) return null;
+    if (r.kind === "video") return editText.video;
+    return r.duration_ms !== null ? editText.animated : null;
+  };
+  const reasons = all.map(why);
+  const turnBlocked = blocked ?? (reasons.every((r) => r !== null) ? (reasons[0] ?? undefined) : undefined);
 
   // The window losing focus or changing size, or a later scroll, closes it.
   useEffect(() => {
@@ -58,6 +81,24 @@ export function PhotoMenu({ at, photoId, onClose }: PhotoMenuProps) {
   }, [onClose]);
 
   const entries: MenuEntry[] = [
+    {
+      id: "rotate-left",
+      label: t.rotateLeft,
+      icon: "rotate-ccw",
+      shortcut: primaryKey("browse.rotate_left"),
+      disabledReason: turnBlocked,
+      onSelect: () => void turn("rotate_left", "selection", all),
+    },
+    {
+      id: "rotate-right",
+      label: t.rotateRight,
+      icon: "rotate-cw",
+      shortcut: primaryKey("browse.rotate_right"),
+      disabledReason: turnBlocked,
+      onSelect: () => void turn("rotate_right", "selection", all),
+    },
+    { id: "flip", label: t.flip, icon: "flip-h", disabledReason: turnBlocked, onSelect: () => void turn("flip", "selection", all) },
+    "separator",
     {
       id: "copy",
       label: t.copy(all.length),

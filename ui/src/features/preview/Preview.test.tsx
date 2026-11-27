@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { setApi } from "../../api";
 import type { Row } from "../../api/bindings/Row";
 import { createFakeApi, type FakeApi } from "../../api/fake";
+import { fakePlan } from "../../api/fake/edit";
 import { fakeDetail } from "../../api/fake/photo";
 import { createQueryFake, type FakePhoto } from "../../api/fake/query";
 import { handlerGaps, row as keyRow } from "../../keys";
@@ -344,7 +345,7 @@ describe("Caption", () => {
   });
 
   it("starts with the selection count when more than one photo is selected, and shows the edit badge", () => {
-    render(<Caption row={{ ...base, edit_plan: {} }} selected={3} fullPath={null} editTarget="file" />);
+    render(<Caption row={{ ...base, edit_plan: fakePlan() }} selected={3} fullPath={null} editTarget="file" />);
     expect(screen.getByText("3 selected ·")).toBeInTheDocument();
     expect(screen.getByText("Edited · not saved")).toBeInTheDocument();
     expect(screen.queryByText("Starred")).toBeNull();

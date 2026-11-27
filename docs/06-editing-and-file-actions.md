@@ -283,7 +283,7 @@ The colour filter is an SVG filter with one `feColorMatrix` of type `matrix` who
 
 Three tests together pin "what you see is what gets saved".
 
-1. **Shared plan fixtures.** A Rust test writes `fixtures/edit-plans.json`: a list of edits, photo sizes and boxes, each with its plan, the expected `<img>` width, height and transform text, and the expected filter values. The file is committed. The Rust test fails when the model's output differs from the file. A page test reads the same file and asserts that `EditedImage` produces exactly those strings.
+1. **Shared plan fixtures.** A Rust test (`owlbum-core`, `edit::fixtures`; run it with `OWLBUM_UPDATE_FIXTURES=1` to write the file again after a deliberate change) writes `fixtures/edit-plans.json`: a list of edits, photo sizes and boxes, each with its plan, the expected `<img>` width, height and transform text, and the expected filter values. The file is committed. The Rust test fails when the model's output differs from the file. A page test reads the same file and asserts that `EditedImage` produces exactly those strings.
 2. **Reference preview.** `owlbum-core` has `preview_reference(plan, thumbnail, box)`, a small Rust interpreter of the drawing rules above: the same affine transform with bilinear sampling, then the matrix on 8-bit sRGB values. A Rust test renders each fixture edit twice, once with the renderer at full size scaled down to the box, and once with `preview_reference` on the medium thumbnail. They must agree within a mean absolute difference of 2 levels per channel, with at most 1% of pixels differing by more than 12 levels.
 3. **Colour exactness.** For a flat-colour fixture and each fixture colour edit, the renderer's output pixel must be within 1 level per channel of `apply` on the input colour for PNG, and within 3 levels for JPEG.
 
@@ -439,7 +439,7 @@ Phones often get the orientation wrong, so turning does not need edit mode.
 | `]` | Rotate right (clockwise) |
 | Photo menu: **Rotate left**, **Rotate right**, **Flip horizontally** | The same, and flip |
 
-- They act on **every selected photo that is shown**, or on the current photo when nothing else is selected. They work in the grid, the timeline, the map, the preview and the viewer.
+- They act on **every selected photo that is shown**, or on the current photo when nothing else is selected. They work in the grid, the timeline, the map, the preview and the viewer. In the viewer they act on the shown photo only, as star, hide and the nudges do there.
 - Each press calls `edit_turn(photo_ids, op)`. Rust applies `rotate_left`, `rotate_right` or `flip` to each photo's stored edit (or to identity) in **one transaction**. An existing crop, straighten and colour are kept; the crop turns with the photo. A result that is identity is stored as NULL.
 - One press is **one undo step** for all the photos, labelled "rotate left", "rotate right" or "flip".
 - Photos that cannot be edited are skipped. If any were skipped, an info toast says "Skipped N that cannot be edited". If none could be turned, nothing is recorded.
@@ -624,6 +624,8 @@ The question is asked only when `edit_target` is `file`. The shell asks Rust for
 | 7. Colour | When `plan.colour` is not null: convert the pixels to sRGB, then apply `out = clamp(m · in + offset, 0, 1)` to the sRGB-encoded values. Alpha is untouched. A greyscale picture becomes three channels first. |
 | 8. Encode | Encode in the target format with the settings in [Output](#output), with the metadata rules there. |
 | 9. Write | Write to `<out_path>.<uuid>.tmp`, flush to disk, and rename onto `out_path`. The temp file is removed on any failure. Returns the written width and height. |
+
+**Version 1 so far (#43).** `render_edit` decodes through the handler's 8-bit sRGB `working` picture, renders with the steps above, and writes JPEG (quality 95, 4:4:4, transparency on white), PNG or lossless WebP through a temporary file. Keeping 16-bit samples and the source profile (the table below) and the metadata rules in [Output](#output) are built with saving (#47), the renderer's first caller.
 
 **Colour profiles.**
 
@@ -821,9 +823,9 @@ Every command takes photo ids. An unknown id answers `photo_not_found`. A comman
 | `edit_plan` | `photo_id, edit, whole` | `EditPlan` | Pure. `edit_invalid` for a bad edit. |
 | `edit_transform` | `edit, op` | `PhotoEdit` | `op` is `rotate_left`, `rotate_right` or `flip`. Pure; used by edit mode's buttons. |
 | `edit_auto` | `photo_id` | `Colour` | Reads the medium thumbnail. |
-| `edit_set` | `photo_id, edit or null` | the photo's `Row` | Done. Identity stores NULL. Records an undo step. |
-| `edit_turn` | `photo_ids, op` | `{ changed, skipped }` | One transaction, one undo step. |
-| `edit_revert` | `photo_ids` | `{ changed }` | One transaction, one undo step. |
+| `edit_set` | `photo_id, edit or null` | `{ changed, plan, revision }` | Done. Identity stores NULL. Records an undo step. `plan` is the plan of the stored edit now (null for none); the grid's re-run on `album_changed` brings the new `Row`. |
+| `edit_turn` | `photo_ids, op` | `{ changed, skipped, revision }` | One transaction, one undo step. |
+| `edit_revert` | `photo_ids` | `{ changed, revision }` | One transaction, one undo step. |
 | `edit_status` | | `{ edited, waiting, saving }` | |
 | `edit_save_to_file` | `photo_ids` | `{ saved, failed: [{ id, name, message }], skipped }` | The sequence above, one photo after another. |
 | `edit_save_all` | | the same | `file` mode only. |

@@ -2,6 +2,7 @@
 import type { Camera } from "./Camera";
 import type { Clipping } from "./Clipping";
 import type { DateInfo } from "./DateInfo";
+import type { EditPlan } from "./EditPlan";
 import type { MediaKind } from "./MediaKind";
 import type { Place } from "./Place";
 import type { JsonValue } from "./serde_json/JsonValue";
@@ -56,10 +57,9 @@ people: Array<string>, description: string | null, notes: string | null,
  */
 revision: number, 
 /**
- * The plan for the stored edit, as on `Row`. Always null until the
- * edit model exists (#43), which gives it its type.
+ * The plan for the stored edit, as on `Row`; null for none.
  */
-edit_plan: JsonValue | null, 
+edit_plan: EditPlan | null, 
 /**
  * What tagging found (`PhotoTags`, docs/07-tagging.md). Always null
  * until the "What's in it" section is built (#55), which gives it its

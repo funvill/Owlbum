@@ -199,7 +199,11 @@ describe("the photo menu", () => {
     const labels = within(menu)
       .getAllByRole("menuitem")
       .map((i) => i.querySelector(".ow-menu__label")?.textContent);
-    expect(labels).toEqual(["Copy 3 photos", "Copy 3 paths", "Show in folder", "Star", "Hide", `Move to ${bin()}`]);
+    expect(labels).toEqual([
+      "Rotate left",
+      "Rotate right",
+      "Flip horizontally",
+      "Copy 3 photos", "Copy 3 paths", "Show in folder", "Star", "Hide", `Move to ${bin()}`]);
   });
 
   it("copies paths, shows in folder and moves to the bin", async () => {
@@ -225,7 +229,19 @@ describe("the photo menu", () => {
     fireEvent.contextMenu(tile(1), { clientX: 10, clientY: 10 });
     const trash = await screen.findByRole("menuitem", { name: /Move to/ });
     expect(trash).toHaveAttribute("aria-disabled", "true");
+    expect(screen.getByRole("menuitem", { name: /Rotate left/ })).toHaveAttribute("aria-disabled", "true");
     expect(screen.getByRole("menuitem", { name: /Copy path/ })).not.toHaveAttribute("aria-disabled");
+  });
+
+  it("rotates and flips every target as one edit_turn", async () => {
+    await show(1, [2]);
+    fireEvent.contextMenu(tile(0), { clientX: 10, clientY: 10 });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Rotate right/ }));
+    await waitFor(() => expect(callsOf("edit_turn")).toEqual([{ photo_ids: [1, 2], op: "rotate_right" }]));
+    fireEvent.contextMenu(tile(0), { clientX: 10, clientY: 10 });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /Flip horizontally/ }));
+    await waitFor(() => expect(callsOf("edit_turn")).toHaveLength(2));
+    expect(callsOf("edit_turn")[1]).toEqual({ photo_ids: [1, 2], op: "flip" });
   });
 
   it("closes when the window loses focus", async () => {

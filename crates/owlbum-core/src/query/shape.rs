@@ -414,10 +414,9 @@ pub struct Row {
     pub score: Option<i32>,
     /// The tile's stack, if it is in one.
     pub stack: Option<RowStack>,
-    /// The plan for the stored edit (docs/06-editing-and-file-actions.md).
-    /// Always null until the edit model exists (#43), which gives it its
-    /// type.
-    pub edit_plan: Option<serde_json::Value>,
+    /// The plan for the stored edit (docs/06-editing-and-file-actions.md,
+    /// "How the page gets a plan"); null for none.
+    pub edit_plan: Option<crate::edit::EditPlan>,
 }
 
 /// What `query_locate` answers when the photo is in the result.

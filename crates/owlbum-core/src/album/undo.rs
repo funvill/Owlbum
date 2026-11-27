@@ -12,6 +12,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::album::Album;
+use crate::edit::store::{self as edits, EditStep};
 use crate::error::AppResult;
 use crate::info::typed::{self, UndoStep};
 use crate::organise::nudge::{self, NudgeStep};
@@ -26,6 +27,8 @@ pub enum Step {
     Info(UndoStep),
     /// A `photo_nudge` tap.
     Score(NudgeStep),
+    /// An `edit_set`, `edit_turn` or `edit_revert` call.
+    Edit(EditStep),
 }
 
 impl Step {
@@ -34,6 +37,7 @@ impl Step {
         match self {
             Step::Info(s) => s.label,
             Step::Score(s) => s.label,
+            Step::Edit(s) => s.label,
         }
     }
 
@@ -42,6 +46,7 @@ impl Step {
         match self {
             Step::Info(s) => s.before.iter().map(|p| p.id).collect(),
             Step::Score(s) => s.before.iter().map(|(id, _)| *id).collect(),
+            Step::Edit(s) => s.before.iter().map(|(id, _)| *id).collect(),
         }
     }
 }
@@ -77,6 +82,21 @@ impl UndoList {
     pub fn drop_deleted(&self, deleted: &std::collections::HashSet<i64>) {
         self.steps()
             .retain(|step| !step.ids().iter().all(|id| deleted.contains(id)));
+    }
+
+    /// Removes the edits of `ids` from every edit step, and drops an edit
+    /// step left with no photo. Saving an edit into its file calls this, so
+    /// undo never puts back an edit that is now in the file's pixels
+    /// (docs/06-editing-and-file-actions.md, "Save into the file", step 8).
+    /// Other steps are kept.
+    pub fn drop_edits_of(&self, ids: &std::collections::HashSet<i64>) {
+        let mut steps = self.steps();
+        for step in steps.iter_mut() {
+            if let Step::Edit(s) = step {
+                s.before.retain(|(id, _)| !ids.contains(id));
+            }
+        }
+        steps.retain(|step| !matches!(step, Step::Edit(s) if s.before.is_empty()));
     }
 
     /// The number of steps held.
@@ -135,6 +155,7 @@ pub fn undo(album: &Album) -> AppResult<Undone> {
     let written = match &step {
         Step::Info(s) => typed::restore_info(album, s),
         Step::Score(s) => nudge::restore(album, s),
+        Step::Edit(s) => edits::restore(album, s),
     };
     let ids = match written {
         Ok(ids) => ids,

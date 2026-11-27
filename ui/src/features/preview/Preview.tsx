@@ -64,7 +64,7 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
     <section className="ow-preview" aria-label={t.region}>
       <div className="ow-preview__stage">
         <CachedZoomStage
-          key={`${row.id}:${row.thumb_key}`}
+          key={`${row.id}:${row.thumb_key}:${row.edit_plan?.key ?? ""}`}
           ready={row.thumb_key !== ""}
           pictures={{
             small: thumbUrl(row.thumb_key, "s"),
@@ -72,6 +72,7 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
             full: fullUrl(row.id, row.thumb_key),
           }}
           aspect={row.aspect}
+          plan={row.edit_plan}
           original={own !== null && own.width > 0 && own.height > 0 ? { width: own.width, height: own.height } : null}
           zoomable={row.kind !== "video"}
           onOpenAtFit={onOpen === undefined ? undefined : () => onOpen(at)}

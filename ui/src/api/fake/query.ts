@@ -7,7 +7,7 @@ import type { QueryCommands } from "../bindings/query";
 import type { Query } from "../bindings/QueryShape";
 import type { Row } from "../bindings/Row";
 import type { RowStack } from "../bindings/RowStack";
-import type { JsonValue } from "../bindings/serde_json/JsonValue";
+import type { EditPlan } from "../bindings/EditPlan";
 import type { AppError } from "../bindings/AppError";
 import type { Group } from "../bindings/Group";
 import type { GroupUnit } from "../bindings/GroupUnit";
@@ -43,7 +43,7 @@ export interface FakePhoto {
    */
   colour?: { bucket: number; lightness: number } | null;
   /** The plan for the stored edit; null (no edit) when absent. */
-  edit_plan?: JsonValue | null;
+  edit_plan?: EditPlan | null;
   /** Has a typed place or GPS. */
   has_location?: boolean;
   /** The effective place, `[lat, lon]`, for `query_map`; absent or null when there is none. */

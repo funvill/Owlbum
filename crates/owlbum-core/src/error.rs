@@ -31,6 +31,13 @@ pub enum ErrorCode {
     ClipboardFailed,
     /// The drag could not start.
     DragFailed,
+    /// `edit_plan`, `edit_set`, `edit_transform`: the edit sent by the page
+    /// did not parse (docs/06-editing-and-file-actions.md).
+    EditInvalid,
+    /// `edit_set`: the photo is a video or an animated picture.
+    EditNotEditable,
+    /// The edited photo could not be made.
+    EditRenderFailed,
     /// A photo's file is not there.
     FileMissing,
     /// The path given to `album_open` cannot be read.

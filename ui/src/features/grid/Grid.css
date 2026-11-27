@@ -69,6 +69,17 @@
   object-fit: cover;
 }
 
+.ow-tile__picture--edited {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+}
+
+.ow-tile__picture--edited > .ow-edited {
+  flex: none;
+}
+
 .ow-tile--hidden .ow-tile__picture {
   opacity: 0.45;
 }

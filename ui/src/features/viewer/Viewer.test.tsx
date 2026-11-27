@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { setApi } from "../../api";
 import { createFakeApi, type FakeApi } from "../../api/fake";
+import { fakePlan } from "../../api/fake/edit";
 import { fakeDetail } from "../../api/fake/photo";
 import { createQueryFake, type FakePhoto } from "../../api/fake/query";
 import { handlerGaps, row as keyRow } from "../../keys";
@@ -240,7 +241,7 @@ describe("Viewer", () => {
   });
 
   it("shows an edited photo as edited, on the same picture the preview uses", async () => {
-    setup(photos(5, (p) => (p.id === 2 ? { ...p, edit_plan: { steps: [] } } : p)));
+    setup(photos(5, (p) => (p.id === 2 ? { ...p, edit_plan: fakePlan(4032, 3024, 90) } : p)));
     await open(2);
     expect(within(viewer()).getByText("Edited")).toBeInTheDocument();
     expect(images()[0]).toMatch(/thumb\/tk-2\/s$/);

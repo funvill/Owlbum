@@ -1,0 +1,2998 @@
+[
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 133.3333,
+      "outer_h": 133.3333,
+      "outer_w": 200.0,
+      "transform": "translate(100px, 66.6667px) rotate(0deg) translate(-100px, -66.6667px)",
+      "width": 200.0
+    },
+    "fit": "contain",
+    "name": "identity",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 2000,
+        "left": 0,
+        "top": 0,
+        "width": 3000
+      },
+      "flip": false,
+      "frame": {
+        "h": 2000,
+        "w": 3000
+      },
+      "key": "9ds1ev",
+      "out": {
+        "h": 2000,
+        "w": 3000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 200.0,
+      "outer_h": 200.0,
+      "outer_w": 300.0,
+      "transform": "translate(150px, 100px) rotate(0deg) translate(-150px, -100px)",
+      "width": 300.0
+    },
+    "fit": "cover",
+    "name": "identity",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 2000,
+        "left": 0,
+        "top": 0,
+        "width": 3000
+      },
+      "flip": false,
+      "frame": {
+        "h": 2000,
+        "w": 3000
+      },
+      "key": "9ds1ev",
+      "out": {
+        "h": 2000,
+        "w": 3000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 360.0,
+      "outer_h": 360.0,
+      "outer_w": 540.0,
+      "transform": "translate(270px, 180px) rotate(0deg) translate(-270px, -180px)",
+      "width": 540.0
+    },
+    "fit": "contain",
+    "name": "identity",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 2000,
+        "left": 0,
+        "top": 0,
+        "width": 3000
+      },
+      "flip": false,
+      "frame": {
+        "h": 2000,
+        "w": 3000
+      },
+      "key": "9ds1ev",
+      "out": {
+        "h": 2000,
+        "w": 3000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 426.6667,
+      "outer_h": 426.6667,
+      "outer_w": 640.0,
+      "transform": "translate(320px, 213.3333px) rotate(0deg) translate(-320px, -213.3333px)",
+      "width": 640.0
+    },
+    "fit": "cover",
+    "name": "identity",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 2000,
+        "left": 0,
+        "top": 0,
+        "width": 3000
+      },
+      "flip": false,
+      "frame": {
+        "h": 2000,
+        "w": 3000
+      },
+      "key": "9ds1ev",
+      "out": {
+        "h": 2000,
+        "w": 3000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 90,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 133.3333,
+      "outer_h": 200.0,
+      "outer_w": 133.3333,
+      "transform": "translate(66.6667px, 100px) rotate(90deg) translate(-100px, -66.6667px)",
+      "width": 200.0
+    },
+    "fit": "contain",
+    "name": "rotate 90",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 90.0,
+      "colour": null,
+      "crop": {
+        "height": 3000,
+        "left": 0,
+        "top": 0,
+        "width": 2000
+      },
+      "flip": false,
+      "frame": {
+        "h": 3000,
+        "w": 2000
+      },
+      "key": "1l0wtmc",
+      "out": {
+        "h": 3000,
+        "w": 2000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 90,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 200.0,
+      "outer_h": 300.0,
+      "outer_w": 200.0,
+      "transform": "translate(100px, 150px) rotate(90deg) translate(-150px, -100px)",
+      "width": 300.0
+    },
+    "fit": "cover",
+    "name": "rotate 90",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 90.0,
+      "colour": null,
+      "crop": {
+        "height": 3000,
+        "left": 0,
+        "top": 0,
+        "width": 2000
+      },
+      "flip": false,
+      "frame": {
+        "h": 3000,
+        "w": 2000
+      },
+      "key": "1l0wtmc",
+      "out": {
+        "h": 3000,
+        "w": 2000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 90,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 240.0,
+      "outer_h": 360.0,
+      "outer_w": 240.0,
+      "transform": "translate(120px, 180px) rotate(90deg) translate(-180px, -120px)",
+      "width": 360.0
+    },
+    "fit": "contain",
+    "name": "rotate 90",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 90.0,
+      "colour": null,
+      "crop": {
+        "height": 3000,
+        "left": 0,
+        "top": 0,
+        "width": 2000
+      },
+      "flip": false,
+      "frame": {
+        "h": 3000,
+        "w": 2000
+      },
+      "key": "1l0wtmc",
+      "out": {
+        "h": 3000,
+        "w": 2000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 90,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 640.0,
+      "outer_h": 960.0,
+      "outer_w": 640.0,
+      "transform": "translate(320px, 480px) rotate(90deg) translate(-480px, -320px)",
+      "width": 960.0
+    },
+    "fit": "cover",
+    "name": "rotate 90",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 90.0,
+      "colour": null,
+      "crop": {
+        "height": 3000,
+        "left": 0,
+        "top": 0,
+        "width": 2000
+      },
+      "flip": false,
+      "frame": {
+        "h": 3000,
+        "w": 2000
+      },
+      "key": "1l0wtmc",
+      "out": {
+        "h": 3000,
+        "w": 2000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 180,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 133.3333,
+      "outer_h": 133.3333,
+      "outer_w": 200.0,
+      "transform": "translate(100px, 66.6667px) rotate(180deg) translate(-100px, -66.6667px)",
+      "width": 200.0
+    },
+    "fit": "contain",
+    "name": "rotate 180",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 180.0,
+      "colour": null,
+      "crop": {
+        "height": 2000,
+        "left": 0,
+        "top": 0,
+        "width": 3000
+      },
+      "flip": false,
+      "frame": {
+        "h": 2000,
+        "w": 3000
+      },
+      "key": "17csb0c",
+      "out": {
+        "h": 2000,
+        "w": 3000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 180,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 200.0,
+      "outer_h": 200.0,
+      "outer_w": 300.0,
+      "transform": "translate(150px, 100px) rotate(180deg) translate(-150px, -100px)",
+      "width": 300.0
+    },
+    "fit": "cover",
+    "name": "rotate 180",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 180.0,
+      "colour": null,
+      "crop": {
+        "height": 2000,
+        "left": 0,
+        "top": 0,
+        "width": 3000
+      },
+      "flip": false,
+      "frame": {
+        "h": 2000,
+        "w": 3000
+      },
+      "key": "17csb0c",
+      "out": {
+        "h": 2000,
+        "w": 3000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 180,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 360.0,
+      "outer_h": 360.0,
+      "outer_w": 540.0,
+      "transform": "translate(270px, 180px) rotate(180deg) translate(-270px, -180px)",
+      "width": 540.0
+    },
+    "fit": "contain",
+    "name": "rotate 180",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 180.0,
+      "colour": null,
+      "crop": {
+        "height": 2000,
+        "left": 0,
+        "top": 0,
+        "width": 3000
+      },
+      "flip": false,
+      "frame": {
+        "h": 2000,
+        "w": 3000
+      },
+      "key": "17csb0c",
+      "out": {
+        "h": 2000,
+        "w": 3000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 180,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 426.6667,
+      "outer_h": 426.6667,
+      "outer_w": 640.0,
+      "transform": "translate(320px, 213.3333px) rotate(180deg) translate(-320px, -213.3333px)",
+      "width": 640.0
+    },
+    "fit": "cover",
+    "name": "rotate 180",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 180.0,
+      "colour": null,
+      "crop": {
+        "height": 2000,
+        "left": 0,
+        "top": 0,
+        "width": 3000
+      },
+      "flip": false,
+      "frame": {
+        "h": 2000,
+        "w": 3000
+      },
+      "key": "17csb0c",
+      "out": {
+        "h": 2000,
+        "w": 3000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 270,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 133.3333,
+      "outer_h": 200.0,
+      "outer_w": 133.3333,
+      "transform": "translate(66.6667px, 100px) rotate(270deg) translate(-100px, -66.6667px)",
+      "width": 200.0
+    },
+    "fit": "contain",
+    "name": "rotate 270",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 270.0,
+      "colour": null,
+      "crop": {
+        "height": 3000,
+        "left": 0,
+        "top": 0,
+        "width": 2000
+      },
+      "flip": false,
+      "frame": {
+        "h": 3000,
+        "w": 2000
+      },
+      "key": "tcyb5u",
+      "out": {
+        "h": 3000,
+        "w": 2000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 270,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 200.0,
+      "outer_h": 300.0,
+      "outer_w": 200.0,
+      "transform": "translate(100px, 150px) rotate(270deg) translate(-150px, -100px)",
+      "width": 300.0
+    },
+    "fit": "cover",
+    "name": "rotate 270",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 270.0,
+      "colour": null,
+      "crop": {
+        "height": 3000,
+        "left": 0,
+        "top": 0,
+        "width": 2000
+      },
+      "flip": false,
+      "frame": {
+        "h": 3000,
+        "w": 2000
+      },
+      "key": "tcyb5u",
+      "out": {
+        "h": 3000,
+        "w": 2000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 270,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 240.0,
+      "outer_h": 360.0,
+      "outer_w": 240.0,
+      "transform": "translate(120px, 180px) rotate(270deg) translate(-180px, -120px)",
+      "width": 360.0
+    },
+    "fit": "contain",
+    "name": "rotate 270",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 270.0,
+      "colour": null,
+      "crop": {
+        "height": 3000,
+        "left": 0,
+        "top": 0,
+        "width": 2000
+      },
+      "flip": false,
+      "frame": {
+        "h": 3000,
+        "w": 2000
+      },
+      "key": "tcyb5u",
+      "out": {
+        "h": 3000,
+        "w": 2000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 270,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 640.0,
+      "outer_h": 960.0,
+      "outer_w": 640.0,
+      "transform": "translate(320px, 480px) rotate(270deg) translate(-480px, -320px)",
+      "width": 960.0
+    },
+    "fit": "cover",
+    "name": "rotate 270",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 270.0,
+      "colour": null,
+      "crop": {
+        "height": 3000,
+        "left": 0,
+        "top": 0,
+        "width": 2000
+      },
+      "flip": false,
+      "frame": {
+        "h": 3000,
+        "w": 2000
+      },
+      "key": "tcyb5u",
+      "out": {
+        "h": 3000,
+        "w": 2000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": true,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 133.3333,
+      "outer_h": 133.3333,
+      "outer_w": 200.0,
+      "transform": "translate(100px, 66.6667px) rotate(0deg) scaleX(-1) translate(-100px, -66.6667px)",
+      "width": 200.0
+    },
+    "fit": "contain",
+    "name": "flip",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 2000,
+        "left": 0,
+        "top": 0,
+        "width": 3000
+      },
+      "flip": true,
+      "frame": {
+        "h": 2000,
+        "w": 3000
+      },
+      "key": "12atx7w",
+      "out": {
+        "h": 2000,
+        "w": 3000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": true,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 200.0,
+      "outer_h": 200.0,
+      "outer_w": 300.0,
+      "transform": "translate(150px, 100px) rotate(0deg) scaleX(-1) translate(-150px, -100px)",
+      "width": 300.0
+    },
+    "fit": "cover",
+    "name": "flip",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 2000,
+        "left": 0,
+        "top": 0,
+        "width": 3000
+      },
+      "flip": true,
+      "frame": {
+        "h": 2000,
+        "w": 3000
+      },
+      "key": "12atx7w",
+      "out": {
+        "h": 2000,
+        "w": 3000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": true,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 360.0,
+      "outer_h": 360.0,
+      "outer_w": 540.0,
+      "transform": "translate(270px, 180px) rotate(0deg) scaleX(-1) translate(-270px, -180px)",
+      "width": 540.0
+    },
+    "fit": "contain",
+    "name": "flip",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 2000,
+        "left": 0,
+        "top": 0,
+        "width": 3000
+      },
+      "flip": true,
+      "frame": {
+        "h": 2000,
+        "w": 3000
+      },
+      "key": "12atx7w",
+      "out": {
+        "h": 2000,
+        "w": 3000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": true,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 426.6667,
+      "outer_h": 426.6667,
+      "outer_w": 640.0,
+      "transform": "translate(320px, 213.3333px) rotate(0deg) scaleX(-1) translate(-320px, -213.3333px)",
+      "width": 640.0
+    },
+    "fit": "cover",
+    "name": "flip",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 2000,
+        "left": 0,
+        "top": 0,
+        "width": 3000
+      },
+      "flip": true,
+      "frame": {
+        "h": 2000,
+        "w": 3000
+      },
+      "key": "12atx7w",
+      "out": {
+        "h": 2000,
+        "w": 3000
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": true,
+      "rotate": 90,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 150.0,
+      "outer_h": 200.0,
+      "outer_w": 150.0,
+      "transform": "translate(75px, 100px) rotate(90deg) scaleX(-1) translate(-100px, -75px)",
+      "width": 200.0
+    },
+    "fit": "contain",
+    "name": "flip and rotate 90",
+    "photo": {
+      "h": 3024,
+      "w": 4032
+    },
+    "plan": {
+      "angle": 90.0,
+      "colour": null,
+      "crop": {
+        "height": 4032,
+        "left": 0,
+        "top": 0,
+        "width": 3024
+      },
+      "flip": true,
+      "frame": {
+        "h": 4032,
+        "w": 3024
+      },
+      "key": "1dbu0sv",
+      "out": {
+        "h": 4032,
+        "w": 3024
+      },
+      "pic": {
+        "h": 3024,
+        "w": 4032
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": true,
+      "rotate": 90,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 200.0,
+      "outer_h": 266.6667,
+      "outer_w": 200.0,
+      "transform": "translate(100px, 133.3333px) rotate(90deg) scaleX(-1) translate(-133.3333px, -100px)",
+      "width": 266.6667
+    },
+    "fit": "cover",
+    "name": "flip and rotate 90",
+    "photo": {
+      "h": 3024,
+      "w": 4032
+    },
+    "plan": {
+      "angle": 90.0,
+      "colour": null,
+      "crop": {
+        "height": 4032,
+        "left": 0,
+        "top": 0,
+        "width": 3024
+      },
+      "flip": true,
+      "frame": {
+        "h": 4032,
+        "w": 3024
+      },
+      "key": "1dbu0sv",
+      "out": {
+        "h": 4032,
+        "w": 3024
+      },
+      "pic": {
+        "h": 3024,
+        "w": 4032
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": true,
+      "rotate": 90,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 270.0,
+      "outer_h": 360.0,
+      "outer_w": 270.0,
+      "transform": "translate(135px, 180px) rotate(90deg) scaleX(-1) translate(-180px, -135px)",
+      "width": 360.0
+    },
+    "fit": "contain",
+    "name": "flip and rotate 90",
+    "photo": {
+      "h": 3024,
+      "w": 4032
+    },
+    "plan": {
+      "angle": 90.0,
+      "colour": null,
+      "crop": {
+        "height": 4032,
+        "left": 0,
+        "top": 0,
+        "width": 3024
+      },
+      "flip": true,
+      "frame": {
+        "h": 4032,
+        "w": 3024
+      },
+      "key": "1dbu0sv",
+      "out": {
+        "h": 4032,
+        "w": 3024
+      },
+      "pic": {
+        "h": 3024,
+        "w": 4032
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": true,
+      "rotate": 90,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 640.0,
+      "outer_h": 853.3333,
+      "outer_w": 640.0,
+      "transform": "translate(320px, 426.6667px) rotate(90deg) scaleX(-1) translate(-426.6667px, -320px)",
+      "width": 853.3333
+    },
+    "fit": "cover",
+    "name": "flip and rotate 90",
+    "photo": {
+      "h": 3024,
+      "w": 4032
+    },
+    "plan": {
+      "angle": 90.0,
+      "colour": null,
+      "crop": {
+        "height": 4032,
+        "left": 0,
+        "top": 0,
+        "width": 3024
+      },
+      "flip": true,
+      "frame": {
+        "h": 4032,
+        "w": 3024
+      },
+      "key": "1dbu0sv",
+      "out": {
+        "h": 4032,
+        "w": 3024
+      },
+      "pic": {
+        "h": 3024,
+        "w": 4032
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": -2.5
+    },
+    "expect": {
+      "filter": null,
+      "height": 141.9446,
+      "outer_h": 133.357,
+      "outer_w": 200.0,
+      "transform": "translate(100px, 66.6785px) rotate(-2.5deg) translate(-106.4585px, -70.9723px)",
+      "width": 212.917
+    },
+    "fit": "contain",
+    "name": "straighten",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": -2.5,
+      "colour": null,
+      "crop": {
+        "height": 1879,
+        "left": 0,
+        "top": 0,
+        "width": 2818
+      },
+      "flip": false,
+      "frame": {
+        "h": 1879,
+        "w": 2818
+      },
+      "key": "59k9ur",
+      "out": {
+        "h": 1879,
+        "w": 2818
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": -2.5
+    },
+    "expect": {
+      "filter": null,
+      "height": 212.8792,
+      "outer_h": 200.0,
+      "outer_w": 299.9468,
+      "transform": "translate(149.9734px, 100px) rotate(-2.5deg) translate(-159.6594px, -106.4396px)",
+      "width": 319.3188
+    },
+    "fit": "cover",
+    "name": "straighten",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": -2.5,
+      "colour": null,
+      "crop": {
+        "height": 1879,
+        "left": 0,
+        "top": 0,
+        "width": 2818
+      },
+      "flip": false,
+      "frame": {
+        "h": 1879,
+        "w": 2818
+      },
+      "key": "59k9ur",
+      "out": {
+        "h": 1879,
+        "w": 2818
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": -2.5
+    },
+    "expect": {
+      "filter": null,
+      "height": 383.1825,
+      "outer_h": 360.0,
+      "outer_w": 539.9042,
+      "transform": "translate(269.9521px, 180px) rotate(-2.5deg) translate(-287.3869px, -191.5913px)",
+      "width": 574.7738
+    },
+    "fit": "contain",
+    "name": "straighten",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": -2.5,
+      "colour": null,
+      "crop": {
+        "height": 1879,
+        "left": 0,
+        "top": 0,
+        "width": 2818
+      },
+      "flip": false,
+      "frame": {
+        "h": 1879,
+        "w": 2818
+      },
+      "key": "59k9ur",
+      "out": {
+        "h": 1879,
+        "w": 2818
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": -2.5
+    },
+    "expect": {
+      "filter": null,
+      "height": 454.2229,
+      "outer_h": 426.7424,
+      "outer_w": 640.0,
+      "transform": "translate(320px, 213.3712px) rotate(-2.5deg) translate(-340.6671px, -227.1114px)",
+      "width": 681.3343
+    },
+    "fit": "cover",
+    "name": "straighten",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": -2.5,
+      "colour": null,
+      "crop": {
+        "height": 1879,
+        "left": 0,
+        "top": 0,
+        "width": 2818
+      },
+      "flip": false,
+      "frame": {
+        "h": 1879,
+        "w": 2818
+      },
+      "key": "59k9ur",
+      "out": {
+        "h": 1879,
+        "w": 2818
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 0.9,
+        "w": 0.8,
+        "x": 0.1,
+        "y": 0.05
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 187.5,
+      "outer_h": 168.75,
+      "outer_w": 200.0,
+      "transform": "translate(100px, 84.375px) rotate(0deg) translate(-125px, -93.75px)",
+      "width": 250.0
+    },
+    "fit": "contain",
+    "name": "crop",
+    "photo": {
+      "h": 1200,
+      "w": 1600
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 1080,
+        "left": 160,
+        "top": 60,
+        "width": 1280
+      },
+      "flip": false,
+      "frame": {
+        "h": 1200,
+        "w": 1600
+      },
+      "key": "ecqgqq",
+      "out": {
+        "h": 1080,
+        "w": 1280
+      },
+      "pic": {
+        "h": 1200,
+        "w": 1600
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 0.9,
+        "w": 0.8,
+        "x": 0.1,
+        "y": 0.05
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 222.2222,
+      "outer_h": 200.0,
+      "outer_w": 237.037,
+      "transform": "translate(118.5185px, 100px) rotate(0deg) translate(-148.1481px, -111.1111px)",
+      "width": 296.2963
+    },
+    "fit": "cover",
+    "name": "crop",
+    "photo": {
+      "h": 1200,
+      "w": 1600
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 1080,
+        "left": 160,
+        "top": 60,
+        "width": 1280
+      },
+      "flip": false,
+      "frame": {
+        "h": 1200,
+        "w": 1600
+      },
+      "key": "ecqgqq",
+      "out": {
+        "h": 1080,
+        "w": 1280
+      },
+      "pic": {
+        "h": 1200,
+        "w": 1600
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 0.9,
+        "w": 0.8,
+        "x": 0.1,
+        "y": 0.05
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 400.0,
+      "outer_h": 360.0,
+      "outer_w": 426.6667,
+      "transform": "translate(213.3333px, 180px) rotate(0deg) translate(-266.6667px, -200px)",
+      "width": 533.3333
+    },
+    "fit": "contain",
+    "name": "crop",
+    "photo": {
+      "h": 1200,
+      "w": 1600
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 1080,
+        "left": 160,
+        "top": 60,
+        "width": 1280
+      },
+      "flip": false,
+      "frame": {
+        "h": 1200,
+        "w": 1600
+      },
+      "key": "ecqgqq",
+      "out": {
+        "h": 1080,
+        "w": 1280
+      },
+      "pic": {
+        "h": 1200,
+        "w": 1600
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 0.9,
+        "w": 0.8,
+        "x": 0.1,
+        "y": 0.05
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 600.0,
+      "outer_h": 540.0,
+      "outer_w": 640.0,
+      "transform": "translate(320px, 270px) rotate(0deg) translate(-400px, -300px)",
+      "width": 800.0
+    },
+    "fit": "cover",
+    "name": "crop",
+    "photo": {
+      "h": 1200,
+      "w": 1600
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 1080,
+        "left": 160,
+        "top": 60,
+        "width": 1280
+      },
+      "flip": false,
+      "frame": {
+        "h": 1200,
+        "w": 1600
+      },
+      "key": "ecqgqq",
+      "out": {
+        "h": 1080,
+        "w": 1280
+      },
+      "pic": {
+        "h": 1200,
+        "w": 1600
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 10.0,
+        "contrast": 0.0,
+        "saturation": -20.0,
+        "warmth": 5.0
+      },
+      "crop": {
+        "h": 0.9,
+        "w": 0.8,
+        "x": 0.1,
+        "y": 0.05
+      },
+      "flip": false,
+      "rotate": 90,
+      "straighten": -2.5
+    },
+    "expect": {
+      "filter": "0.848839 0.144113 0.014548 0 0.0403 0.04252 0.94304 0.01444 0 0.04 0.042201 0.141967 0.808332 0 0.0397 0 0 0 1 0",
+      "height": 157.7287,
+      "outer_h": 200.0,
+      "outer_w": 118.5331,
+      "transform": "translate(59.2666px, 100px) rotate(87.5deg) translate(-118.2965px, -78.8644px)",
+      "width": 236.5931
+    },
+    "fit": "contain",
+    "name": "everything",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 87.5,
+      "colour": {
+        "m": [
+          0.8488389000000001,
+          0.14411279999999996,
+          0.014548299999999997,
+          0.042519999999999995,
+          0.94304,
+          0.014439999999999996,
+          0.0422011,
+          0.14196719999999996,
+          0.8083317000000001
+        ],
+        "offset": [
+          0.04030000000000001,
+          0.04000000000000001,
+          0.03970000000000001
+        ],
+        "svg": [
+          0.848839,
+          0.144113,
+          0.014548,
+          0.0,
+          0.0403,
+          0.04252,
+          0.94304,
+          0.01444,
+          0.0,
+          0.04,
+          0.042201,
+          0.141967,
+          0.808332,
+          0.0,
+          0.0397,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "crop": {
+        "height": 2536,
+        "left": 188,
+        "top": 141,
+        "width": 1503
+      },
+      "flip": false,
+      "frame": {
+        "h": 2818,
+        "w": 1879
+      },
+      "key": "1pcre6w",
+      "out": {
+        "h": 2536,
+        "w": 1503
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 10.0,
+        "contrast": 0.0,
+        "saturation": -20.0,
+        "warmth": 5.0
+      },
+      "crop": {
+        "h": 0.9,
+        "w": 0.8,
+        "x": 0.1,
+        "y": 0.05
+      },
+      "flip": false,
+      "rotate": 90,
+      "straighten": -2.5
+    },
+    "expect": {
+      "filter": "0.848839 0.144113 0.014548 0 0.0403 0.04252 0.94304 0.01444 0 0.04 0.042201 0.141967 0.808332 0 0.0397 0 0 0 1 0",
+      "height": 266.1344,
+      "outer_h": 337.4584,
+      "outer_w": 200.0,
+      "transform": "translate(100px, 168.7292px) rotate(87.5deg) translate(-199.6008px, -133.0672px)",
+      "width": 399.2016
+    },
+    "fit": "cover",
+    "name": "everything",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 87.5,
+      "colour": {
+        "m": [
+          0.8488389000000001,
+          0.14411279999999996,
+          0.014548299999999997,
+          0.042519999999999995,
+          0.94304,
+          0.014439999999999996,
+          0.0422011,
+          0.14196719999999996,
+          0.8083317000000001
+        ],
+        "offset": [
+          0.04030000000000001,
+          0.04000000000000001,
+          0.03970000000000001
+        ],
+        "svg": [
+          0.848839,
+          0.144113,
+          0.014548,
+          0.0,
+          0.0403,
+          0.04252,
+          0.94304,
+          0.01444,
+          0.0,
+          0.04,
+          0.042201,
+          0.141967,
+          0.808332,
+          0.0,
+          0.0397,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "crop": {
+        "height": 2536,
+        "left": 188,
+        "top": 141,
+        "width": 1503
+      },
+      "flip": false,
+      "frame": {
+        "h": 2818,
+        "w": 1879
+      },
+      "key": "1pcre6w",
+      "out": {
+        "h": 2536,
+        "w": 1503
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 10.0,
+        "contrast": 0.0,
+        "saturation": -20.0,
+        "warmth": 5.0
+      },
+      "crop": {
+        "h": 0.9,
+        "w": 0.8,
+        "x": 0.1,
+        "y": 0.05
+      },
+      "flip": false,
+      "rotate": 90,
+      "straighten": -2.5
+    },
+    "expect": {
+      "filter": "0.848839 0.144113 0.014548 0 0.0403 0.04252 0.94304 0.01444 0 0.04 0.042201 0.141967 0.808332 0 0.0397 0 0 0 1 0",
+      "height": 283.9117,
+      "outer_h": 360.0,
+      "outer_w": 213.3596,
+      "transform": "translate(106.6798px, 180px) rotate(87.5deg) translate(-212.9338px, -141.9558px)",
+      "width": 425.8675
+    },
+    "fit": "contain",
+    "name": "everything",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 87.5,
+      "colour": {
+        "m": [
+          0.8488389000000001,
+          0.14411279999999996,
+          0.014548299999999997,
+          0.042519999999999995,
+          0.94304,
+          0.014439999999999996,
+          0.0422011,
+          0.14196719999999996,
+          0.8083317000000001
+        ],
+        "offset": [
+          0.04030000000000001,
+          0.04000000000000001,
+          0.03970000000000001
+        ],
+        "svg": [
+          0.848839,
+          0.144113,
+          0.014548,
+          0.0,
+          0.0403,
+          0.04252,
+          0.94304,
+          0.01444,
+          0.0,
+          0.04,
+          0.042201,
+          0.141967,
+          0.808332,
+          0.0,
+          0.0397,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "crop": {
+        "height": 2536,
+        "left": 188,
+        "top": 141,
+        "width": 1503
+      },
+      "flip": false,
+      "frame": {
+        "h": 2818,
+        "w": 1879
+      },
+      "key": "1pcre6w",
+      "out": {
+        "h": 2536,
+        "w": 1503
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 10.0,
+        "contrast": 0.0,
+        "saturation": -20.0,
+        "warmth": 5.0
+      },
+      "crop": {
+        "h": 0.9,
+        "w": 0.8,
+        "x": 0.1,
+        "y": 0.05
+      },
+      "flip": false,
+      "rotate": 90,
+      "straighten": -2.5
+    },
+    "expect": {
+      "filter": "0.848839 0.144113 0.014548 0 0.0403 0.04252 0.94304 0.01444 0 0.04 0.042201 0.141967 0.808332 0 0.0397 0 0 0 1 0",
+      "height": 851.6301,
+      "outer_h": 1079.8669,
+      "outer_w": 640.0,
+      "transform": "translate(320px, 539.9335px) rotate(87.5deg) translate(-638.7226px, -425.815px)",
+      "width": 1277.4451
+    },
+    "fit": "cover",
+    "name": "everything",
+    "photo": {
+      "h": 2000,
+      "w": 3000
+    },
+    "plan": {
+      "angle": 87.5,
+      "colour": {
+        "m": [
+          0.8488389000000001,
+          0.14411279999999996,
+          0.014548299999999997,
+          0.042519999999999995,
+          0.94304,
+          0.014439999999999996,
+          0.0422011,
+          0.14196719999999996,
+          0.8083317000000001
+        ],
+        "offset": [
+          0.04030000000000001,
+          0.04000000000000001,
+          0.03970000000000001
+        ],
+        "svg": [
+          0.848839,
+          0.144113,
+          0.014548,
+          0.0,
+          0.0403,
+          0.04252,
+          0.94304,
+          0.01444,
+          0.0,
+          0.04,
+          0.042201,
+          0.141967,
+          0.808332,
+          0.0,
+          0.0397,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "crop": {
+        "height": 2536,
+        "left": 188,
+        "top": 141,
+        "width": 1503
+      },
+      "flip": false,
+      "frame": {
+        "h": 2818,
+        "w": 1879
+      },
+      "key": "1pcre6w",
+      "out": {
+        "h": 2536,
+        "w": 1503
+      },
+      "pic": {
+        "h": 2000,
+        "w": 3000
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 35.0,
+        "saturation": 40.0,
+        "warmth": -30.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": "1.695312 -0.368829 -0.037234 0 -0.167125 -0.114804 1.503792 -0.038988 0 -0.175 -0.11997 -0.403587 1.934308 0 -0.182875 0 0 0 1 0",
+      "height": 133.2031,
+      "outer_h": 133.2031,
+      "outer_w": 200.0,
+      "transform": "translate(100px, 66.6016px) rotate(0deg) translate(-100px, -66.6016px)",
+      "width": 200.0
+    },
+    "fit": "contain",
+    "name": "colour only",
+    "photo": {
+      "h": 341,
+      "w": 512
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": {
+        "m": [
+          1.69531218,
+          -0.3688286399999999,
+          -0.03723353999999999,
+          -0.11480399999999999,
+          1.503792,
+          -0.038987999999999995,
+          -0.11997017999999998,
+          -0.40358735999999984,
+          1.9343075399999998
+        ],
+        "offset": [
+          -0.16712500000000002,
+          -0.17500000000000004,
+          -0.18287500000000004
+        ],
+        "svg": [
+          1.695312,
+          -0.368829,
+          -0.037234,
+          0.0,
+          -0.167125,
+          -0.114804,
+          1.503792,
+          -0.038988,
+          0.0,
+          -0.175,
+          -0.11997,
+          -0.403587,
+          1.934308,
+          0.0,
+          -0.182875,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "crop": {
+        "height": 341,
+        "left": 0,
+        "top": 0,
+        "width": 512
+      },
+      "flip": false,
+      "frame": {
+        "h": 341,
+        "w": 512
+      },
+      "key": "z4xt13",
+      "out": {
+        "h": 341,
+        "w": 512
+      },
+      "pic": {
+        "h": 341,
+        "w": 512
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 35.0,
+        "saturation": 40.0,
+        "warmth": -30.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": "1.695312 -0.368829 -0.037234 0 -0.167125 -0.114804 1.503792 -0.038988 0 -0.175 -0.11997 -0.403587 1.934308 0 -0.182875 0 0 0 1 0",
+      "height": 200.0,
+      "outer_h": 200.0,
+      "outer_w": 300.2933,
+      "transform": "translate(150.1466px, 100px) rotate(0deg) translate(-150.1466px, -100px)",
+      "width": 300.2933
+    },
+    "fit": "cover",
+    "name": "colour only",
+    "photo": {
+      "h": 341,
+      "w": 512
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": {
+        "m": [
+          1.69531218,
+          -0.3688286399999999,
+          -0.03723353999999999,
+          -0.11480399999999999,
+          1.503792,
+          -0.038987999999999995,
+          -0.11997017999999998,
+          -0.40358735999999984,
+          1.9343075399999998
+        ],
+        "offset": [
+          -0.16712500000000002,
+          -0.17500000000000004,
+          -0.18287500000000004
+        ],
+        "svg": [
+          1.695312,
+          -0.368829,
+          -0.037234,
+          0.0,
+          -0.167125,
+          -0.114804,
+          1.503792,
+          -0.038988,
+          0.0,
+          -0.175,
+          -0.11997,
+          -0.403587,
+          1.934308,
+          0.0,
+          -0.182875,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "crop": {
+        "height": 341,
+        "left": 0,
+        "top": 0,
+        "width": 512
+      },
+      "flip": false,
+      "frame": {
+        "h": 341,
+        "w": 512
+      },
+      "key": "z4xt13",
+      "out": {
+        "h": 341,
+        "w": 512
+      },
+      "pic": {
+        "h": 341,
+        "w": 512
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 35.0,
+        "saturation": 40.0,
+        "warmth": -30.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": "1.695312 -0.368829 -0.037234 0 -0.167125 -0.114804 1.503792 -0.038988 0 -0.175 -0.11997 -0.403587 1.934308 0 -0.182875 0 0 0 1 0",
+      "height": 360.0,
+      "outer_h": 360.0,
+      "outer_w": 540.5279,
+      "transform": "translate(270.2639px, 180px) rotate(0deg) translate(-270.2639px, -180px)",
+      "width": 540.5279
+    },
+    "fit": "contain",
+    "name": "colour only",
+    "photo": {
+      "h": 341,
+      "w": 512
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": {
+        "m": [
+          1.69531218,
+          -0.3688286399999999,
+          -0.03723353999999999,
+          -0.11480399999999999,
+          1.503792,
+          -0.038987999999999995,
+          -0.11997017999999998,
+          -0.40358735999999984,
+          1.9343075399999998
+        ],
+        "offset": [
+          -0.16712500000000002,
+          -0.17500000000000004,
+          -0.18287500000000004
+        ],
+        "svg": [
+          1.695312,
+          -0.368829,
+          -0.037234,
+          0.0,
+          -0.167125,
+          -0.114804,
+          1.503792,
+          -0.038988,
+          0.0,
+          -0.175,
+          -0.11997,
+          -0.403587,
+          1.934308,
+          0.0,
+          -0.182875,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "crop": {
+        "height": 341,
+        "left": 0,
+        "top": 0,
+        "width": 512
+      },
+      "flip": false,
+      "frame": {
+        "h": 341,
+        "w": 512
+      },
+      "key": "z4xt13",
+      "out": {
+        "h": 341,
+        "w": 512
+      },
+      "pic": {
+        "h": 341,
+        "w": 512
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 35.0,
+        "saturation": 40.0,
+        "warmth": -30.0
+      },
+      "crop": {
+        "h": 1.0,
+        "w": 1.0,
+        "x": 0.0,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": "1.695312 -0.368829 -0.037234 0 -0.167125 -0.114804 1.503792 -0.038988 0 -0.175 -0.11997 -0.403587 1.934308 0 -0.182875 0 0 0 1 0",
+      "height": 426.25,
+      "outer_h": 426.25,
+      "outer_w": 640.0,
+      "transform": "translate(320px, 213.125px) rotate(0deg) translate(-320px, -213.125px)",
+      "width": 640.0
+    },
+    "fit": "cover",
+    "name": "colour only",
+    "photo": {
+      "h": 341,
+      "w": 512
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": {
+        "m": [
+          1.69531218,
+          -0.3688286399999999,
+          -0.03723353999999999,
+          -0.11480399999999999,
+          1.503792,
+          -0.038987999999999995,
+          -0.11997017999999998,
+          -0.40358735999999984,
+          1.9343075399999998
+        ],
+        "offset": [
+          -0.16712500000000002,
+          -0.17500000000000004,
+          -0.18287500000000004
+        ],
+        "svg": [
+          1.695312,
+          -0.368829,
+          -0.037234,
+          0.0,
+          -0.167125,
+          -0.114804,
+          1.503792,
+          -0.038988,
+          0.0,
+          -0.175,
+          -0.11997,
+          -0.403587,
+          1.934308,
+          0.0,
+          -0.182875,
+          0.0,
+          0.0,
+          0.0,
+          1.0,
+          0.0
+        ]
+      },
+      "crop": {
+        "height": 341,
+        "left": 0,
+        "top": 0,
+        "width": 512
+      },
+      "flip": false,
+      "frame": {
+        "h": 341,
+        "w": 512
+      },
+      "key": "z4xt13",
+      "out": {
+        "h": 341,
+        "w": 512
+      },
+      "pic": {
+        "h": 341,
+        "w": 512
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 0.01,
+        "w": 0.01,
+        "x": 0.99,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 16000.0,
+      "outer_h": 200.0,
+      "outer_w": 200.0,
+      "transform": "translate(-11800px, 8000px) rotate(0deg) translate(-12000px, -8000px)",
+      "width": 24000.0
+    },
+    "fit": "contain",
+    "name": "tiny crop",
+    "photo": {
+      "h": 80,
+      "w": 120
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 1,
+        "left": 119,
+        "top": 0,
+        "width": 1
+      },
+      "flip": false,
+      "frame": {
+        "h": 80,
+        "w": 120
+      },
+      "key": "1jpt887",
+      "out": {
+        "h": 1,
+        "w": 1
+      },
+      "pic": {
+        "h": 80,
+        "w": 120
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 200.0,
+      "w": 200.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 0.01,
+        "w": 0.01,
+        "x": 0.99,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 16000.0,
+      "outer_h": 200.0,
+      "outer_w": 200.0,
+      "transform": "translate(-11800px, 8000px) rotate(0deg) translate(-12000px, -8000px)",
+      "width": 24000.0
+    },
+    "fit": "cover",
+    "name": "tiny crop",
+    "photo": {
+      "h": 80,
+      "w": 120
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 1,
+        "left": 119,
+        "top": 0,
+        "width": 1
+      },
+      "flip": false,
+      "frame": {
+        "h": 80,
+        "w": 120
+      },
+      "key": "1jpt887",
+      "out": {
+        "h": 1,
+        "w": 1
+      },
+      "pic": {
+        "h": 80,
+        "w": 120
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 0.01,
+        "w": 0.01,
+        "x": 0.99,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 28800.0,
+      "outer_h": 360.0,
+      "outer_w": 360.0,
+      "transform": "translate(-21240px, 14400px) rotate(0deg) translate(-21600px, -14400px)",
+      "width": 43200.0
+    },
+    "fit": "contain",
+    "name": "tiny crop",
+    "photo": {
+      "h": 80,
+      "w": 120
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 1,
+        "left": 119,
+        "top": 0,
+        "width": 1
+      },
+      "flip": false,
+      "frame": {
+        "h": 80,
+        "w": 120
+      },
+      "key": "1jpt887",
+      "out": {
+        "h": 1,
+        "w": 1
+      },
+      "pic": {
+        "h": 80,
+        "w": 120
+      }
+    }
+  },
+  {
+    "box": {
+      "h": 360.0,
+      "w": 640.0
+    },
+    "edit": {
+      "colour": {
+        "brightness": 0.0,
+        "contrast": 0.0,
+        "saturation": 0.0,
+        "warmth": 0.0
+      },
+      "crop": {
+        "h": 0.01,
+        "w": 0.01,
+        "x": 0.99,
+        "y": 0.0
+      },
+      "flip": false,
+      "rotate": 0,
+      "straighten": 0.0
+    },
+    "expect": {
+      "filter": null,
+      "height": 51200.0,
+      "outer_h": 640.0,
+      "outer_w": 640.0,
+      "transform": "translate(-37760px, 25600px) rotate(0deg) translate(-38400px, -25600px)",
+      "width": 76800.0
+    },
+    "fit": "cover",
+    "name": "tiny crop",
+    "photo": {
+      "h": 80,
+      "w": 120
+    },
+    "plan": {
+      "angle": 0.0,
+      "colour": null,
+      "crop": {
+        "height": 1,
+        "left": 119,
+        "top": 0,
+        "width": 1
+      },
+      "flip": false,
+      "frame": {
+        "h": 80,
+        "w": 120
+      },
+      "key": "1jpt887",
+      "out": {
+        "h": 1,
+        "w": 1
+      },
+      "pic": {
+        "h": 80,
+        "w": 120
+      }
+    }
+  }
+]

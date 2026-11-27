@@ -1,5 +1,6 @@
 import { Toasts } from "./controls";
 import { Shell } from "./features/album";
+import { ColourFilters } from "./features/edit";
 
 /** The whole page. Features are composed here. */
 export function App() {
@@ -7,6 +8,7 @@ export function App() {
     <>
       <Shell />
       <Toasts />
+      <ColourFilters />
     </>
   );
 }

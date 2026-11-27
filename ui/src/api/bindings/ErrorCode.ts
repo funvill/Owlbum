@@ -9,4 +9,4 @@
  * listed in that part's document; codes used by several parts are listed in
  * docs/01-architecture.md.
  */
-export type ErrorCode = "album_damaged" | "album_lock_stale" | "album_unreachable" | "bad_query" | "clipboard_failed" | "drag_failed" | "file_missing" | "folder_unreadable" | "internal" | "invalid_date" | "invalid_location" | "no_album" | "not_supported" | "not_a_folder" | "photo_not_found" | "query_expired" | "scan_running" | "setting_out_of_range" | "trash_failed" | "view_only";
+export type ErrorCode = "album_damaged" | "album_lock_stale" | "album_unreachable" | "bad_query" | "clipboard_failed" | "drag_failed" | "edit_invalid" | "edit_not_editable" | "edit_render_failed" | "file_missing" | "folder_unreadable" | "internal" | "invalid_date" | "invalid_location" | "no_album" | "not_supported" | "not_a_folder" | "photo_not_found" | "query_expired" | "scan_running" | "setting_out_of_range" | "trash_failed" | "view_only";

@@ -63,9 +63,8 @@ pub struct PhotoDetail {
     /// The album revision when this detail was read. The panel reads the
     /// detail again on an `album_changed` with a newer revision.
     pub revision: u64,
-    /// The plan for the stored edit, as on `Row`. Always null until the
-    /// edit model exists (#43), which gives it its type.
-    pub edit_plan: Option<serde_json::Value>,
+    /// The plan for the stored edit, as on `Row`; null for none.
+    pub edit_plan: Option<crate::edit::EditPlan>,
     /// What tagging found (`PhotoTags`, docs/07-tagging.md). Always null
     /// until the "What's in it" section is built (#55), which gives it its
     /// type.
@@ -164,6 +163,8 @@ struct Typed {
     description: Option<String>,
     notes: Option<String>,
     people: Vec<String>,
+    /// `photos.edit` as stored.
+    edit: Option<String>,
 }
 
 fn not_found() -> AppError {
@@ -216,7 +217,7 @@ fn typed(conn: &Connection, id: i64) -> AppResult<Option<Typed>> {
     let failed = sqlite_error(text::photo::READING_DETAIL);
     let typed = conn
         .prepare_cached(
-            "SELECT star, hidden, date_override, loc_lat, loc_lon, loc_name, description, notes
+            "SELECT star, hidden, date_override, loc_lat, loc_lon, loc_name, description, notes, edit
                FROM photos WHERE id = ?1",
         )
         .and_then(|mut st| {
@@ -230,6 +231,7 @@ fn typed(conn: &Connection, id: i64) -> AppResult<Option<Typed>> {
                     description: r.get(6)?,
                     notes: r.get(7)?,
                     people: Vec::new(),
+                    edit: r.get(8)?,
                 })
             })
             .optional()
@@ -300,7 +302,7 @@ fn build(
         description: t.description,
         notes: t.notes,
         revision,
-        edit_plan: None,
+        edit_plan: crate::edit::store::stored_plan(id, f.width, f.height, t.edit.as_deref()),
         tags: None,
     }
 }

@@ -6,6 +6,7 @@ import type { Row } from "../../api/bindings/Row";
 import { Tooltip } from "../../controls";
 import { Icon } from "../../icons";
 import { gridText } from "../../text/grid";
+import { EditedImage } from "../edit/EditedImage";
 
 /** What the page does with the pointer on a tile. Selection is #19's; the rest belong to their own parts. */
 export interface TileActions {
@@ -103,6 +104,11 @@ export const Tile = memo(function Tile({
     edited,
   });
   const stop = (e: MouseEvent) => e.stopPropagation();
+  const onError = () => {
+    if (failed.size >= FAILED_KEPT) failed.clear();
+    failed.add(url);
+    redraw((n) => n + 1);
+  };
   const animated = row.kind !== "video" && row.duration_ms !== null;
 
   return (
@@ -129,6 +135,19 @@ export const Tile = memo(function Tile({
             <Icon name={row.kind === "video" ? "video" : "warning"} size="lg" />
             <span className="ow-tile__missing-name">{row.file_name}</span>
           </span>
+        ) : row.edit_plan !== null ? (
+          // The stored edit, drawn over the unedited thumbnail
+          // (docs/06-editing-and-file-actions.md, "Where edits are shown").
+          <span className="ow-tile__picture ow-tile__picture--edited">
+            <EditedImage
+              plan={row.edit_plan}
+              src={url}
+              boxW={side}
+              boxH={side}
+              fit="cover"
+              onError={onError}
+            />
+          </span>
         ) : (
           <img
             className="ow-tile__picture"
@@ -136,11 +155,7 @@ export const Tile = memo(function Tile({
             alt=""
             decoding="async"
             draggable={false}
-            onError={() => {
-              if (failed.size >= FAILED_KEPT) failed.clear();
-              failed.add(url);
-              redraw((n) => n + 1);
-            }}
+            onError={onError}
           />
         )}
 

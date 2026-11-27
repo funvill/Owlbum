@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } 
 import { setApi, thumbUrl } from "../../api";
 import { createFakeApi, type FakeApi } from "../../api/fake";
 import { fakeFormats } from "../../api/fake/app";
+import { fakePlan } from "../../api/fake/edit";
 import { createQueryFake, type FakePhoto } from "../../api/fake/query";
 import type { Row } from "../../api/bindings/Row";
 import { seriousFindings } from "../../test/axe";
@@ -201,7 +202,7 @@ describe("the grid", () => {
         hidden: false,
         score: null,
         stack: r.id === 1 ? { id: 1, size: 3, open: false, face: true, place: 1 } : null,
-        edit_plan: r.id === 1 ? {} : null,
+        edit_plan: r.id === 1 ? fakePlan() : null,
         ...r,
       }));
       return rows.slice(offset, offset + limit);

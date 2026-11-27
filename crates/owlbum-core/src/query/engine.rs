@@ -64,6 +64,8 @@ struct Display {
     duration_ms: Option<u64>,
     star: bool,
     hidden: bool,
+    /// `photos.edit` as stored.
+    edit: Option<String>,
 }
 
 /// What a row takes from the album index.
@@ -236,6 +238,7 @@ impl QueryEngine {
                         duration_ms: r.facts.duration_ms,
                         star: false,
                         hidden: false,
+                        edit: None,
                     })
             })
             .collect();
@@ -262,7 +265,7 @@ impl QueryEngine {
             let tx = conn.unchecked_transaction().map_err(&failed)?;
             let mut stmt = tx
                 .prepare_cached(
-                    "SELECT rel_path, file_name, thumb_key, kind, width, height, duration_ms, star, hidden
+                    "SELECT rel_path, file_name, thumb_key, kind, width, height, duration_ms, star, hidden, edit
                        FROM photos WHERE id = ?1",
                 )
                 .map_err(&failed)?;
@@ -284,6 +287,7 @@ impl QueryEngine {
                                 .and_then(|d| u64::try_from(d).ok()),
                             star: r.get::<_, i64>(7)? != 0,
                             hidden: r.get::<_, i64>(8)? != 0,
+                            edit: r.get(9)?,
                         })
                     })
                     .optional()
@@ -371,6 +375,7 @@ fn row(id: u32, display: Option<Display>, indexed: Option<Indexed>) -> Row {
         duration_ms: None,
         star: false,
         hidden: false,
+        edit: None,
     });
     let (width, height) = indexed.map_or((d.width, d.height), |i| (i.width, i.height));
     Row {
@@ -393,7 +398,7 @@ fn row(id: u32, display: Option<Display>, indexed: Option<Indexed>) -> Row {
         hidden: indexed.map_or(d.hidden, |i| i.hidden),
         score: indexed.and_then(|i| i.score),
         stack: None,
-        edit_plan: None,
+        edit_plan: crate::edit::store::stored_plan(i64::from(id), width, height, d.edit.as_deref()),
     }
 }
 

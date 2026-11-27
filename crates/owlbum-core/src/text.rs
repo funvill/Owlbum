@@ -8,6 +8,7 @@
 
 pub mod album;
 pub mod appdata;
+pub mod edit;
 pub mod errors;
 pub mod files;
 pub mod media;

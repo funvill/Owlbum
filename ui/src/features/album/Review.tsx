@@ -4,6 +4,7 @@ import type { PhotoAt } from "../../api/bindings/PhotoAt";
 import { albumText } from "../../text/album";
 import { DetailsPanel, useDetail, type CurrentPhoto } from "../details";
 import { PhotoMenu, pressPhoto, useFileKeys } from "../files";
+import { useRotateKeys } from "../edit";
 import { BrowseGrid, gridBlocks, selectNone, useGridStore } from "../grid";
 import { MapView } from "../map";
 import { toggleStack, toggleTileStar, useFlagKeys } from "../organise";
@@ -55,6 +56,8 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
   const openMenu = useCallback((at: PhotoAt, e: { clientX: number; clientY: number }) => {
     setMenu({ at: { x: e.clientX, y: e.clientY }, photoId: at.id });
   }, []);
+  // [ and ] turn the selection (docs/06-editing-and-file-actions.md).
+  useRotateKeys();
   const writable = useAlbumStore((s) => s.status === null || viewOnlyReason(s.status) === null);
   const folder = useAlbumStore((s) => s.status?.folder ?? "");
   const view = useGridStore((s) => s.query.view);

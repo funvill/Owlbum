@@ -19,6 +19,7 @@ import { useSettingsStore } from "../app";
 import { formatLength, formatSize, formatTaken } from "../details";
 import { step, stepToEnd, useGridStore } from "../grid";
 import { fileKeyHandlers } from "../files/keys";
+import { isRotateKey, rotateKeyHandlers } from "../edit";
 import { FlagMark, ScoreToast, flagKeyHandlers, isFlagKey } from "../organise";
 import { CachedZoomStage, usePreload, useShownRow, zoomKeyHandlers, type ZoomHandle } from "../preview";
 import { closeViewer, toggleDetails, useViewerStore } from "./store";
@@ -132,6 +133,8 @@ function OpenViewer({ detail }: ViewerProps) {
       if (match !== null && match.act && isFlagKey(match.id)) flagKeyHandlers()[match.id]();
       // Ctrl+C copies the shown photo (docs/06-editing-and-file-actions.md).
       if (match !== null && match.act && match.id === "viewer.copy") fileKeyHandlers()["viewer.copy"]();
+      // [ and ] turn the shown photo (docs/06-editing-and-file-actions.md).
+      if (match !== null && match.act && isRotateKey(match.id)) rotateKeyHandlers()[match.id]();
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);
@@ -154,7 +157,7 @@ function OpenViewer({ detail }: ViewerProps) {
       <div className="ow-viewer__stage">
         {row !== undefined && current !== null && (
           <CachedZoomStage
-            key={`${row.id}:${row.thumb_key}`}
+            key={`${row.id}:${row.thumb_key}:${row.edit_plan?.key ?? ""}`}
             ready={row.thumb_key !== ""}
             pictures={{
               small: thumbUrl(row.thumb_key, "s"),
@@ -162,6 +165,7 @@ function OpenViewer({ detail }: ViewerProps) {
               full: fullUrl(row.id, row.thumb_key),
             }}
             aspect={row.aspect}
+            plan={row.edit_plan}
             original={own !== null && own.width > 0 && own.height > 0 ? { width: own.width, height: own.height } : null}
             zoomable={row.kind !== "video"}
             actualSizeAtFit

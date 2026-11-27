@@ -16,7 +16,10 @@ import {
   type PointerEvent as ReactPointerEvent,
   type Ref,
 } from "react";
+import type { EditPlan } from "../../api/bindings/EditPlan";
 import type { KeyId } from "../../keys";
+import { editedStyles } from "../edit/EditedImage";
+import { useColourFilter } from "../edit/filters";
 import { MiniMap } from "./MiniMap";
 import {
   WHEEL_STEP,
@@ -56,6 +59,12 @@ export interface ZoomStageProps {
   pictures: StagePictures;
   /** The picture's shape (upright width / height); the layout never follows a loaded picture's own size. */
   aspect: number;
+  /**
+   * The plan of the photo's stored edit (docs/06-editing-and-file-actions.md,
+   * "How the page draws a plan"): every picture is drawn through it, and the
+   * stage takes the edited shape. Null or absent for no edit.
+   */
+  plan?: EditPlan | null;
   /** The original's upright size in pixels, once known; until then the largest zoom is 8 and no full picture is asked for. */
   original: Box | null;
   /** False while the photo has no thumbnail yet: the stage stays empty. */
@@ -103,8 +112,9 @@ function dpr(): number {
 export function ZoomStage({
   pictures,
   ready = true,
-  aspect,
-  original,
+  aspect: photoAspect,
+  plan = null,
+  original: photoOriginal,
   zoomable,
   mediumCached = false,
   onOpenAtFit,
@@ -122,6 +132,12 @@ export function ZoomStage({
   const [fullWanted, setFullWanted] = useState(false);
   const [fullReady, setFullReady] = useState(false);
   const [grabbing, setGrabbing] = useState(false);
+
+  // An edit gives the stage the edited picture's shape and size.
+  const aspect = plan === null ? photoAspect : plan.out.w / plan.out.h;
+  const original = plan === null || photoOriginal === null ? photoOriginal : { width: plan.out.w, height: plan.out.h };
+  const filterValues = plan?.colour?.svg.map((v) => String(v)).join(" ") ?? null;
+  useColourFilter(filterValues === null ? null : (plan?.key ?? null), filterValues);
 
   const fitted = fittedSize(stage, { width: aspect > 0 ? aspect : 1, height: 1 });
   const shown = view ?? fitView(stage, fitted);
@@ -226,6 +242,7 @@ export function ZoomStage({
   if (zoomable && shown.zoom > 1) classes.push("ow-zoom--grab");
   if (grabbing) classes.push("ow-zoom--grabbing");
   const known = ready && fitted.width > 0;
+  const imgStyle = plan === null || !known ? undefined : editedStyles(plan, fitted.width, fitted.height, "contain").img;
 
   return (
     <div
@@ -246,10 +263,18 @@ export function ZoomStage({
           width: fitted.width,
           height: fitted.height,
           transform: `translate(${round(shown.x, 3)}px, ${round(shown.y, 3)}px) scale(${round(shown.zoom, 4)})`,
+          ...(plan === null ? {} : { overflow: "hidden" }),
         }}
+        data-edit-key={plan?.key}
       >
         {ready && !cachedFromStart && (
-          <img className="ow-zoom__img ow-zoom__img--ready" src={pictures.small} alt="" draggable={false} />
+          <img
+            className="ow-zoom__img ow-zoom__img--ready"
+            src={pictures.small}
+            alt=""
+            draggable={false}
+            style={imgStyle}
+          />
         )}
         {ready && (
           <img
@@ -257,6 +282,7 @@ export function ZoomStage({
             src={pictures.medium}
             alt=""
             draggable={false}
+            style={imgStyle}
             onLoad={() => setMediumLoaded(true)}
           />
         )}
@@ -266,6 +292,7 @@ export function ZoomStage({
             src={pictures.full}
             alt=""
             draggable={false}
+            style={imgStyle}
             onLoad={() => setFullReady(true)}
           />
         )}

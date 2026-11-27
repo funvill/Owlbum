@@ -347,7 +347,7 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         ...options,
       };
       try {
-        const { status, session } = await api().invoke("album_open", {
+        const { status, session, notices } = await api().invoke("album_open", {
           path,
           options: full,
         });
@@ -362,6 +362,9 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
             : null,
         });
         took(status);
+        // A save into a file that could not be finished (docs/06, "The save record and recovery").
+        for (const message of notices ?? [])
+          showToast({ kind: "error", message });
         // A small folder's scan can end before the answer arrives.
         if (scansFinished !== finishedBefore) await get().refresh();
       } catch (e) {

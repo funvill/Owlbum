@@ -363,7 +363,9 @@ fn read_ifd<R: Read + Seek>(r: &mut R, o: Order, at: u32) -> Option<(Vec<Raw>, u
     let mut buf = vec![0u8; usize::from(n) * 12 + 4];
     r.read_exact(&mut buf).ok()?;
     let entries = buf
-        .chunks_exact(12)
+        .as_chunks::<12>()
+        .0
+        .iter()
         .map(|e| Raw {
             tag: o.u16([e[0], e[1]]),
             kind: o.u16([e[2], e[3]]),

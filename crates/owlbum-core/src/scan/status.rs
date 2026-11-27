@@ -105,4 +105,10 @@ pub struct AlbumOpened {
     /// session (docs/04-browsing.md, "Restoring a session"), in the page's
     /// form ([`crate::album::reopen::to_page`]).
     pub session: Option<serde_json::Value>,
+    /// Messages from settling unfinished saves into files
+    /// (docs/06-editing-and-file-actions.md, "The save record and
+    /// recovery"), each shown once as a toast. Left out when there are none.
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    #[ts(optional, as = "Option<Vec<String>>")]
+    pub notices: Vec<String>,
 }

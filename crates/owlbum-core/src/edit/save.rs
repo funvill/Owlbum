@@ -1095,19 +1095,8 @@ fn settle(
     let path = absolute(album, &rel_path);
     let saved = super::parse_edit(&record.edit);
     let render = env.renders.join(&record.render);
-    if path.exists() {
-        let key = keys::sample(&path).map(|s| s.file_key).unwrap_or_default();
-        if key == record.file_key {
-            // The save never replaced the file: the edit stays.
-            delete_record(album, id)?;
-        } else {
-            // It did: finish step 7.
-            let saved = saved.unwrap_or(super::IDENTITY);
-            finish(album, id, &path, &saved, None)?;
-            album.undo().drop_edits_of(&HashSet::from([id]));
-            let _ = fs::remove_file(&render);
-        }
-        tracing::info!(target: "edit", "save record of photo {id} settled: the file was there");
+    if settle_present(album, id, record, &path)? {
+        let _ = fs::remove_file(&render);
         return Ok(None);
     }
     if render.is_file() {
@@ -1125,6 +1114,63 @@ fn settle(
     delete_record(album, id)?;
     tracing::warn!(target: "edit", "save record of photo {id}: the original is in the bin and the render is gone");
     Ok(Some(text::edit::interrupted(&name)))
+}
+
+/// Settles a record whose photo's file is at `path` (the first two rows of
+/// the recovery table). False, with nothing done, when there is no file.
+fn settle_present(album: &Album, id: i64, record: &SaveRecord, path: &Path) -> AppResult<bool> {
+    if !path.exists() {
+        return Ok(false);
+    }
+    let key = keys::sample(path).map(|s| s.file_key).unwrap_or_default();
+    if key == record.file_key {
+        // The save never replaced the file: the edit stays.
+        delete_record(album, id)?;
+    } else {
+        // It did: finish step 7.
+        let saved = super::parse_edit(&record.edit).unwrap_or(super::IDENTITY);
+        finish(album, id, path, &saved, None)?;
+        album.undo().drop_edits_of(&HashSet::from([id]));
+    }
+    tracing::info!(target: "edit", "save record of photo {id} settled: the file was there");
+    Ok(true)
+}
+
+/// The scanner's part of recovery (docs/06, "The save record and
+/// recovery"): settles the record of every photo that no save holds now
+/// and whose file is at its path, for example after step 7 failed while
+/// the program kept running. A record whose file is not there is left for
+/// the next open, which can put the render in place. Answers how many
+/// records were settled.
+pub fn settle_found(album: &Album) -> usize {
+    if album.is_view_only() {
+        return 0;
+    }
+    let Ok(records) = records(album) else {
+        return 0;
+    };
+    let mut settled = 0;
+    for (id, record) in records {
+        if album.saves().is_busy(id) {
+            continue;
+        }
+        let row = album.db().read(move |conn| {
+            conn.query_row("SELECT rel_path FROM photos WHERE id = ?1", [id], |r| {
+                r.get::<_, String>(0)
+            })
+            .optional()
+            .map_err(sqlite_error(text::edit::READING))
+        });
+        let Ok(Some(rel_path)) = row else { continue };
+        match settle_present(album, id, &record, &absolute(album, &rel_path)) {
+            Ok(true) => settled += 1,
+            Ok(false) => {}
+            Err(e) => {
+                tracing::warn!(target: "edit", "the save record of photo {id} could not be settled: {e}");
+            }
+        }
+    }
+    settled
 }
 
 /// Deletes files in `renders` older than `kept_for`, except those named in

@@ -70,7 +70,7 @@ command! {
             let saved = app
                 .try_state::<AppData>()
                 .and_then(|data| restored_session(&data, &album, &opened));
-            open_album(&app, album);
+            let notices = open_album(&app, album);
             if let Some(data) = app.try_state::<AppData>()
                 && let Err(e) = data.touch_recent(&opened, now_ms())
             {
@@ -91,6 +91,7 @@ command! {
             Ok(AlbumOpened {
                 status,
                 session: saved,
+                notices,
             })
         })
         .await

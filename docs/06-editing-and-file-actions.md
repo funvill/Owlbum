@@ -538,7 +538,7 @@ key:   save:<photo id>
 value: { "edit": <the edit>, "file_key": "<the original's file key>", "render": "<file name in renders/>", "started_at": <ms> }
 ```
 
-While a photo has a save record, its stored edit is **not drawn**: its `Row` carries no plan. So a file that was replaced is never shown with the edit applied a second time, even when step 7 failed and the program kept running. The scanner settles a record by the table below whenever it meets that photo's path. As built (#47), only the open settles records; while a save holds a path the scanner and the folder watcher skip that path (its row and its file), and the save itself finishes or keeps its record.
+While a photo has a save record, its stored edit is **not drawn**: its `Row` carries no plan. So a file that was replaced is never shown with the edit applied a second time, even when step 7 failed and the program kept running. The scanner settles a record by the table below whenever it meets that photo's path. As built (#47, #160): while a save holds a path the scanner and the folder watcher skip that path (its row and its file), and the save itself finishes or keeps its record. At the start of every scan, before the rows are read, each record whose photo no save holds and whose file is at its path is settled by the first two rows of the table (`save::settle_found`), for example after step 7 failed while Owlbum kept running; its render is left for the start-up clean-up. A record with no file at the path is left for the next open, which can put the render in place.
 
 On every writable open, each save record is settled before the scan starts:
 
@@ -547,7 +547,7 @@ On every writable open, each save record is settled before the scan starts:
 | A file with the recorded `file_key` | The save never replaced the file. | Delete the record. The edit stays. |
 | A file with another `file_key` | The save replaced the file. | Finish step 7: clear the edit if it still equals the recorded one, refresh the row, delete the record. |
 | No file, and the render is still in `renders/` on this computer | The original is in the bin and the move failed. | Do step 6 and step 7. |
-| No file and no render | The original is in the bin and the render is gone. | Delete the record, keep the edit, and show: "<name> was being saved when Owlbum stopped. Its original is in the <bin>; restore it to get the photo back." As built (#47) the message goes to the log only; showing it on the page is a follow-up. |
+| No file and no render | The original is in the bin and the render is gone. | Delete the record, keep the edit, and show: "<name> was being saved when Owlbum stopped. Its original is in the <bin>; restore it to get the photo back." As built (#160) the message is logged and also answered in `album_open`'s reply (`notices`, left out when empty); the page shows each as an error toast. |
 
 ### Save all
 
@@ -596,7 +596,7 @@ Closing loses nothing, because every edit is already in the album. So there is n
 | Situation | What happens |
 |---|---|
 | Edit mode is open | It ends as Done first. |
-| A save is running | The close waits for the current photo's sequence to finish. Save all stops after that photo. The window shows "Finishing saving…" meanwhile. |
+| A save is running | The close waits for the current photo's sequence to finish. Save all stops after that photo. The window shows "Finishing saving…" meanwhile (as built, #160: in the place of the Save all button, from `app_closing` until the save ends). |
 | `album` mode | The window closes. |
 | `file` mode with photos waiting | One native question, below. It is asked for closing the window, File > Quit, and before installing an update. |
 

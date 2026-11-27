@@ -510,6 +510,10 @@ impl Work<'_, '_> {
     fn stages(&self, summary: &mut ScanSummary) {
         let env = self.scan.env;
         let progress = self.scan.progress;
+        // A save record whose file is at its path is settled first, so the
+        // rows read next already hold the saved file's facts (docs/06, "The
+        // save record and recovery").
+        crate::edit::save::settle_found(self.scan.album);
         let known = match self.known() {
             Ok(k) => k,
             Err(e) => {

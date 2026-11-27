@@ -486,6 +486,45 @@ fn recovery_settles_each_row_of_the_table() {
 }
 
 #[test]
+fn the_scanner_settles_a_record_whose_file_is_there_and_leaves_the_rest() {
+    let f = Fixture::new();
+    let record = |id: i64| {
+        write_record(
+            &f.album,
+            id,
+            &SaveRecord {
+                edit: serde_json::json!({"rotate": 0, "flip": true}),
+                file_key: "fk1:1:old".to_owned(),
+                render: "gone.png".to_owned(),
+                started_at: 1,
+            },
+        )
+        .unwrap();
+    };
+    // Step 7 failed after the file was replaced: the scan finishes it.
+    let replaced = f.photo("replaced.png");
+    f.flip(replaced);
+    record(replaced);
+    // No file: left for the next open.
+    let lost = f.photo("lost.png");
+    f.flip(lost);
+    record(lost);
+    std::fs::remove_file(f.root().join("lost.png")).unwrap();
+    // Being saved now: left to its save.
+    let busy = f.photo("busy.png");
+    f.flip(busy);
+    record(busy);
+    let claim = f.album.saves().claim(busy, "busy.png").unwrap();
+
+    assert_eq!(settle_found(&f.album), 1);
+    assert_eq!(f.edit(replaced), None, "the edit is in the file now");
+    assert!(f.edit(lost).is_some());
+    assert!(f.edit(busy).is_some());
+    assert_eq!(f.records(), 2);
+    drop(claim);
+}
+
+#[test]
 fn old_renders_are_cleaned_unless_a_record_names_them() {
     let tmp = tempfile::tempdir().unwrap();
     std::fs::write(tmp.path().join("old.png"), b"x").unwrap();

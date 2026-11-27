@@ -11,4 +11,10 @@ export type AlbumOpened = { status: AlbumStatus,
  * session (docs/04-browsing.md, "Restoring a session"), in the page's
  * form ([`crate::album::reopen::to_page`]).
  */
-session: JsonValue | null, };
+session: JsonValue | null, 
+/**
+ * Messages from settling unfinished saves into files
+ * (docs/06-editing-and-file-actions.md, "The save record and
+ * recovery"), each shown once as a toast. Left out when there are none.
+ */
+notices?: Array<string>, };

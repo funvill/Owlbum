@@ -8,17 +8,30 @@ const t = editText;
 /**
  * Save all (N) in the top bar, in `file` mode while any photo has an edit
  * (docs/06-editing-and-file-actions.md, "Save all"). While a save runs it
- * shows the count in its place: "Saving 2 of 5…".
+ * shows the count in its place: "Saving 2 of 5…", and "Finishing saving…" while the
+ * window waits to close (docs/06, "Closing and quitting").
  */
 export function SaveAllButton({ viewOnly }: { viewOnly?: string }) {
   const fileMode = useSettingsStore((s) => s.settings?.edit_target === "file");
   const edited = useSaveStore((s) => s.status?.edited ?? 0);
   const running = useSaveStore((s) => s.running);
   const progress = useSaveStore((s) => s.progress);
+  const finishing = useSaveStore(
+    (s) => s.closing && (s.running || (s.status?.saving ?? 0) > 0),
+  );
+  if (finishing) {
+    return (
+      <Button icon="check" disabledReason={t.finishingSaving}>
+        {t.finishingSaving}
+      </Button>
+    );
+  }
   if (running) {
     return (
       <Button icon="check" disabledReason={t.saving}>
-        {progress === null ? t.saving : t.savingProgress(progress.done, progress.total)}
+        {progress === null
+          ? t.saving
+          : t.savingProgress(progress.done, progress.total)}
       </Button>
     );
   }

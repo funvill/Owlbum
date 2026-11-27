@@ -20,9 +20,16 @@ export interface SaveState {
   running: boolean;
   /** The last `edit_save_progress` of a running save of several. */
   progress: SaveProgress | null;
+  /** The window is closing (`app_closing`): a running save shows "Finishing saving…". */
+  closing: boolean;
 }
 
-const idle: SaveState = { status: null, running: false, progress: null };
+const idle: SaveState = {
+  status: null,
+  running: false,
+  progress: null,
+  closing: false,
+};
 
 export const useSaveStore = create<SaveState>(() => idle);
 
@@ -60,6 +67,8 @@ export async function followEditStatus(): Promise<() => void> {
     api().listen("album_changed", (e) => {
       if (e.reason !== "info" && e.reason !== "tags") void refreshEditStatus();
     }),
+    // The close waits for a running save's current photo (docs/06, "Closing and quitting").
+    api().listen("app_closing", () => useSaveStore.setState({ closing: true })),
     api().listen("edit_save_progress", (progress) =>
       useSaveStore.setState({
         progress: progress.current === null ? null : progress,
@@ -77,7 +86,10 @@ export async function followEditStatus(): Promise<() => void> {
 /** The one toast for a finished save (docs/06, "Save all"). */
 export function savedToast(out: SavedEdits): void {
   const skipped = out.skipped > 0 ? t.skippedCopyOnly(out.skipped) : "";
-  const only = out.failed.length === 1 && out.saved.length === 0 ? out.failed[0] : undefined;
+  const only =
+    out.failed.length === 1 && out.saved.length === 0
+      ? out.failed[0]
+      : undefined;
   if (only !== undefined) {
     showToast({ kind: "error", message: only.message });
   } else if (out.failed.length > 0) {
@@ -92,12 +104,14 @@ export function savedToast(out: SavedEdits): void {
   } else if (out.saved.length > 0 || out.skipped > 0) {
     showToast({ kind: "info", message: t.saved(out.saved.length) + skipped });
   }
-  for (const warning of out.warnings) showToast({ kind: "info", message: warning });
+  for (const warning of out.warnings)
+    showToast({ kind: "info", message: warning });
 }
 
 async function run(job: () => Promise<SavedEdits>): Promise<void> {
   if (saving()) return;
-  useSaveStore.setState({ running: true, progress: null });
+  // A close that went back ("Go back") is over once a new save starts.
+  useSaveStore.setState({ running: true, progress: null, closing: false });
   try {
     savedToast(await job());
   } catch (e) {
@@ -124,7 +138,8 @@ export async function saveAs(id: number): Promise<void> {
   try {
     const out = await api().invoke("edit_save_as", { photo_id: id });
     if (out.cancelled || out.saved_name === null) return;
-    if (out.warning !== null) showToast({ kind: "error", message: out.warning });
+    if (out.warning !== null)
+      showToast({ kind: "error", message: out.warning });
     else showToast({ kind: "info", message: t.savedCopy(out.saved_name) });
   } catch (e) {
     showToast({ kind: "error", message: toAppError(e).message });

@@ -166,8 +166,9 @@ impl Session {
 
 /// Opens `album` in the app's session, with its scans' events sent to the
 /// page, and changes to its state sent as `album_changed` with reason
-/// `status`.
-pub fn open_album<R: Runtime>(app: &AppHandle<R>, album: Album) {
+/// `status`. Answers the messages from settling unfinished saves, for the
+/// page to show.
+pub fn open_album<R: Runtime>(app: &AppHandle<R>, album: Album) -> Vec<String> {
     let emitter = Arc::new(TauriEmitter(app.clone()));
     {
         let emitter = Arc::clone(&emitter);
@@ -184,18 +185,22 @@ pub fn open_album<R: Runtime>(app: &AppHandle<R>, album: Album) {
     }
     let mut env = ScanEnv::new(emitter);
     env.thumbs = app.try_state::<Thumbs>().map(|t| t.inner().clone());
-    recover_saves(app, &album);
+    let notices = recover_saves(app, &album);
     app.state::<Session>().open(album, env);
+    notices
 }
 
 /// Settles the save records of a save into a file that did not finish
 /// (docs/06-editing-and-file-actions.md, "The save record and recovery"),
-/// before the album's first scan. Its messages go to the log.
-fn recover_saves<R: Runtime>(app: &AppHandle<R>, album: &Album) {
+/// before the album's first scan. Its messages are logged and answered for
+/// the page.
+fn recover_saves<R: Runtime>(app: &AppHandle<R>, album: &Album) -> Vec<String> {
     let no_bin = |_: &std::path::Path| Err(String::new());
     let env =
         owlbum_core::edit::save::SaveEnv::new(crate::commands::edit::renders_dir(app), &no_bin);
-    for notice in owlbum_core::edit::save::recover(album, &env) {
+    let notices = owlbum_core::edit::save::recover(album, &env);
+    for notice in &notices {
         tracing::warn!(target: "edit", "{notice}");
     }
+    notices
 }

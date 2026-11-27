@@ -221,16 +221,11 @@ mod tests {
                 .expect("a colour edit");
             let want = apply_colour(&cm, base.map(|v| f64::from(v) / 255.0)).map(|v| v * 255.0);
             for (target, tolerance) in [(SaveFormat::Png, 1.0), (SaveFormat::Jpeg, 3.0)] {
-                let out = tmp.path().join(format!(
-                    "out.{}",
-                    if target == SaveFormat::Png {
-                        "png"
-                    } else {
-                        "jpg"
-                    }
-                ));
+                let out = tmp.path().join("out");
                 render_edit(&src, format, &edit, target, &out).unwrap();
-                let img = image::open(&out).unwrap().to_rgb8();
+                let img = image::load_from_memory(&fs::read(&out).unwrap())
+                    .unwrap()
+                    .to_rgb8();
                 let (cx, cy) = (img.width() / 2, img.height() / 2);
                 let got = img.get_pixel(cx, cy).0;
                 for i in 0..3 {

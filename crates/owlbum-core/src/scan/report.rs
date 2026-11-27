@@ -215,3 +215,94 @@ pub fn scan_errors(
         items: page(&items, offset, limit),
     })
 }
+
+/// Every item of a paged list: `page(offset, PAGE_MAX)` until `total` is
+/// reached or a page comes back empty.
+fn all_pages<T>(mut page: impl FnMut(u32) -> AppResult<(u32, Vec<T>)>) -> AppResult<Vec<T>> {
+    let mut items = Vec::new();
+    loop {
+        let (total, more) = page(count(items.len()))?;
+        let done = more.is_empty();
+        items.extend(more);
+        if done || items.len() >= usize::try_from(total).unwrap_or(usize::MAX) {
+            return Ok(items);
+        }
+    }
+}
+
+/// The Files not shown list as plain text, for **Copy list**
+/// (docs/04-browsing.md, "Notices"): one line per file, its path relative
+/// to the album root and its reason separated by a tab, the unsupported
+/// files first and then the files that could not be read, each in walker
+/// order.
+pub fn not_shown_text(unsupported: &[UnsupportedFile], errors: &[ScanErrorItem]) -> String {
+    let lines = unsupported
+        .iter()
+        .map(|u| (u.rel_path.as_str(), u.reason.as_str()))
+        .chain(
+            errors
+                .iter()
+                .map(|e| (e.rel_path.as_str(), e.message.as_str())),
+        );
+    let mut out = String::new();
+    for (path, reason) in lines {
+        out.push_str(path);
+        out.push('\t');
+        out.push_str(reason);
+        out.push('\n');
+    }
+    out
+}
+
+/// [`not_shown_text`] of `unsupported`, the last whole walk's unsupported
+/// files, and every row in scope with a scan error.
+pub fn not_shown(
+    album: &Album,
+    overlay: &Overlay,
+    unsupported: &[UnsupportedFile],
+) -> AppResult<String> {
+    let errors = all_pages(|offset| {
+        let p = scan_errors(album, overlay, offset, PAGE_MAX)?;
+        Ok((p.total, p.items))
+    })?;
+    Ok(not_shown_text(unsupported, &errors))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn not_shown_text_lists_unsupported_then_unreadable_with_tabs() {
+        let unsupported = [UnsupportedFile {
+            rel_path: "2024/a.heic".into(),
+            label: "HEIC".into(),
+            reason: text::media::HEIC_UNSUPPORTED.into(),
+        }];
+        let errors = [ScanErrorItem {
+            id: 4,
+            rel_path: "b.jpg".into(),
+            code: "decode".into(),
+            message: "This file could not be read: bad bytes".into(),
+        }];
+        assert_eq!(
+            not_shown_text(&unsupported, &errors),
+            "2024/a.heic\tHEIC photos are not supported yet.\n\
+             b.jpg\tThis file could not be read: bad bytes\n"
+        );
+        assert_eq!(not_shown_text(&[], &[]), "");
+    }
+
+    #[test]
+    fn all_pages_reads_until_the_total() {
+        let items: Vec<u32> = (0..1200).collect();
+        let mut calls = 0;
+        let all = all_pages(|offset| {
+            calls += 1;
+            Ok((count(items.len()), page(&items, offset, PAGE_MAX)))
+        })
+        .unwrap();
+        assert_eq!(all, items);
+        assert_eq!(calls, 3);
+    }
+}

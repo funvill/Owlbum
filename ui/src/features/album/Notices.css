@@ -1,0 +1,35 @@
+/* docs/04-browsing.md, "Notices": each sentence is a link button; the
+   Files not shown list scrolls at half the window's height. */
+
+.ow-notices__link {
+  padding: 0;
+  background: none;
+  border: 0;
+  color: var(--text);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+.ow-notshown__list {
+  max-height: 50vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.ow-notshown__item {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0 var(--space-3);
+  padding: var(--space-1) 0;
+}
+
+.ow-notshown__path {
+  overflow-wrap: anywhere;
+}
+
+.ow-notshown__reason {
+  color: var(--muted);
+}

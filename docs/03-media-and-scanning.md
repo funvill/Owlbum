@@ -220,7 +220,7 @@ GIF and WebP files may hold more than one frame. `metadata` reports the frame co
 - Thumbnails, analysis, the full-size zoom copy, tagging and edit rendering all use **frame 1**.
 - A file with more than one frame stores its loop length in `duration_ms`. A still stores NULL. So `kind = 'image'` with a `duration_ms` means "animated".
 - The grid shows such a tile with a small "GIF" or "WebP" badge and does not animate it.
-- The preview pane and the full-screen viewer show the animation by loading the original file bytes in an `<img>` from `owlbum://original/<photo_id>`. The webview plays it. Zooming an animated picture zooms that same element; it does not switch to the still zoom copy.
+- The preview pane and the full-screen viewer show the animation by loading the original file bytes in an `<img>` from `owlbum://original/<photo_id>`. The webview plays it. Zooming an animated picture zooms that same element; it does not switch to the still zoom copy. The small thumbnail (frame 1) shows until the original is decoded; the medium thumbnail and the zoom copy are not asked for. An animated picture is told apart on the page by its row alone: `kind` is `image` and `duration_ms` is set.
 - Animated PNG and animated JPEG XL are shown as stills in version 1.
 
 ### The JPEG XL handler
@@ -771,6 +771,7 @@ All use the `album_` and `app_` prefixes from [Architecture](01-architecture.md)
 | `album_scan_report()` | `ScanReport` | Counts and short lists from the last walk that ended (a cancelled walk, or one whose folder could not be read, leaves the previous report; before any, everything is empty): unreadable folders (`{ rel_path, message }`) and nested albums (`{ rel_path, message }`), each the first 100 with a count of all; skipped links (count), online-only files (count), unreadable names (count), unsupported files by label (`{ label, count }`, in the order of the table of recognised-but-unsupported formats), and notices such as the missing-GStreamer one (none until video lands). |
 | `album_scan_errors(offset, limit)` | `{ total, items: [{ id, rel_path, code, message }] }` | The `scan_error` rows in scope that are not missing, in walker order; in a view-only album, the rows held in memory replace the database's. `limit` at most 500: a larger one is taken as 500. |
 | `album_unsupported(offset, limit)` | `{ total, items: [{ rel_path, label, reason }] }` | Files recognised but not supported yet, from the last walk that ended, in walker order. Held in memory, not in the database. `limit` as above. |
+| `album_copy_not_shown()` | number of lines | Puts the whole Files not shown list on the clipboard as plain text: one line per file, its path relative to the album root, a tab and its reason; the unsupported files first, then the files that could not be read, each in walker order (see [Browsing](04-browsing.md#notices)). Fails with `no_album` or `clipboard_failed` ("Couldn't copy the list: {reason}"). |
 | `app_formats()` | `[{ id, extensions, kind, label, edit_in_place, alpha, save_as, animated }]` | The registry, so the page never hard-codes a format rule. |
 
 ### Events

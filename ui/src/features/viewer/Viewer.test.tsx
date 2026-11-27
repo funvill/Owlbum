@@ -250,6 +250,13 @@ describe("Viewer", () => {
     expect(within(viewer()).queryByText("Edited")).toBeNull();
   });
 
+  it("plays an animated picture's original file", async () => {
+    setup(photos(5, (p) => (p.id === 2 ? { ...p, duration_ms: 1200 } : p)));
+    await open(2);
+    await waitFor(() => expect(images().some((s) => s!.includes("original/2?v=tk-2"))).toBe(true));
+    expect(images().some((s) => s!.endsWith("/m"))).toBe(false);
+  });
+
   it("shows the star and hidden marks in the top bar", async () => {
     setup(photos(5, (p) => (p.id === 2 ? { ...p, star: true } : p)));
     await open(2);

@@ -8,7 +8,6 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { createPortal } from "react-dom";
-import { fullUrl, thumbUrl } from "../../api";
 import type { PhotoDetail } from "../../api/bindings/PhotoDetail";
 import { IconButton, Tooltip, layerRoot } from "../../controls";
 import { viewerBarMs } from "../../controls/timing";
@@ -21,7 +20,7 @@ import { step, stepToEnd, useGridStore } from "../grid";
 import { fileKeyHandlers } from "../files/keys";
 import { isRotateKey, rotateKeyHandlers } from "../edit";
 import { FlagMark, ScoreToast, flagKeyHandlers, isFlagKey } from "../organise";
-import { CachedZoomStage, usePreload, useShownRow, zoomKeyHandlers, type ZoomHandle } from "../preview";
+import { CachedZoomStage, stagePictures, usePreload, useShownRow, zoomKeyHandlers, type ZoomHandle } from "../preview";
 import { closeViewer, toggleDetails, useViewerStore } from "./store";
 import "./Viewer.css";
 
@@ -159,11 +158,7 @@ function OpenViewer({ detail }: ViewerProps) {
           <CachedZoomStage
             key={`${row.id}:${row.thumb_key}:${row.edit_plan?.key ?? ""}`}
             ready={row.thumb_key !== ""}
-            pictures={{
-              small: thumbUrl(row.thumb_key, "s"),
-              medium: thumbUrl(row.thumb_key, "m"),
-              full: fullUrl(row.id, row.thumb_key),
-            }}
+            pictures={stagePictures(row)}
             aspect={row.aspect}
             plan={row.edit_plan}
             original={own !== null && own.width > 0 && own.height > 0 ? { width: own.width, height: own.height } : null}

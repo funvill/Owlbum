@@ -101,8 +101,16 @@ impl Drop for Fixture {
 impl Fixture {
     /// Makes an album of three PNGs, opens it and waits for its scan.
     fn open(&self) -> PathBuf {
+        self.open_with(&[])
+    }
+
+    /// [`Fixture::open`], with `extra` files (name, bytes) beside the PNGs.
+    fn open_with(&self, extra: &[(&str, &[u8])]) -> PathBuf {
         let root = self.tmp.path().join("album");
         std::fs::create_dir_all(&root).unwrap();
+        for (name, bytes) in extra {
+            std::fs::write(root.join(name), bytes).unwrap();
+        }
         for (i, name) in ["a.png", "b.png", "c.png"].iter().enumerate() {
             let img = RgbImage::from_pixel(30 + i as u32, 20, Rgb([200, 10, 10]));
             std::fs::write(root.join(name), owlbum_fixtures::encode::png_rgb(&img)).unwrap();
@@ -272,4 +280,19 @@ fn a_refused_drag_is_reported() {
     } else {
         assert_eq!(err["code"], "not_supported");
     }
+}
+
+#[test]
+fn copy_not_shown_copies_unsupported_then_unreadable_files() {
+    let f = fixture();
+    f.open_with(&[
+        ("z.heic", b"not really a heic"),
+        ("bad.jpg", b"these bytes are no picture at all"),
+    ]);
+    let copied: u32 = f.call("album_copy_not_shown", json!({})).unwrap();
+    assert_eq!(copied, 2);
+    let text = f.fake.text.lock().unwrap().clone().unwrap();
+    let lines: Vec<&str> = text.lines().collect();
+    assert_eq!(lines[0], "z.heic	HEIC photos are not supported yet.");
+    assert!(lines[1].starts_with("bad.jpg	"), "{text:?}");
 }

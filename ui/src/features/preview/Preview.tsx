@@ -10,7 +10,6 @@
 // preloading").
 
 import type { MouseEvent as ReactMouseEvent, Ref } from "react";
-import { fullUrl, thumbUrl } from "../../api";
 import type { PhotoAt } from "../../api/bindings/PhotoAt";
 import type { PhotoDetail } from "../../api/bindings/PhotoDetail";
 import { previewText as t } from "../../text/preview";
@@ -18,6 +17,7 @@ import { useSettingsStore } from "../app";
 import { useGridStore } from "../grid";
 import { FlagMark, ScoreToast } from "../organise";
 import { Caption } from "./Caption";
+import { stagePictures } from "./pictures";
 import { useCachedReady, usePreload } from "./preload";
 import { useShownRow } from "./shownRow";
 import { ZoomStage, type ZoomHandle, type ZoomStageProps } from "./ZoomStage";
@@ -66,11 +66,7 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
         <CachedZoomStage
           key={`${row.id}:${row.thumb_key}:${row.edit_plan?.key ?? ""}`}
           ready={row.thumb_key !== ""}
-          pictures={{
-            small: thumbUrl(row.thumb_key, "s"),
-            medium: thumbUrl(row.thumb_key, "m"),
-            full: fullUrl(row.id, row.thumb_key),
-          }}
+          pictures={stagePictures(row)}
           aspect={row.aspect}
           plan={row.edit_plan}
           original={own !== null && own.width > 0 && own.height > 0 ? { width: own.width, height: own.height } : null}

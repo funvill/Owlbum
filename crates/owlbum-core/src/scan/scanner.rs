@@ -253,6 +253,20 @@ impl Scanner {
         report::scan_errors(&self.shared.album, &overlay, offset, limit)
     }
 
+    /// `album_copy_not_shown`: the whole Files not shown list as plain
+    /// text.
+    pub fn not_shown_text(&self) -> AppResult<String> {
+        let unsupported = self
+            .shared
+            .state()
+            .walk
+            .as_ref()
+            .map(|w| w.unsupported.clone())
+            .unwrap_or_default();
+        let overlay = self.overlay();
+        report::not_shown(&self.shared.album, &overlay, &unsupported)
+    }
+
     /// The open album and its rows held in memory, for the picture URLs.
     pub fn open(&self) -> crate::thumbs::serve::Open<'_> {
         crate::thumbs::serve::Open {

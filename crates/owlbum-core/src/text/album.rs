@@ -128,3 +128,12 @@ pub mod tidy {
         }
     }
 }
+
+/// `clipboard_failed` for **Copy list** in the Files not shown dialog.
+pub fn copy_list_failed(reason: &str) -> String {
+    format!("Couldn't copy the list: {reason}")
+}
+
+/// What was being done, for an `internal` error while copying the Files
+/// not shown list.
+pub const COPYING_LIST: &str = "copying the list of files not shown";

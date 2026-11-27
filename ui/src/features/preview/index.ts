@@ -2,6 +2,7 @@
 // (docs/04-browsing.md, "Preview pane").
 export { CachedZoomStage, Preview, type PreviewProps } from "./Preview";
 export { Caption, type CaptionProps } from "./Caption";
+export { isAnimated, stagePictures } from "./pictures";
 export {
   ZOOM_KEY_IDS,
   ZoomStage,

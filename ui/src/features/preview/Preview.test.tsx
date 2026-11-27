@@ -218,6 +218,21 @@ describe("Preview", () => {
     expect(images().some((s) => s!.includes("full/"))).toBe(false);
   });
 
+  it("plays an animated picture's original file and zooms that same element", async () => {
+    setup(photos(5, (p) => (p.id === 2 ? { ...p, duration_ms: 900 } : p)));
+    await show(2);
+    await waitFor(() => expect(fake.calls.some((c) => c.command === "photo_detail")).toBe(true));
+    expect(images()).toEqual([expect.stringContaining("thumb/tk-2/s"), expect.stringContaining("original/2?v=tk-2")]);
+    for (let i = 0; i < 6; i++) wheel(-100);
+    expect(zoomOf()).toBeGreaterThan(2);
+    expect(images().some((s) => s!.includes("full/") || s!.endsWith("/m"))).toBe(false);
+  });
+
+  it("shows a still with no loop length as a still", async () => {
+    await show(2);
+    expect(images().some((s) => s!.includes("original/"))).toBe(false);
+  });
+
   it("does not zoom a video", async () => {
     setup(photos(5, (p) => ({ ...p, kind: "video", duration_ms: 5000 })));
     await show(2);

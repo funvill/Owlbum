@@ -69,6 +69,7 @@ export const albumHandlers: AreaHandlers<AlbumCommands> = {
   album_people: () => [],
   album_open: ({ path }) => ({ status: fakeStatus(path), session: null }),
   album_close: () => null,
+  album_copy_not_shown: () => 0,
   album_status: () => null,
   album_undo: () => ({ outcome: "nothing", label: null, ids: [], revision: 0 }),
   album_tidy_list: () => [],

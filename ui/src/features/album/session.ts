@@ -35,6 +35,8 @@ export interface AlbumState {
   dropOver: boolean;
   /** The conflict banner was dismissed until the album is opened again. */
   conflictHidden: boolean;
+  /** The notices were dismissed while they said this (`noticeKey`); null when shown. */
+  noticesHidden: string | null;
   /** The reading bar shows, with this scan's progress. */
   reading: ScanProgress | null;
   /** Where reading started in this scan, for the estimate. */
@@ -67,6 +69,16 @@ export interface AlbumState {
   askRestore(): Promise<void>;
   /** Hides the conflict banner until the album is opened again. */
   hideConflict(): void;
+  /** Hides the notices until their numbers change or the album is opened again. */
+  hideNotices(): void;
+}
+
+/**
+ * What the notices say, as one string: dismissing them hides them until
+ * this changes (docs/04-browsing.md, "Notices").
+ */
+export function noticeKey(status: AlbumStatus): string {
+  return `${status.unsupported.count}|${status.unsupported.labels.join(",")}|${status.unreadable}`;
 }
 
 /** The last part of a path: an opened folder's own name, for messages. */
@@ -216,6 +228,7 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
     question: null,
     dropOver: false,
     conflictHidden: false,
+    noticesHidden: null,
     reading: null,
     readStart: null,
 
@@ -286,6 +299,7 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         reading: null,
         readStart: null,
         conflictHidden: false,
+    noticesHidden: null,
       });
       latest = null;
       const full: OpenOptions = {
@@ -408,6 +422,11 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
 
     hideConflict() {
       set({ conflictHidden: true });
+    },
+
+    hideNotices() {
+      const status = get().status;
+      set({ noticesHidden: status === null ? null : noticeKey(status) });
     },
   };
 });

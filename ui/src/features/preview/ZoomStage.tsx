@@ -53,6 +53,11 @@ export interface StagePictures {
   medium: string;
   /** The full-size picture, asked for only past the medium picture's pixels. */
   full: string;
+  /**
+   * An animated picture's original file: the webview plays it. It takes
+   * the place of the medium and full-size pictures and zooms as it is.
+   */
+  animated?: string | null;
 }
 
 export interface ZoomStageProps {
@@ -131,6 +136,8 @@ export function ZoomStage({
   const mediumReady = mediumLoaded || mediumCached;
   const [fullWanted, setFullWanted] = useState(false);
   const [fullReady, setFullReady] = useState(false);
+  const [animatedReady, setAnimatedReady] = useState(false);
+  const animated = pictures.animated ?? null;
   const [grabbing, setGrabbing] = useState(false);
 
   // An edit gives the stage the edited picture's shape and size.
@@ -203,7 +210,8 @@ export function ZoomStage({
   }, [zoomBy]);
 
   // Ask for the full-size picture once it is drawn past the medium picture's pixels; keep it for this photo.
-  const wantFull = zoomable && original !== null && needsFull(fitted.width, shown.zoom, dpr(), original);
+  const wantFull =
+    zoomable && animated === null && original !== null && needsFull(fitted.width, shown.zoom, dpr(), original);
   if (wantFull && !fullWanted) setFullWanted(true);
 
   const drag = useRef<{ id: number; x: number; y: number; from: View } | null>(null);
@@ -267,7 +275,7 @@ export function ZoomStage({
         }}
         data-edit-key={plan?.key}
       >
-        {ready && !cachedFromStart && (
+        {ready && (!cachedFromStart || animated !== null) && (
           <img
             className="ow-zoom__img ow-zoom__img--ready"
             src={pictures.small}
@@ -276,7 +284,17 @@ export function ZoomStage({
             style={imgStyle}
           />
         )}
-        {ready && (
+        {ready && animated !== null && (
+          <img
+            className={`ow-zoom__img ow-zoom__img--animated${animatedReady ? " ow-zoom__img--ready" : ""}`}
+            src={animated}
+            alt=""
+            draggable={false}
+            style={imgStyle}
+            onLoad={() => setAnimatedReady(true)}
+          />
+        )}
+        {ready && animated === null && (
           <img
             className={`ow-zoom__img${mediumReady ? " ow-zoom__img--ready" : ""}`}
             src={pictures.medium}

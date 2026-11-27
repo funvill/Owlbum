@@ -20,6 +20,7 @@ area! {
     prefix: "album",
     commands: [
         album_close,
+        album_copy_not_shown,
         album_open,
         album_people,
         album_rescan,
@@ -175,6 +176,26 @@ command! {
     /// taken as 500. `no_album` when no album is open.
     pub fn album_unsupported(offset: u32, limit: u32; session: State<'_, Session>) -> UnsupportedFiles {
         session.with(|open| Ok(open.scanner().unsupported(offset, limit)))
+    }
+}
+
+command! {
+    /// Puts the whole Files not shown list on the clipboard as plain text:
+    /// one line per file, its path relative to the album root, a tab and
+    /// its reason; the unsupported files first, then the files that could
+    /// not be read (docs/04-browsing.md, "Notices"). Answers how many
+    /// lines were copied. Errors: `no_album`, `clipboard_failed`.
+    pub async fn album_copy_not_shown<R: Runtime>(; app: AppHandle<R>) -> u32 {
+        let desktop = crate::commands::file::desktop(&app)?;
+        off_main(text::album::COPYING_LIST, move || {
+            let scanner = app.state::<Session>().with(|open| Ok(std::sync::Arc::clone(open.scanner_arc())))?;
+            let list = scanner.not_shown_text()?;
+            desktop.copy_text(&list).map_err(|r| {
+                AppError::new(owlbum_core::ErrorCode::ClipboardFailed, text::album::copy_list_failed(&r))
+            })?;
+            Ok(u32::try_from(list.lines().count()).unwrap_or(u32::MAX))
+        })
+        .await
     }
 }
 

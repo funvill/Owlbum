@@ -76,7 +76,7 @@ pub struct PreparedDrag {
 #[derive(Default)]
 pub struct DragPrep(pub DragCache<PreparedDrag>);
 
-fn desktop<R: Runtime>(app: &AppHandle<R>) -> Result<Arc<dyn Desktop>, AppError> {
+pub(crate) fn desktop<R: Runtime>(app: &AppHandle<R>) -> Result<Arc<dyn Desktop>, AppError> {
     app.try_state::<DesktopShell>()
         .map(|d| Arc::clone(&d.0))
         .ok_or_else(|| AppError::internal(text::files::COPYING))

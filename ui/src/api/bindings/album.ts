@@ -16,6 +16,7 @@ import type { UnsupportedFiles } from "./UnsupportedFiles";
 
 export type AlbumCommands = {
   album_close: { args: Record<string, never>; result: null };
+  album_copy_not_shown: { args: Record<string, never>; result: number };
   album_open: { args: { path: string; options: OpenOptions | null }; result: AlbumOpened };
   album_people: { args: Record<string, never>; result: Array<PersonCount> };
   album_rescan: { args: Record<string, never>; result: null };

@@ -1,10 +1,15 @@
 // Text shown by the album feature (src/features/album).
 // docs/04-browsing.md, "Start screen", "Opening a folder", "Top bar",
-// "Album banners", "Reading bar" and "Toasts and other dialogs".
+// "Album banners", "Reading bar", "Notices" and "Toasts and other dialogs".
 
 /** "1 photo", "2,140 photos": the plural "s" only when the number is not 1. */
 function plural(n: number, one: string, many: string): string {
   return n === 1 ? one : many;
+}
+
+/** "2,140": thousands separators. */
+function count(n: number): string {
+  return n.toLocaleString("en-US");
 }
 
 export const albumText = {
@@ -73,6 +78,18 @@ export const albumText = {
   tryAgain: "Try again",
   restoreBackupEllipsis: "Restore backup…",
   openForChanges: "Open for changes",
+
+  // Notices and the Files not shown dialog
+  noticesLabel: "Files not shown",
+  unsupportedNotice: (n: number, labels: readonly string[]) =>
+    `${count(n)} ${plural(n, "file", "files")} not supported yet (${labels.join(", ")})`,
+  unreadableNotice: (n: number) => `${count(n)} ${plural(n, "file", "files")} could not be read`,
+  noticeSeparator: " · ",
+  notShownTitle: "Files not shown",
+  notShownLoading: "Reading the list…",
+  notShownEmpty: "Every file is shown.",
+  copyList: "Copy list",
+  listCopied: "Copied the list",
 
   // Questions when opening. Their sentences are the error's message, from Rust.
   staleTitle: "Is this album open somewhere else?",

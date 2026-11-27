@@ -89,6 +89,11 @@ pub fn write(path: &Path, bytes: &[u8]) -> io::Result<()> {
     let mut file = match create_new(path) {
         Ok(file) => file,
         Err(e) if e.kind() == io::ErrorKind::AlreadyExists => return replace(path, bytes),
+        // Windows answers "access denied", not "already exists", while
+        // another writer's rename over the name is still settling (its
+        // old file is pending delete). Replacing copes with that race; a
+        // folder that truly refuses writes fails there too.
+        Err(e) if e.kind() == io::ErrorKind::PermissionDenied => return replace(path, bytes),
         Err(e) => return Err(e),
     };
     file.write_all(bytes).inspect_err(|_| {

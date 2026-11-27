@@ -19,6 +19,7 @@ Owlbum is a from-scratch rebuild of an earlier program, Photo Tool. The old prog
 | 7 | [Tagging](07-tagging.md) | "What's in it": models, downloads, the tagging queue, descriptions, objects, keywords, and search by meaning. |
 | 8 | [Desktop, release and tests](08-desktop-and-release.md) | Menus, settings, keyboard shortcut overlay, updates, About, What's new, logs, packaging, the release workflow, the marketing site, and the test rules. |
 | 9 | [Visual design](09-visual-design.md) | Theme tokens, typography, spacing, layering, window sizes, components, accessibility, icons, the logo, and design suggestions awaiting a decision. |
+| | [Build process](build-process.md) | How the v1 build was run, where it paused, and how to resume it on this or another computer. |
 | | [Roadmap](roadmap.md) | Every version 1 feature as a GitHub issue, grouped into ordered milestones, plus the issues deferred until after version 1. |
 
 ## Principles

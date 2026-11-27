@@ -1,4 +1,4 @@
-import { memo, useState, type CSSProperties, type MouseEvent } from "react";
+import { memo, useState, type CSSProperties, type MouseEvent, type PointerEvent } from "react";
 import { thumbUrl } from "../../api";
 import type { EditTarget } from "../../api/bindings/EditTarget";
 import type { PhotoAt } from "../../api/bindings/PhotoAt";
@@ -15,6 +15,8 @@ export interface TileActions {
   onOpen?: (at: PhotoAt) => void;
   /** A right-click: the photo menu. */
   onMenu?: (at: PhotoAt, event: MouseEvent) => void;
+  /** A pointer pressed on the photo: may become a drag out (#42). */
+  onPress?: (at: PhotoAt, event: PointerEvent) => void;
   /** The star button: star or unstar this photo only. */
   onStar?: (row: Row) => void;
   /** The stack count: open or fold the stack. */
@@ -115,6 +117,7 @@ export const Tile = memo(function Tile({
         style={style}
         onClick={(e) => actions.onTileClick?.(at, e)}
         onDoubleClick={() => actions.onOpen?.(at)}
+        onPointerDown={(e) => actions.onPress?.(at, e)}
         onContextMenu={(e) => {
           if (actions.onMenu === undefined) return;
           e.preventDefault();

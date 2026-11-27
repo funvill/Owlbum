@@ -350,6 +350,7 @@ export function Grid(props: GridProps) {
       onTileClick: (at, e) => actions.current.onTileClick?.(at, e),
       onOpen: (at) => actions.current.onOpen?.(at),
       onMenu: hasMenu ? (at, e) => actions.current.onMenu?.(at, e) : undefined,
+      onPress: (at, e) => actions.current.onPress?.(at, e),
       onStar: hasStar ? (row) => actions.current.onStar?.(row) : undefined,
       onStack: hasStack ? (row) => actions.current.onStack?.(row) : undefined,
     }),

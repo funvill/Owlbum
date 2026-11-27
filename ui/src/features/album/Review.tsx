@@ -1,7 +1,9 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useState } from "react";
+import type { Point } from "../../controls/place";
 import type { PhotoAt } from "../../api/bindings/PhotoAt";
 import { albumText } from "../../text/album";
 import { DetailsPanel, useDetail, type CurrentPhoto } from "../details";
+import { PhotoMenu, pressPhoto, useFileKeys } from "../files";
 import { BrowseGrid, gridBlocks, selectNone, useGridStore } from "../grid";
 import { MapView } from "../map";
 import { toggleStack, toggleTileStar, useFlagKeys } from "../organise";
@@ -45,6 +47,14 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
   // F, S and H star and hide (docs/05-organising.md, "Star and hide"); in a
   // view-only album the tile's star is a badge, not a button.
   useFlagKeys();
+  // Delete and Ctrl+C (docs/06-editing-and-file-actions.md, "File actions").
+  useFileKeys();
+  // The photo menu: a right-click on a tile or the preview.
+  const [menu, setMenu] = useState<{ at: Point; photoId: number } | null>(null);
+  const closeMenu = useCallback(() => setMenu(null), []);
+  const openMenu = useCallback((at: PhotoAt, e: { clientX: number; clientY: number }) => {
+    setMenu({ at: { x: e.clientX, y: e.clientY }, photoId: at.id });
+  }, []);
   const writable = useAlbumStore((s) => s.status === null || viewOnlyReason(s.status) === null);
   const folder = useAlbumStore((s) => s.status?.folder ?? "");
   const view = useGridStore((s) => s.query.view);
@@ -63,17 +73,20 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
             onOpen={open}
             onStar={writable ? (r) => void toggleTileStar(r) : undefined}
             onStack={toggleStack}
+            onMenu={openMenu}
+            onPress={(at, e) => pressPhoto(at.id, e)}
           />
         )}
       </div>
       <div className="ow-review__preview">
-        <Preview detail={detail.detail} onOpen={open} />
+        <Preview detail={detail.detail} onOpen={open} onMenu={openMenu} />
       </div>
       <div className="ow-review__details">
         {/* Close details does what Ctrl+D does: nothing selected. */}
         <DetailsPanel current={shown} onClose={selectNone} onNotFound={notFound} shared={detail} />
       </div>
       <Viewer detail={detail.detail} />
+      {menu !== null && <PhotoMenu at={menu.at} photoId={menu.photoId} onClose={closeMenu} />}
     </section>
   );
 }

@@ -18,6 +18,7 @@ import { viewerText as t } from "../../text/viewer";
 import { useSettingsStore } from "../app";
 import { formatLength, formatSize, formatTaken } from "../details";
 import { step, stepToEnd, useGridStore } from "../grid";
+import { fileKeyHandlers } from "../files/keys";
 import { FlagMark, ScoreToast, flagKeyHandlers, isFlagKey } from "../organise";
 import { CachedZoomStage, usePreload, useShownRow, zoomKeyHandlers, type ZoomHandle } from "../preview";
 import { closeViewer, toggleDetails, useViewerStore } from "./store";
@@ -129,6 +130,8 @@ function OpenViewer({ detail }: ViewerProps) {
       // F, S and H star or hide, Up and Down nudge, the shown photo only
       // (docs/05-organising.md).
       if (match !== null && match.act && isFlagKey(match.id)) flagKeyHandlers()[match.id]();
+      // Ctrl+C copies the shown photo (docs/06-editing-and-file-actions.md).
+      if (match !== null && match.act && match.id === "viewer.copy") fileKeyHandlers()["viewer.copy"]();
     };
     window.addEventListener("keydown", onKeyDown, true);
     return () => window.removeEventListener("keydown", onKeyDown, true);

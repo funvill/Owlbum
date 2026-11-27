@@ -102,7 +102,7 @@ A command is a request with a reply (`invoke`). Names are `snake_case`, grouped 
 | `query_` | Ask for rows | [Organising](05-organising.md) | `query_run`, `query_window`, `query_locate`, `query_facets`, `query_parse` |
 | `photo_` | Read or change one or more photos | [Browsing](04-browsing.md), [Organising](05-organising.md) | `photo_detail`, `photo_set_info`, `photo_nudge`, `photo_histogram` |
 | `edit_` | The edit model, rendering and saving | [Editing and file actions](06-editing-and-file-actions.md) | `edit_plan`, `edit_set`, `edit_turn`, `edit_save_to_file`, `edit_save_as` |
-| `file_` | File actions | [Editing and file actions](06-editing-and-file-actions.md) | `file_trash`, `file_reveal`, `file_copy_image`, `file_copy_files`, `file_start_drag` |
+| `file_` | File actions | [Editing and file actions](06-editing-and-file-actions.md) | `file_trash`, `file_reveal`, `file_copy_image`, `file_copy_files`, `file_copy_paths`, `file_prepare_drag`, `file_start_drag` |
 | `tagging_` | Models and the queue | [Tagging](07-tagging.md) | `tagging_models`, `tagging_download`, `tagging_pause`, `tagging_regenerate` |
 | `search_` | Search by meaning | [Tagging](07-tagging.md) | `search_meaning` |
 | `app_` | Start-up, settings, recent albums, session, updates, cache | [Desktop, release and tests](08-desktop-and-release.md), [Browsing](04-browsing.md) | `app_startup`, `app_settings_get`, `app_settings_set`, `app_check_updates` |
@@ -255,10 +255,10 @@ These are the starting choices. A prototype may replace one; the replacement is 
 | Logging | `tracing`, with Owlbum's own small subscriber writing the file (`owlbum_core::appdata::log`) | `tracing-subscriber` and `tracing-appender` were not needed: the line format, the one rotation at open and the temp-folder fallback are a few dozen lines. |
 | Licence notices | `cargo-about` plus a small script for npm packages | |
 | Folder watching | `notify` | |
-| Trash | `trash` | |
-| Drag-out | `tauri-plugin-drag` | Linux reliability is checked by a prototype. |
-| Clipboard | `tauri-plugin-clipboard-manager` for text and one image; platform code for a list of files | |
-| Reveal in file manager | `tauri-plugin-opener` | |
+| Trash | `trash` | Called through `owlbum_core::files::no_bin_reason` first: on Windows only a local fixed drive is sent to the Recycle Bin (#39). |
+| Drag-out | `drag`, the library under `tauri-plugin-drag`, called from the shell | The plugin's own command takes paths, so it is not used. Windows only for now; the Linux prototype waits for Linux work to resume (#42). |
+| Clipboard | `arboard` for text and one image; `clipboard-win` for a list of files on Windows | `arboard` is what `tauri-plugin-clipboard-manager` uses; called directly, since no clipboard command is granted to the page. The shell keeps one `arboard::Clipboard` for the program's life, as its Linux backend needs (#40, #41). |
+| Reveal in file manager | `tauri-plugin-opener` | Its `reveal_item_in_dir` function only; the plugin is not registered. |
 | Updates | `tauri-plugin-updater` | Needs a signing key, created at final review. |
 | Single instance | `tauri-plugin-single-instance` | |
 | Native dialogs | `tauri-plugin-dialog` | |

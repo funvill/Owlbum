@@ -698,7 +698,7 @@ Every view-only tooltip is the first sentence of the view-only banner in force (
 | Check | Rust keeps the ids whose files exist. If none is left, nothing happens. |
 | Confirm | A native warning box, modal to the window. Rust shows it, so the page cannot skip it. |
 | Moving | Files are moved one at a time. A file that cannot be moved stays where it is and is reported. It is never retried another way. |
-| A drive with no bin | Some network and removable drives have no Recycle Bin or Trash. The move must fail there; it must never become a permanent delete. |
+| A drive with no bin | Some network and removable drives have no Recycle Bin or Trash. The move must fail there; it must never become a permanent delete. On Windows Rust sends a file to the bin only when it is on a local fixed drive; any other file (a network share, a mapped network drive, a removable drive) fails with "This drive has no Recycle Bin." without calling the system. On Linux the `trash` library refuses a mount with no trash folder. |
 | The row | Each moved photo's row is marked `missing = 1` in one transaction. It keeps its typed info, its edit and its tags, and it leaves every result. If the file is restored from the bin, the next scan finds it and the row is used again. **Tidy** removes missing rows for good (see [Organising](05-organising.md)). |
 | Undo | Not undoable in Owlbum. The bin is the undo. |
 | Selection afterwards | Settled like any other change to the result: the page re-runs its query with `keep`, and the tile now in the current photo's place is selected, or the last tile when that place is past the end, or nothing when the result is empty (see [Browsing](04-browsing.md#when-the-result-changes)). Photos that failed to move are still in the result and stay selected. |
@@ -714,6 +714,8 @@ The confirm:
 | Detail, several | "You can restore them from the Recycle Bin." | "You can restore them from the Trash." |
 | Buttons | "Move to Recycle Bin", "Cancel" | "Move to Trash", "Cancel" |
 | Default button and Esc | Cancel | Cancel |
+
+The box is `tauri-plugin-dialog`'s message box with custom buttons. It cannot choose its default button, so the first one ("Move to …") is the default on Windows; Esc still cancels. A follow-up issue tracks making Cancel the default.
 
 Results:
 
@@ -744,7 +746,7 @@ Ctrl+C with one photo selected, or **Copy** in the menu, calls `file_copy_image(
 
 | Rule | Detail |
 |---|---|
-| What is copied | The photo as Owlbum shows it: upright, **with its stored edit applied**, rendered by the renderer. |
+| What is copied | The photo as Owlbum shows it: upright, **with its stored edit applied**, rendered by the renderer. Until the renderer exists (#43) the copy is upright and unedited; the reply's `with_edits` says when the photo has an edit that the copy lacks. |
 | Size limit | At most 50 megapixels. A larger picture is scaled down to fit, keeping its shape. |
 | Video | The file is copied instead, as in "Copy several". |
 | Toast | "Copied"; "Copied, made smaller to fit the clipboard" when it was scaled. |
@@ -760,7 +762,7 @@ Ctrl+C with several photos selected calls `file_copy_files(photo_ids)`. It puts 
 | What is copied | The original files, as they are on disk. A stored edit is not in them. |
 | Limit | The first 500 photos whose files exist, in the order of the result, each once. |
 | Windows | A file drop list, which Explorer and chat programs paste as files. |
-| Linux | The `text/uri-list` and `x-special/gnome-copied-files` clipboard formats, which GNOME Files, Nemo and Dolphin paste as files. This is checked by a prototype on X11 and Wayland. |
+| Linux | The `text/uri-list` and `x-special/gnome-copied-files` clipboard formats, which GNOME Files, Nemo and Dolphin paste as files. This is checked by a prototype on X11 and Wayland. Linux work is paused, so version 1 builds use the fallback below on Linux until the prototype is done. |
 | Linux fallback | If the prototype cannot make it reliable, Linux copies the paths as text instead, and the reply says so. The toast then never claims files were copied. An issue stays open. |
 | Toast, files | "Copied N photos"; "Copied the first 500 photos" when more were selected. |
 | Toast, paths (the fallback) | "Copied N paths. Copying files is not supported on Linux yet." |
@@ -773,7 +775,7 @@ Tiles and the preview can be dragged into other programs: a file manager, a mail
 
 | Rule | Detail |
 |---|---|
-| What is dragged | The **original files**, never copies. The receiving program decides whether to copy or link them. Owlbum offers copy and link only, never move. A stored edit is not in the files. |
+| What is dragged | The **original files**, never copies. The receiving program copies them: Owlbum offers copy only, never move (the `drag` library offers one effect, and link is left out). A stored edit is not in the files. |
 | Which photos | If the dragged photo is selected, the selected photos that are shown, in the order of the result. Otherwise only the dragged photo. |
 | Limit | The first 500 whose files exist. |
 | Icon | The first photo's small thumbnail scaled to 128 px on its longest side, never enlarged, drawn without its edit. A plain 48 px square in token `--drag-placeholder` when there is no thumbnail. |
@@ -784,7 +786,7 @@ Tiles and the preview can be dragged into other programs: a file manager, a mail
 
 1. On pointer-down (primary button) on a tile or the preview, the page calls `file_prepare_drag(photo_ids)`. Rust resolves the ids, checks the files exist, loads the icon, and keeps the result for that exact list of ids, in that order, for 10 seconds.
 2. When the pointer has moved 5 px with the button down, the page calls `file_start_drag(photo_ids)`. The page does not use the webview's own drag, so an image is never dragged as a web picture.
-3. Rust uses the prepared result when it is for the same list and at most 10 seconds old. Otherwise it waits for a preparation in flight for the same list, or prepares now.
+3. Rust uses the prepared result when it is for the same list and at most 10 seconds old. Otherwise it prepares now (it does not wait for a preparation still in flight).
 4. Just before the drag starts, the files are checked for existence once more. If none is left, nothing happens.
 
 Rust starts the drag from the shell crate. `tauri-plugin-drag` offers the page a command that takes file paths, which the id rule forbids, so that command is **not** granted to the page. The shell needs a Rust-side way to start the same drag; see the open questions.
@@ -826,9 +828,9 @@ Every command takes photo ids. An unknown id answers `photo_not_found`. A comman
 | `edit_save_to_file` | `photo_ids` | `{ saved, failed: [{ id, name, message }], skipped }` | The sequence above, one photo after another. |
 | `edit_save_all` | | the same | `file` mode only. |
 | `edit_save_as` | `photo_id` | `{ cancelled }` or `{ saved_name, in_album, photo_id?, warning? }` | Rust opens the dialog. |
-| `file_trash` | `photo_ids` | `{ trashed: [id], failed: [{ id, name, message }], cancelled }` | Rust shows the confirm. |
+| `file_trash` | `photo_ids` | `{ trashed: [id], failed: [{ id, name, message }], cancelled, revision }` | Rust shows the confirm. |
 | `file_reveal` | `photo_id` | nothing | |
-| `file_copy_image` | `photo_id` | `{ scaled }` | |
+| `file_copy_image` | `photo_id` | `{ scaled, file, with_edits }` | `file` when a video's file was copied instead; `with_edits` while the copy cannot show the edit yet. |
 | `file_copy_files` | `photo_ids` | `{ copied, dropped, as, with_edits }` | `as` is `files` or `paths`. |
 | `file_copy_paths` | `photo_ids` | `{ copied, dropped }` | |
 | `file_prepare_drag` | `photo_ids` | nothing | Never fails; a failure shows at start. |

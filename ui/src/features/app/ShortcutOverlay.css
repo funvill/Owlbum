@@ -1,0 +1,67 @@
+/* The keyboard shortcut overlay (docs/08-desktop-and-release.md, "The overlay"). */
+
+.ow-shortcuts {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--space-6) var(--space-6);
+}
+
+.ow-shortcuts__heading {
+  font: var(--text-xs);
+  letter-spacing: var(--tracking-caps);
+  text-transform: uppercase;
+  color: var(--muted);
+  margin-bottom: var(--space-3);
+}
+
+.ow-shortcuts__here {
+  text-transform: none;
+  letter-spacing: normal;
+  color: var(--accent);
+}
+
+.ow-shortcuts__list {
+  display: grid;
+  grid-template-columns: max-content minmax(0, 1fr);
+  gap: var(--space-2) var(--space-4);
+  align-items: center;
+}
+
+.ow-shortcuts__keys {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ow-shortcuts__combo {
+  display: inline-flex;
+  gap: var(--space-1);
+}
+
+.ow-shortcuts__cap {
+  display: inline-block;
+  min-width: var(--size-target);
+  padding: 0 var(--space-2);
+  border: 1px solid var(--line);
+  border-bottom-width: 2px;
+  border-radius: var(--radius-sm);
+  background: var(--panel-2);
+  color: var(--text);
+  font: var(--text-sm);
+  text-align: center;
+}
+
+.ow-shortcuts__hold {
+  font: var(--text-sm);
+  color: var(--muted);
+}
+
+.ow-shortcuts__label {
+  font: var(--text-md);
+  color: var(--text);
+}
+
+.ow-shortcuts__note {
+  font: var(--text-sm);
+  color: var(--muted);
+}

@@ -55,6 +55,7 @@ command! {
             let session = app.state::<Session>();
             let _one = session.one_at_a_time();
             session.close();
+            crate::menu::album_open(&app, false);
             let folder = owlbum_core::app::folder_of(Path::new(&path));
             let album = Album::open(&folder, &options.unwrap_or_default())?;
             let opened = album.location().opened().display().to_string();
@@ -88,6 +89,7 @@ command! {
                     return Err(e);
                 }
             };
+            crate::menu::album_open(&app, true);
             Ok(AlbumOpened {
                 status,
                 session: saved,
@@ -109,6 +111,7 @@ command! {
                 tracing::info!(target: "album", "close");
             }
             session.close();
+            crate::menu::album_open(&app, false);
             Ok(())
         })
         .await

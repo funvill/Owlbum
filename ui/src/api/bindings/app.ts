@@ -2,6 +2,7 @@
 // run scripts/bindings.sh after changing a command, an event or a type.
 
 import type { AppClosing } from "./AppClosing";
+import type { AppMenu } from "./AppMenu";
 import type { AppVersion } from "./AppVersion";
 import type { CacheCleared } from "./CacheCleared";
 import type { CacheUsage } from "./CacheUsage";
@@ -23,6 +24,7 @@ export type AppCommands = {
   app_formats: { args: Record<string, never>; result: Array<FormatInfo> };
   app_pick_folder: { args: Record<string, never>; result: string | null };
   app_place_search: { args: { text: string }; result: Array<CountryMatch> };
+  app_quit: { args: Record<string, never>; result: null };
   app_recent_list: { args: Record<string, never>; result: Array<Recent> };
   app_recent_remove: { args: { root: string }; result: Array<Recent> };
   app_session_save: { args: { session: JsonValue }; result: null };
@@ -34,6 +36,7 @@ export type AppCommands = {
 
 export type AppEvents = {
   app_closing: AppClosing;
+  app_menu: AppMenu;
   folder_drop: FolderDrop;
   open_folder: OpenFolder;
 };

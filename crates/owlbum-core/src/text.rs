@@ -12,6 +12,7 @@ pub mod edit;
 pub mod errors;
 pub mod files;
 pub mod media;
+pub mod menu;
 pub mod photo;
 pub mod query;
 pub mod scan;

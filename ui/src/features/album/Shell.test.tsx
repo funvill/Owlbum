@@ -11,6 +11,8 @@ import { fakeStatus } from "../../api/fake/album";
 import { defaultSettings } from "../../api/fake/app";
 import { Toasts, useToasts } from "../../controls";
 import { albumText } from "../../text/album";
+import { settingsText } from "../../text/app";
+import { shortcutsText } from "../../text/keys";
 import { seriousFindings } from "../../test/axe";
 import { createQueryFake } from "../../api/fake/query";
 import { gridText } from "../../text/grid";
@@ -466,5 +468,30 @@ describe("reading bar", () => {
     } finally {
       vi.useRealTimers();
     }
+  });
+});
+
+describe("the menu bar and the top bar's gear (docs/08-desktop-and-release.md)", () => {
+  it("acts on the menu items that act in the page", async () => {
+    const fake = await shell();
+    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    await waitFor(() => expect(useAlbumStore.getState().status).not.toBeNull());
+    act(() => fake.emit("app_menu", { item: "rescan" }));
+    await waitFor(() => expect(fake.calls.some((c) => c.command === "album_rescan")).toBe(true));
+    act(() => fake.emit("app_menu", { item: "shortcuts" }));
+    expect(await screen.findByRole("dialog", { name: shortcutsText.title })).toBeInTheDocument();
+    act(() => fake.emit("app_menu", { item: "shortcuts" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: shortcutsText.title })).not.toBeInTheDocument());
+    act(() => fake.emit("app_menu", { item: "close_folder" }));
+    await waitFor(() => expect(fake.calls.some((c) => c.command === "album_close")).toBe(true));
+    // Items whose features come later do nothing yet.
+    act(() => fake.emit("app_menu", { item: "about" }));
+  });
+
+  it("opens Settings from the gear, with or without an album", async () => {
+    const user = userEvent.setup();
+    await shell();
+    await user.click(screen.getByRole("button", { name: settingsText.open }));
+    expect(await screen.findByRole("dialog", { name: settingsText.title })).toBeInTheDocument();
   });
 });

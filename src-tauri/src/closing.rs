@@ -159,6 +159,8 @@ fn run<R: Runtime>(app: &AppHandle<R>) {
         }
     }
     drop(scanner);
+    // 3. The window geometry.
+    crate::window::save(app);
     // 4. Close the album: its writer finishes and its lock goes.
     app.state::<Session>().close();
     // 5. Exit.

@@ -31,6 +31,10 @@ tauri-build = "2"
 # `app_pick_folder` (docs/01-architecture.md, "Security"). Never granted to
 # the page.
 tauri-plugin-dialog = "2"
+# One running copy per app data folder (docs/08-desktop-and-release.md,
+# "Single instance and second launches"). Not registered when
+# OWLBUM_DATA_DIR is set.
+tauri-plugin-single-instance = "2"
 # Only for the shell's test that every menu accelerator in the key table
 # parses the way Tauri's menu builder parses it. The version Tauri uses.
 muda = { version = "0.20", default-features = false }

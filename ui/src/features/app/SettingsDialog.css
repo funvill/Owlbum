@@ -1,0 +1,63 @@
+/* The Settings dialog (docs/08-desktop-and-release.md, "Settings dialog"). */
+
+.ow-settings {
+  display: flex;
+  flex-direction: column;
+}
+
+.ow-settings__section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-5) 0;
+  border-top: 1px solid var(--line-soft);
+}
+
+.ow-settings__section:first-child {
+  border-top: none;
+  padding-top: 0;
+}
+
+.ow-settings__heading {
+  font: var(--text-lg);
+  letter-spacing: var(--tracking-heading);
+}
+
+.ow-settings__subheading {
+  font: var(--text-md);
+  font-weight: var(--weight-heading);
+}
+
+.ow-settings__cache {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ow-settings__cache-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.ow-settings__cache-row .ow-field {
+  width: calc(var(--size-control) * 3);
+}
+
+.ow-settings__note {
+  font: var(--text-sm);
+  color: var(--muted);
+}
+
+.ow-settings__confirm {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  background: var(--warn-soft);
+}
+
+.ow-settings__confirm > span {
+  flex: 1;
+}

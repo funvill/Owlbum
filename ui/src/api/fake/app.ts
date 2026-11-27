@@ -144,6 +144,7 @@ export const appHandlers: AreaHandlers<AppCommands> = {
   // The dialog was cancelled. A test that picks a folder replaces this.
   app_pick_folder: () => null,
   app_place_search: ({ text }) => placeSearch(fakeCountries, text),
+  app_quit: () => null,
   app_recent_list: () => [],
   app_recent_remove: () => [],
   app_session_save: () => null,

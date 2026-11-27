@@ -12,8 +12,10 @@ pub mod desktop;
 pub mod events;
 pub mod handoff;
 pub mod keymap;
+pub mod menu;
 pub mod protocol;
 pub mod session;
+pub mod window;
 
 use std::sync::Arc;
 
@@ -31,8 +33,11 @@ pub fn setup<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
         .manage(handoff::Handoff::default())
         .manage(commands::file::DragPrep::default())
         .manage(closing::Closing::default())
+        .manage(window::Geometry::default())
+        .on_menu_event(|app, event| menu::chosen(app, event.id().as_ref()))
         .on_window_event(|window, event| match event {
             WindowEvent::Focused(true) => window.state::<session::Session>().focused(),
+            WindowEvent::Moved(_) | WindowEvent::Resized(_) => self::window::changed(window),
             WindowEvent::CloseRequested { api, .. } => {
                 if closing::requested(window.app_handle()) {
                     api.prevent_close();
@@ -142,10 +147,24 @@ pub fn run() {
         .ok()
         .and_then(|cwd| owlbum_core::app::launch_folder(std::env::args_os(), &cwd));
 
-    with_app_data(setup(tauri::Builder::default()), data)
+    let auto = data.settings().map(|s| s.updates_auto).unwrap_or(true);
+    let saved_window = data.settings().map(|s| s.window).unwrap_or_default();
+
+    let mut builder = tauri::Builder::default();
+    // Step 3: one running copy per app data folder. Tests that set
+    // OWLBUM_DATA_DIR run several copies at once, each with its own folder.
+    if !location.overridden {
+        builder = builder.plugin(tauri_plugin_single_instance::init(second_launch));
+    }
+    with_app_data(setup(builder), data)
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
-            main_window(app)?;
+            // Step 6: the menu.
+            let menu = menu::build(app.handle(), dev, auto)?;
+            app.set_menu(menu)?;
+            // Step 8: the window, hidden, with the restored geometry.
+            let window = main_window(app, dev)?;
+            self::window::place(&window, &saved_window);
             app.manage(commands::app::FolderPicker(folder_dialog(
                 app.handle().clone(),
             )));
@@ -155,16 +174,60 @@ pub fn run() {
             if let Some(folder) = &launch {
                 handoff::deliver(app.handle(), folder);
             }
+            // Step 10: shown when `app_startup` arrives, or after 3 s.
+            let handle = app.handle().clone();
+            let _ = std::thread::Builder::new()
+                .name("owlbum-show".into())
+                .spawn(move || {
+                    std::thread::sleep(SHOW_WAIT);
+                    show_window(&handle);
+                });
             Ok(())
         })
         .run(context)
         .expect("Owlbum could not start");
 }
 
+/// How long the hidden window waits for `app_startup` before it is shown
+/// anyway.
+pub const SHOW_WAIT: std::time::Duration = std::time::Duration::from_secs(3);
+
+/// Shows the main window and gives it focus. Called when `app_startup`
+/// arrives, after [`SHOW_WAIT`], and on a second launch, which also
+/// restores it from minimised.
+pub fn show_window<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(window) = app.get_webview_window("main") {
+        if window.is_minimized().unwrap_or(false) {
+            let _ = window.unminimize();
+        }
+        if !window.is_visible().unwrap_or(true) {
+            let _ = window.show();
+            let _ = window.set_focus();
+        }
+    }
+}
+
+/// A second copy was started (docs/08-desktop-and-release.md, "Single
+/// instance and second launches"): it has handed over its arguments and
+/// exits. This copy comes to the front and opens the folder it named.
+fn second_launch<R: Runtime>(app: &AppHandle<R>, args: Vec<String>, cwd: String) {
+    if let Some(window) = app.get_webview_window("main") {
+        let _ = window.unminimize();
+        let _ = window.show();
+        let _ = window.set_focus();
+    }
+    if let Some(folder) = owlbum_core::app::launch_folder(&args, std::path::Path::new(&cwd)) {
+        handoff::deliver(app, &folder);
+    }
+}
+
 /// Builds the main window from its configuration (which has `create:
 /// false`), with Owlbum's user agent, so map tile servers can tell which
 /// program is asking (docs/08-desktop-and-release.md, "Map-tile consent").
-fn main_window<R: Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
+fn main_window<R: Runtime>(
+    app: &tauri::App<R>,
+    dev: bool,
+) -> tauri::Result<tauri::WebviewWindow<R>> {
     let config = app
         .config()
         .app
@@ -174,11 +237,13 @@ fn main_window<R: Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
         .cloned()
         .unwrap_or_default();
     let version = owlbum_core::app::version().version;
-    tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
+    let window = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
         .title(window_title(&version))
         .user_agent(&user_agent(std::env::consts::OS, &version))
+        .visible(false)
+        .devtools(dev)
         .build()?;
-    Ok(())
+    Ok(window)
 }
 
 /// The main window's title: `Owlbum <version>`, so a tester can tell which

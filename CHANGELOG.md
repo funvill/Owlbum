@@ -9,6 +9,30 @@ the window's title shows the version that is running.
 
 ## [Unreleased]
 
+### Added
+
+- A menu bar: File (Open folder, Close folder, Rescan, Open the data
+  folder, Quit), View (Full screen) and Help (Keyboard shortcuts, Check
+  automatically, What's new). Ctrl+O opens a folder, Ctrl+W closes it and
+  goes back to the start screen, Ctrl+Q quits and F11 makes the window full
+  screen.
+- Settings, from the gear at the right of the top bar: reopen the last
+  album, the thumbnail cache's size, limit and Clear cache, whether edits
+  stay in the album or are saved into the photo file, loading maps from the
+  internet, and checking for updates.
+- Press ? for a list of every keyboard shortcut, with the keys for where
+  you are first. It has a button that opens Settings.
+- Starting Owlbum again, or opening a folder with it, brings the running
+  window to the front and opens that folder there.
+
+### Changed
+
+- The window opens where it was last closed, at the same size, maximised if
+  it was. It starts at 1440 by 900 and cannot be made smaller than 960 by
+  600.
+- Quit from the menu finishes edits and saves, and asks about unsaved edits,
+  just as closing the window does.
+
 ### Fixed
 
 - A right-click on the preview showed two menus on top of each other:

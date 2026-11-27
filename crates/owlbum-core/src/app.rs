@@ -121,6 +121,35 @@ impl Event for AppClosing {
     const NAME: &'static str = "app_closing";
 }
 
+/// A menu item that acts in the page (docs/08-desktop-and-release.md,
+/// "Menus"). The page does the rest.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum MenuItem {
+    /// File > Close folder.
+    CloseFolder,
+    /// File > Rescan.
+    Rescan,
+    /// Help > Keyboard shortcuts.
+    Shortcuts,
+    /// Help's update item.
+    Update,
+    /// Help > What's new.
+    WhatsNew,
+    /// Help > About Owlbum.
+    About,
+}
+
+/// The `app_menu` event: a menu item that acts in the page was chosen.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct AppMenu {
+    pub item: MenuItem,
+}
+
+impl Event for AppMenu {
+    const NAME: &'static str = "app_menu";
+}
+
 /// The folder a path opens: a folder opens itself, a file the folder that
 /// holds it. A path that is neither (gone, unreadable) is kept, so that
 /// opening it shows why it cannot be opened.

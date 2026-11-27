@@ -7,7 +7,7 @@ use crate::handoff::Handoff;
 use crate::session::Session;
 use crate::{area, command};
 use owlbum_core::album::reopen;
-use owlbum_core::app::{self, AppClosing, AppVersion, FolderDrop, OpenFolder, Startup};
+use owlbum_core::app::{self, AppClosing, AppMenu, AppVersion, FolderDrop, OpenFolder, Startup};
 use owlbum_core::appdata::{AppData, Recent, Settings};
 use owlbum_core::files::Capabilities;
 use owlbum_core::info::country::{self, CountryMatch};
@@ -27,6 +27,7 @@ area! {
         app_formats,
         app_pick_folder,
         app_place_search,
+        app_quit,
         app_recent_list,
         app_recent_remove,
         app_session_save,
@@ -35,7 +36,7 @@ area! {
         app_startup,
         app_version,
     ],
-    events: [AppClosing, FolderDrop, OpenFolder],
+    events: [AppClosing, AppMenu, FolderDrop, OpenFolder],
 }
 
 command! {
@@ -96,6 +97,17 @@ command! {
 }
 
 command! {
+    /// Quits through the closing steps, as File > Quit does
+    /// (docs/08-desktop-and-release.md, "Closing and quitting").
+    pub fn app_quit<R: Runtime>(; app: AppHandle<R>) -> () {
+        if !crate::closing::requested(&app) {
+            app.exit(0);
+        }
+        Ok(())
+    }
+}
+
+command! {
     /// The recent list, newest first. Each folder is checked to exist, all at
     /// once, each check given at most 1.5 seconds.
     pub async fn app_recent_list(; data: State<'_, AppData>) -> Vec<Recent> {
@@ -152,20 +164,24 @@ command! {
     /// Saves some settings and answers every setting. Unknown keys are kept.
     /// A value outside its setting's range answers `setting_out_of_range`
     /// and changes nothing.
-    pub async fn app_settings_set(
+    pub async fn app_settings_set<R: Runtime>(
         patch: Map<String, Value>;
+        app: AppHandle<R>,
         data: State<'_, AppData>,
         thumbs: State<'_, Thumbs>
     ) -> Settings {
         let data = data.inner().clone();
         let thumbs = thumbs.inner().clone();
-        blocking(move || {
+        let settings = blocking(move || {
             let settings = data.set_settings(&patch)?;
             // Lowering the limit prunes at once.
             thumbs.cache().set_limit_gb(settings.cache_limit_gb);
             Ok(settings)
         })
-        .await
+        .await?;
+        // Help > Check automatically is the same setting.
+        crate::menu::updates_auto(&app, settings.updates_auto);
+        Ok(settings)
     }
 }
 
@@ -195,6 +211,8 @@ command! {
             let launch_folder = app.try_state::<Handoff>().and_then(|h| h.start());
             let reopen = app::reopen(launch_folder.as_deref(), settings.reopen_last, &recent);
             let dev = crate::is_dev_build(cfg!(debug_assertions), &app.config().identifier);
+            // Startup step 10: the page has drawn.
+            crate::show_window(&app);
             Ok(Startup {
                 version: app::version().version,
                 platform: std::env::consts::OS.to_owned(),

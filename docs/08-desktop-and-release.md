@@ -117,6 +117,8 @@ The `window` setting holds `{ "x", "y", "width", "height", "maximised" }`. The f
 
 On Linux under Wayland a program cannot read or set its window position. There only the size and the maximised state are restored.
 
+As built (#58): the window is made hidden (`visible: false`), placed, and shown when `app_startup` arrives or 3 seconds after start, whichever is first. The saved bounds are the window's outer position and inner size, which is what Tauri sets back. "The display it lands on" is the display that holds the saved top-left corner, else the primary display. The loading background colour is not set yet.
+
 ### Closing and quitting
 
 Closing the window quits Owlbum. Quit, the window's close button, and an update install all go through the same steps.
@@ -127,7 +129,7 @@ Closing the window quits Owlbum. Quit, the window's close button, and an update 
 4. The open album is closed: its writer thread finishes, the `lock` file is removed, and tagging and scanning stop.
 5. The process exits with code 0.
 
-As built (#47, `src-tauri/src/closing.rs`): the window's close request is held and the steps run on a thread of their own; a second close while they run is ignored. Before step 2 the shell asks a running save to stop after its current photo and waits for it (at most 2 minutes). The native question uses the dialog plugin's two custom buttons, which cannot choose the default button, so "Close anyway" is the default on Windows (Esc is "Go back"), the same limit as the trash confirm (#148). "Go back" lets saves run again and allows the next close. While it waits the page shows "Finishing saving…" in the place of Save all (#160). File > Quit and the update install do not go through these steps yet because no menu bar (#58) and no updater (#62) exist; each must start them with `closing::requested`. The window geometry of step 3 is not saved yet.
+As built (#47, `src-tauri/src/closing.rs`): the window's close request is held and the steps run on a thread of their own; a second close while they run is ignored. Before step 2 the shell asks a running save to stop after its current photo and waits for it (at most 2 minutes). The native question uses the dialog plugin's two custom buttons, which cannot choose the default button, so "Close anyway" is the default on Windows (Esc is "Go back"), the same limit as the trash confirm (#148). "Go back" lets saves run again and allows the next close. While it waits the page shows "Finishing saving…" in the place of Save all (#160). File > Quit and `app_quit` start these steps with `closing::requested` (#58); the update install must do the same when the updater exists (#62). Step 3 writes the bounds the window last had (`src-tauri/src/window.rs`).
 
 If step 4 takes longer than 5 seconds the process exits anyway and the log says so. Every typed change was already committed when its command returned, so nothing typed is lost.
 
@@ -165,6 +167,8 @@ Rules:
 - **Items that act in the page** (Close folder, Rescan, Keyboard shortcuts, What's new, About, and the update item) emit `app_menu` with `{ item }`, the item's id. The page does the rest.
 - **The menu is rebuilt** when the update state changes, when `updates.auto` changes, and when an album opens or closes.
 - **Menu text** lives in the shell's text module, the Rust counterpart of `ui/src/text/`.
+
+As built (#58, `src-tauri/src/menu.rs`): the items are one table, `menu::ENTRIES`; a shell test fails if a `menu` row of the key table has no item or an item's accelerator has no row. Instead of rebuilding the menu, the shell enables Close folder and Rescan when an album opens or closes and ticks Check automatically when `updates.auto` changes (from the menu or from Settings). The update item is left out until the updater exists (#62). About and Send feedback (F1, F2) are left out until #61 builds them (`menu::LATER`), so their keys stay free; the shell test skips those two rows until then. What's new sends `app_menu`; the page does nothing with it until #63. The `?` beside Keyboard shortcuts is drawn as the item's key column on Windows (text after a tab); Linux shows the label alone. Open folder runs the native dialog on a thread of its own and hands a chosen folder over as `open_folder`. The single-instance plugin (`tauri-plugin-single-instance`) is registered first, and only when `OWLBUM_DATA_DIR` is not set.
 
 ## Settings dialog
 
@@ -214,6 +218,8 @@ The gear button in the top bar opens Settings. It is a modal dialog. Esc, the cl
 | Updates | Check now (button) | none | The manual check, the same as the Help item. |
 
 In a view-only album every control here still works, because none of them writes to the album.
+
+As built (#59, `ui/src/features/app/SettingsDialog.tsx`): Check now is left out until the updater exists (#62). The Photo tagging section is a slot, `ui/src/features/app/TaggingSettings.tsx`, which #57 fills. A refused change shows "Couldn't keep the setting: <reason>" as a toast. Changing `edit_target` reads `edit_status` again, because what waits to be saved depends on it. The cache limit's message reads "Use a whole number from 1 to 1000. The limit was put back."
 
 ## Keyboard shortcuts
 
@@ -345,6 +351,8 @@ A cell that names two ids stands for two rows of the file, one per key. If this 
 - Keys are drawn as key caps. Arrow keys are drawn as arrows. Two keys for one action sit side by side. A hold key reads "hold \".
 - Rows whose action is unavailable on this platform (a Linux gap, see the README) are left out.
 - The overlay is read-only. Keys cannot be changed in version 1.
+
+As built (#60, `ui/src/features/app/ShortcutOverlay.tsx`): each row of the table is one line, its keys side by side as caps and its label from `ui/src/text/keys.ts`; rows are not merged into pairs such as "Previous, next photo". Focus starts on the list rather than the close button, so the first Esc closes the overlay. At the owner's request the overlay has a **Settings…** button, which closes it and opens Settings. The rows of About and Send feedback are left out until #61 builds them. No row is left out for a platform yet, because no row is known to be missing on Windows or Linux.
 
 ## Updates
 

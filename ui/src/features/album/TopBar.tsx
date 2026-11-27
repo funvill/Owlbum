@@ -2,7 +2,8 @@ import { useState } from "react";
 import { SaveAllButton } from "../edit/SaveAllButton";
 import { Button, IconButton, Pill, Tooltip, useNarrowWindow } from "../../controls";
 import { albumText } from "../../text/album";
-import { appText } from "../../text/app";
+import { appText, settingsText } from "../../text/app";
+import { openSettings } from "../app/settingsOpen";
 import { ThumbSize } from "../grid";
 import { shownScope, viewOnlyBanner, viewOnlyReason } from "./banners";
 import { TidyDialog } from "./TidyDialog";
@@ -10,7 +11,7 @@ import { useAlbumStore } from "./session";
 
 /**
  * The 48 px bar at the top of the window (docs/04-browsing.md, "Top bar").
- * Settings comes with #59.
+ * The gear that opens Settings is always there.
  */
 export function TopBar() {
   const status = useAlbumStore((s) => s.status);
@@ -104,6 +105,9 @@ export function TopBar() {
           <TidyDialog open={tidying} onClose={() => setTidying(false)} />
         </div>
       )}
+      <div className="ow-topbar__settings">
+        <IconButton icon="settings" label={settingsText.open} onClick={openSettings} />
+      </div>
     </header>
   );
 }

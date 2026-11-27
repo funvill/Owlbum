@@ -15,10 +15,11 @@
         "label": "main",
         "create": false,
         "title": "Owlbum",
-        "width": 1280,
-        "height": 800,
-        "minWidth": 800,
-        "minHeight": 500
+        "width": 1440,
+        "height": 900,
+        "minWidth": 960,
+        "minHeight": 600,
+        "visible": false
       }
     ],
     "security": {

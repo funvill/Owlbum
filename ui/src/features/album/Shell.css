@@ -40,6 +40,13 @@
   gap: var(--space-3);
 }
 
+/* The gear: always at the right end, with or without an album. */
+.ow-topbar__settings {
+  display: flex;
+  flex: none;
+  margin-left: auto;
+}
+
 .ow-topbar__name {
   flex: none;
   font-weight: var(--weight-heading);

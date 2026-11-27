@@ -4,6 +4,7 @@
 import type { AppVersion } from "./AppVersion";
 import type { CacheCleared } from "./CacheCleared";
 import type { CacheUsage } from "./CacheUsage";
+import type { Capabilities } from "./Capabilities";
 import type { CountryMatch } from "./CountryMatch";
 import type { FolderDrop } from "./FolderDrop";
 import type { FormatInfo } from "./FormatInfo";
@@ -16,6 +17,7 @@ import type { Startup } from "./Startup";
 export type AppCommands = {
   app_cache_clear: { args: Record<string, never>; result: CacheCleared };
   app_cache_usage: { args: Record<string, never>; result: CacheUsage };
+  app_capabilities: { args: Record<string, never>; result: Capabilities };
   app_formats: { args: Record<string, never>; result: Array<FormatInfo> };
   app_pick_folder: { args: Record<string, never>; result: string | null };
   app_place_search: { args: { text: string }; result: Array<CountryMatch> };

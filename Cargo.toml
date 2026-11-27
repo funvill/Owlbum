@@ -35,6 +35,20 @@ tauri-plugin-dialog = "2"
 # parses the way Tauri's menu builder parses it. The version Tauri uses.
 muda = { version = "0.20", default-features = false }
 tempfile = "3"
+# File actions (docs/06-editing-and-file-actions.md, "File actions"), all
+# called only from Rust behind `file_` commands; nothing is granted to the
+# page. The Recycle Bin or Trash:
+trash = "5"
+# Text and pictures on the clipboard. Its Linux backend keeps the content
+# only while the `Clipboard` lives, so the shell keeps one.
+arboard = "3"
+# A file drop list on the Windows clipboard (arboard cannot write one).
+clipboard-win = "5"
+# Show in folder: the system file manager with the file selected.
+tauri-plugin-opener = "2"
+# Dragging photos out: the library under `tauri-plugin-drag`, called from
+# the shell so the page never names a path.
+drag = "2"
 uuid = { version = "1", features = ["v4"] }
 windows-sys = "0.61"
 # Folder watching (docs/03-media-and-scanning.md, "Folder watching").

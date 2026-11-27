@@ -24,6 +24,9 @@ pub mod appdata;
 pub mod desktop;
 /// The edit model and renderer, saving edits (#43 to #47).
 pub mod edit;
+/// File actions: the Recycle Bin or Trash, copying, dragging out (#38 to
+/// #42). The platform calls are the shell's.
+pub mod files;
 /// The in-memory album index (#12).
 pub mod index;
 /// Typed info: description, notes, people, date, place, country outlines

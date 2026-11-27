@@ -136,6 +136,8 @@ export const appHandlers: AreaHandlers<AppCommands> = {
     bytes: 0,
     limit_bytes: defaultSettings["cache.limit_gb"] * 1_000_000_000,
   }),
+  // Windows: files are dragged out and copied as files.
+  app_capabilities: () => ({ drag_out: true, copy_files: "files" }),
   app_formats: () =>
     fakeFormats.map((f) => ({ ...f, extensions: [...f.extensions] })),
   // The dialog was cancelled. A test that picks a folder replaces this.

@@ -27,6 +27,12 @@ pub enum ErrorCode {
     AlbumUnreachable,
     /// The query could not be understood.
     BadQuery,
+    /// The clipboard could not be written.
+    ClipboardFailed,
+    /// The drag could not start.
+    DragFailed,
+    /// A photo's file is not there.
+    FileMissing,
     /// The path given to `album_open` cannot be read.
     FolderUnreadable,
     /// Something failed that the user cannot act on; the message says what.
@@ -37,6 +43,8 @@ pub enum ErrorCode {
     InvalidLocation,
     /// No album is open.
     NoAlbum,
+    /// The platform does not offer this action.
+    NotSupported,
     /// The path given to `album_open` is not a folder.
     NotAFolder,
     /// The id is not a photo of the open album.
@@ -47,6 +55,9 @@ pub enum ErrorCode {
     ScanRunning,
     /// `app_settings_set` was given a value outside the setting's range.
     SettingOutOfRange,
+    /// `file_trash` could not run at all; per-file failures are in its
+    /// reply.
+    TrashFailed,
     /// The album cannot be changed right now.
     ViewOnly,
 }

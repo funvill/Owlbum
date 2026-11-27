@@ -7,6 +7,7 @@
 
 pub mod bindings;
 pub mod commands;
+pub mod desktop;
 pub mod events;
 pub mod handoff;
 pub mod keymap;
@@ -27,6 +28,7 @@ pub fn setup<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
     protocol::register(builder)
         .manage(session::Session::default())
         .manage(handoff::Handoff::default())
+        .manage(commands::file::DragPrep::default())
         .on_window_event(|window, event| match event {
             WindowEvent::Focused(true) => window.state::<session::Session>().focused(),
             WindowEvent::DragDrop(drop) => dropped(window.app_handle(), drop),
@@ -139,6 +141,9 @@ pub fn run() {
             main_window(app)?;
             app.manage(commands::app::FolderPicker(folder_dialog(
                 app.handle().clone(),
+            )));
+            app.manage(commands::file::DesktopShell(Arc::new(
+                desktop::NativeDesktop::new(app.handle().clone()),
             )));
             if let Some(folder) = &launch {
                 handoff::deliver(app.handle(), folder);

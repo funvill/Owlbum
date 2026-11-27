@@ -9,6 +9,7 @@
 pub mod album;
 pub mod appdata;
 pub mod errors;
+pub mod files;
 pub mod media;
 pub mod photo;
 pub mod query;

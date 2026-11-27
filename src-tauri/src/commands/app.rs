@@ -9,6 +9,7 @@ use crate::{area, command};
 use owlbum_core::album::reopen;
 use owlbum_core::app::{self, AppVersion, FolderDrop, OpenFolder, Startup};
 use owlbum_core::appdata::{AppData, Recent, Settings};
+use owlbum_core::files::Capabilities;
 use owlbum_core::info::country::{self, CountryMatch};
 use owlbum_core::media::{self, FormatInfo};
 use owlbum_core::thumbs::{CacheCleared, CacheUsage, Thumbs};
@@ -21,6 +22,7 @@ area! {
     commands: [
         app_cache_clear,
         app_cache_usage,
+        app_capabilities,
         app_formats,
         app_pick_folder,
         app_place_search,
@@ -50,6 +52,15 @@ command! {
     /// The bytes the thumbnail cache holds and its limit, for Settings.
     pub fn app_cache_usage(; thumbs: State<'_, Thumbs>) -> CacheUsage {
         Ok(thumbs.cache().usage())
+    }
+}
+
+command! {
+    /// What this platform offers for file actions: dragging out, and
+    /// whether copying several photos copies files or paths (docs/06,
+    /// "Dragging photos out"). The page asks this, not the user agent.
+    pub fn app_capabilities() -> Capabilities {
+        Ok(Capabilities::current())
     }
 }
 

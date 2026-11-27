@@ -6,6 +6,7 @@
 //!   the quarter turns and flip.
 //! - [`plan`]: `edit_plan`, `colour_matrix`, `auto_colour`, and the drawing
 //!   rules the page's `EditedImage` follows.
+//! - [`metadata`]: the EXIF and XMP an edited file keeps from its original.
 //! - [`render`]: the renderer that writes edited pictures.
 //! - [`save`]: Save into the file, Save all, Save as…, the save record
 //!   and its recovery.
@@ -13,6 +14,7 @@
 //!   their undo steps.
 
 pub mod auto;
+pub mod metadata;
 pub mod model;
 pub mod plan;
 pub mod render;

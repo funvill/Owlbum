@@ -13,6 +13,7 @@ publish = false
 chrono.workspace = true
 fast_image_resize.workspace = true
 image = { workspace = true, features = ["bmp", "gif", "jpeg", "png", "tiff", "webp"] }
+image-webp.workspace = true
 jpeg-decoder.workspace = true
 jpeg-encoder.workspace = true
 jxl-oxide.workspace = true

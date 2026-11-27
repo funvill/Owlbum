@@ -3406,6 +3406,7 @@ dependencies = [
  "chrono",
  "fast_image_resize",
  "image",
+ "image-webp",
  "jpeg-decoder",
  "jpeg-encoder",
  "jxl-oxide",

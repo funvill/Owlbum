@@ -4,54 +4,91 @@
 //! [`render_pixels`] follows the plan exactly: flip and quarter turn as
 //! pixel moves, then straighten and crop together with Catmull-Rom
 //! sampling of only the cropped pixels, then the colour matrix on the
-//! sRGB-encoded values. [`render_edit`] decodes a file through the format
-//! registry, renders it and writes the result through a temporary file.
-//!
-//! Version-1 gaps recorded on #43 and left to the saving work (#47): the
-//! renderer works on the handlers' 8-bit sRGB `working` picture, so it
-//! does not yet keep 16-bit samples or a wide-gamut profile, and it writes
-//! no metadata (EXIF, XMP).
+//! sRGB-encoded values. [`render_edit`] decodes a file through its
+//! handler's `source` call (the file's own bit depth and colour profile),
+//! renders it in 8 or 16 bits, and writes the result with the original's
+//! metadata (see [`super::metadata`]) through a temporary file.
 
+use std::borrow::Cow;
 use std::fs;
 use std::io::Write;
 use std::path::{Path, PathBuf};
 
 use image::ImageEncoder;
 use image::codecs::png::PngEncoder;
-use image::codecs::webp::WebPEncoder;
 
+use super::metadata::{self, Changes, JPEG_EXIF_MAX, Kept};
 use super::model::PhotoEdit;
 use super::plan::{EditPlan, apply_colour, edit_plan};
 use crate::error::{AppError, AppResult, ErrorCode};
-use crate::media::{MediaFormat, Pixels, SaveFormat};
+use crate::media::colour;
+use crate::media::{Layout, MediaFormat, Pixels, Samples, SaveFormat, SourcePixels};
 use crate::text;
 
 /// JPEG quality for an edited file.
 pub const JPEG_QUALITY: u8 = 95;
 
-/// An RGBA picture being rendered.
-struct Rgba {
-    w: u32,
-    h: u32,
-    px: Vec<u8>,
+/// A sample the renderer works in: 8 or 16 bits.
+pub trait Sample: Copy + Default + PartialEq + std::fmt::Debug + Send + Sync {
+    /// The largest value: white, or opaque.
+    const MAX: f64;
+    fn to_f64(self) -> f64;
+    /// Rounded and clamped to the sample's range.
+    fn from_f64(v: f64) -> Self;
 }
 
-impl Rgba {
-    fn at(&self, x: u32, y: u32) -> &[u8] {
+impl Sample for u8 {
+    const MAX: f64 = 255.0;
+    fn to_f64(self) -> f64 {
+        f64::from(self)
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    fn from_f64(v: f64) -> Self {
+        v.round().clamp(0.0, 255.0) as u8
+    }
+}
+
+impl Sample for u16 {
+    const MAX: f64 = 65535.0;
+    fn to_f64(self) -> f64 {
+        f64::from(self)
+    }
+    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
+    fn from_f64(v: f64) -> Self {
+        v.round().clamp(0.0, 65535.0) as u16
+    }
+}
+
+/// An RGBA picture being rendered.
+struct Rgba<'a, T: Clone> {
+    w: u32,
+    h: u32,
+    px: Cow<'a, [T]>,
+}
+
+impl<T: Sample> Rgba<'_, T> {
+    fn at(&self, x: u32, y: u32) -> &[T] {
         let i = (y as usize * self.w as usize + x as usize) * 4;
         &self.px[i..i + 4]
     }
 }
 
-/// Mirror (when asked) and turn by quarter turns: exact pixel moves.
-fn flip_and_turn(src: &Pixels, flip: bool, rotate: u16) -> Rgba {
-    let (w, h) = (src.width, src.height);
+/// Mirror (when asked) and turn by quarter turns: exact pixel moves. With
+/// neither, the picture is borrowed as it is.
+fn flip_and_turn<T: Sample>(w: u32, h: u32, src: &[T], flip: bool, rotate: u16) -> Rgba<'_, T> {
+    if !flip && rotate == 0 {
+        return Rgba {
+            w,
+            h,
+            px: Cow::Borrowed(src),
+        };
+    }
     let (tw, th) = if rotate == 90 || rotate == 270 {
         (h, w)
     } else {
         (w, h)
     };
-    let mut px = vec![0u8; tw as usize * th as usize * 4];
+    let mut px = vec![T::default(); tw as usize * th as usize * 4];
     for ty in 0..th {
         for tx in 0..tw {
             // The pixel of the flipped picture that lands at (tx, ty).
@@ -64,10 +101,14 @@ fn flip_and_turn(src: &Pixels, flip: bool, rotate: u16) -> Rgba {
             let x = if flip { w - 1 - x } else { x };
             let s = (y as usize * w as usize + x as usize) * 4;
             let d = (ty as usize * tw as usize + tx as usize) * 4;
-            px[d..d + 4].copy_from_slice(&src.rgba[s..s + 4]);
+            px[d..d + 4].copy_from_slice(&src[s..s + 4]);
         }
     }
-    Rgba { w: tw, h: th, px }
+    Rgba {
+        w: tw,
+        h: th,
+        px: Cow::Owned(px),
+    }
 }
 
 /// Catmull-Rom weights for the four taps around a sample at fraction `t`.
@@ -84,7 +125,7 @@ fn catmull_rom(t: f64) -> [f64; 4] {
 
 /// Bicubic sample of `img` at pixel-centre coordinates (`x`, `y`); taps
 /// past the edge repeat the edge.
-fn sample(img: &Rgba, x: f64, y: f64) -> [f64; 4] {
+fn sample<T: Sample>(img: &Rgba<'_, T>, x: f64, y: f64) -> [f64; 4] {
     let x0 = x.floor();
     let y0 = y.floor();
     let wx = catmull_rom(x - x0);
@@ -101,23 +142,18 @@ fn sample(img: &Rgba, x: f64, y: f64) -> [f64; 4] {
             let p = img.at(sx, sy);
             let w = wxi * wyj;
             for c in 0..4 {
-                out[c] += w * f64::from(p[c]);
+                out[c] += w * p[c].to_f64();
             }
         }
     }
     out
 }
 
-#[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-fn to_u8(v: f64) -> u8 {
-    v.round().clamp(0.0, 255.0) as u8
-}
-
-/// Renders `edit` on an upright 8-bit picture. The output is the plan's
-/// `out` size.
-pub fn render_pixels(src: &Pixels, edit: &PhotoEdit) -> (EditPlan, Pixels) {
-    let plan = edit_plan(src.width, src.height, edit, false);
-    let turned = flip_and_turn(src, edit.flip, edit.rotate);
+/// Renders `edit` on an upright RGBA picture of `w × h` pixels. Answers
+/// the plan and the plan's `out` size of RGBA samples.
+pub fn render_rgba<T: Sample>(w: u32, h: u32, src: &[T], edit: &PhotoEdit) -> (EditPlan, Vec<T>) {
+    let plan = edit_plan(w, h, edit, false);
+    let turned = flip_and_turn(w, h, src, edit.flip, edit.rotate);
     let c = plan.crop;
     let mut px = Vec::with_capacity(c.width as usize * c.height as usize * 4);
     if edit.straighten == 0.0 {
@@ -140,24 +176,33 @@ pub fn render_pixels(src: &Pixels, edit: &PhotoEdit) -> (EditPlan, Pixels) {
                 let sx = dx * cos + dy * sin;
                 let sy = -dx * sin + dy * cos;
                 let v = sample(&turned, tcx + sx - 0.5, tcy + sy - 0.5);
-                px.extend(v.map(to_u8));
+                px.extend(v.map(T::from_f64));
             }
         }
     }
+    drop(turned);
     if let Some(cm) = &plan.colour {
         for p in px.as_chunks_mut::<4>().0.iter_mut() {
-            let out = apply_colour(cm, [p[0], p[1], p[2]].map(|v| f64::from(v) / 255.0));
+            let out = apply_colour(cm, [p[0], p[1], p[2]].map(|v| v.to_f64() / T::MAX));
             for i in 0..3 {
-                p[i] = to_u8(out[i] * 255.0);
+                p[i] = T::from_f64(out[i] * T::MAX);
             }
         }
     }
+    (plan, px)
+}
+
+/// Renders `edit` on an upright 8-bit picture. The output is the plan's
+/// `out` size.
+pub fn render_pixels(src: &Pixels, edit: &PhotoEdit) -> (EditPlan, Pixels) {
+    let (plan, rgba) = render_rgba(src.width, src.height, &src.rgba, edit);
+    let c = plan.crop;
     let out = Pixels {
         width: c.width,
         height: c.height,
         full_width: c.width,
         full_height: c.height,
-        rgba: px,
+        rgba,
         has_alpha: src.has_alpha,
     };
     (plan, out)
@@ -170,15 +215,78 @@ fn failed(reason: impl std::fmt::Display) -> AppError {
     )
 }
 
+/// Rendered RGBA samples at 8 or 16 bits.
+enum Work {
+    U8(Vec<u8>),
+    U16(Vec<u16>),
+}
+
+/// A rendered picture and what goes into its file besides pixels.
+struct Rendered<'a> {
+    width: u32,
+    height: u32,
+    has_alpha: bool,
+    px: Work,
+    /// The profile to embed: the source's, or sRGB after a colour change.
+    icc: Option<Vec<u8>>,
+    kept: &'a Kept,
+    /// True when the pixels were converted to sRGB for a colour change.
+    srgb: bool,
+}
+
+/// 16 bits to 8, rounded.
+#[allow(clippy::cast_possible_truncation)]
+fn narrow(v: u16) -> u8 {
+    ((u32::from(v) * 255 + 32767) / 65535) as u8
+}
+
+impl Rendered<'_> {
+    fn rgba8(&self) -> Cow<'_, [u8]> {
+        match &self.px {
+            Work::U8(v) => Cow::Borrowed(v),
+            Work::U16(v) => Cow::Owned(v.iter().map(|&s| narrow(s)).collect()),
+        }
+    }
+
+    fn exif(&self, limit: usize) -> Option<Vec<u8>> {
+        self.kept.exif_for(
+            Changes {
+                width: self.width,
+                height: self.height,
+                srgb: self.srgb,
+            },
+            limit,
+        )
+    }
+}
+
 /// Encodes rendered pixels in `format` (docs/06, "Output"): JPEG at
 /// quality 95 with 4:4:4 chroma and transparency flattened onto white; PNG
-/// and lossless WebP keep transparency.
+/// and lossless WebP keep transparency. No metadata.
 pub fn encode(px: &Pixels, format: SaveFormat) -> AppResult<Vec<u8>> {
+    encode_rendered(
+        &Rendered {
+            width: px.width,
+            height: px.height,
+            has_alpha: px.has_alpha,
+            px: Work::U8(px.rgba.clone()),
+            icc: None,
+            kept: &Kept::default(),
+            srgb: false,
+        },
+        format,
+    )
+}
+
+/// The JPEG APP1 prefix of an XMP packet.
+const XMP_PREFIX: &[u8] = b"http://ns.adobe.com/xap/1.0/\0";
+
+fn encode_rendered(r: &Rendered<'_>, format: SaveFormat) -> AppResult<Vec<u8>> {
     let mut out = Vec::new();
     match format {
         SaveFormat::Jpeg => {
-            let rgb: Vec<u8> = px
-                .rgba
+            let rgba = r.rgba8();
+            let rgb: Vec<u8> = rgba
                 .as_chunks::<4>()
                 .0
                 .iter()
@@ -191,44 +299,87 @@ pub fn encode(px: &Pixels, format: SaveFormat) -> AppResult<Vec<u8>> {
                     })
                 })
                 .collect();
+            drop(rgba);
             let (w, h) = (
-                u16::try_from(px.width).map_err(|_| failed(text::edit::TOO_WIDE_FOR_JPEG))?,
-                u16::try_from(px.height).map_err(|_| failed(text::edit::TOO_WIDE_FOR_JPEG))?,
+                u16::try_from(r.width).map_err(|_| failed(text::edit::TOO_WIDE_FOR_JPEG))?,
+                u16::try_from(r.height).map_err(|_| failed(text::edit::TOO_WIDE_FOR_JPEG))?,
             );
             let mut e = jpeg_encoder::Encoder::new(&mut out, JPEG_QUALITY);
             e.set_sampling_factor(jpeg_encoder::SamplingFactor::R_4_4_4);
+            if let Some(exif) = r.exif(JPEG_EXIF_MAX) {
+                let mut seg = b"Exif\0\0".to_vec();
+                seg.extend(exif);
+                e.add_app_segment(1, seg).map_err(failed)?;
+            }
+            if let Some(xmp) = &r.kept.xmp {
+                let mut seg = XMP_PREFIX.to_vec();
+                seg.extend_from_slice(xmp);
+                // A packet too large for one segment (extended XMP) is
+                // left out rather than split.
+                if seg.len() <= 65533 {
+                    e.add_app_segment(1, seg).map_err(failed)?;
+                }
+            }
+            if let Some(icc) = &r.icc {
+                e.add_icc_profile(icc).map_err(failed)?;
+            }
             e.encode(&rgb, w, h, jpeg_encoder::ColorType::Rgb)
                 .map_err(failed)?;
         }
         SaveFormat::Png => {
-            let e = PngEncoder::new(&mut out);
-            if px.has_alpha {
-                e.write_image(
-                    &px.rgba,
-                    px.width,
-                    px.height,
-                    image::ExtendedColorType::Rgba8,
-                )
-            } else {
-                let rgb: Vec<u8> = px
-                    .rgba
-                    .as_chunks::<4>()
-                    .0
-                    .iter()
-                    .flat_map(|p| [p[0], p[1], p[2]])
-                    .collect();
-                e.write_image(&rgb, px.width, px.height, image::ExtendedColorType::Rgb8)
+            let mut e = PngEncoder::new(&mut out);
+            if let Some(icc) = &r.icc {
+                e.set_icc_profile(icc.clone()).map_err(failed)?;
+            }
+            if let Some(exif) = r.exif(usize::MAX) {
+                e.set_exif_metadata(exif).map_err(failed)?;
+            }
+            let (w, h) = (r.width, r.height);
+            match (&r.px, r.has_alpha) {
+                (Work::U8(px), true) => e.write_image(px, w, h, image::ExtendedColorType::Rgba8),
+                (Work::U8(px), false) => {
+                    let rgb: Vec<u8> = px
+                        .as_chunks::<4>()
+                        .0
+                        .iter()
+                        .flat_map(|p| [p[0], p[1], p[2]])
+                        .collect();
+                    e.write_image(&rgb, w, h, image::ExtendedColorType::Rgb8)
+                }
+                (Work::U16(px), alpha) => {
+                    // Native-endian bytes, as `PngEncoder` wants for 16 bits.
+                    let take = if alpha { 4 } else { 3 };
+                    let mut bytes = Vec::with_capacity(px.len() / 4 * take * 2);
+                    for p in px.as_chunks::<4>().0 {
+                        for s in &p[..take] {
+                            bytes.extend(s.to_ne_bytes());
+                        }
+                    }
+                    let kind = if alpha {
+                        image::ExtendedColorType::Rgba16
+                    } else {
+                        image::ExtendedColorType::Rgb16
+                    };
+                    e.write_image(&bytes, w, h, kind)
+                }
             }
             .map_err(failed)?;
+            if let Some(xmp) = &r.kept.xmp {
+                out = metadata::png_with_xmp(out, xmp);
+            }
         }
         SaveFormat::Webp => {
-            WebPEncoder::new_lossless(&mut out)
-                .write_image(
-                    &px.rgba,
-                    px.width,
-                    px.height,
-                    image::ExtendedColorType::Rgba8,
-                )
+            let mut e = image_webp::WebPEncoder::new(&mut out);
+            if let Some(icc) = &r.icc {
+                e.set_icc_profile(icc.clone());
+            }
+            if let Some(exif) = r.exif(usize::MAX) {
+                e.set_exif_metadata(exif);
+            }
+            if let Some(xmp) = &r.kept.xmp {
+                e.set_xmp_metadata(xmp.clone());
+            }
+            e.encode(&r.rgba8(), r.width, r.height, image_webp::ColorType::Rgba8)
                 .map_err(failed)?;
         }
     }
@@ -258,10 +409,88 @@ fn write_through_temp(out_path: &Path, bytes: &[u8]) -> std::io::Result<()> {
     result
 }
 
+/// The samples as RGBA: grey becomes three channels, and alpha is added
+/// (opaque) when the source has none.
+fn to_rgba<T: Sample>(layout: Layout, samples: Vec<T>, opaque: T) -> Vec<T> {
+    match layout {
+        Layout::Rgba => samples,
+        Layout::Rgb => samples
+            .as_chunks::<3>()
+            .0
+            .iter()
+            .flat_map(|p| [p[0], p[1], p[2], opaque])
+            .collect(),
+        Layout::Grey => samples.iter().flat_map(|&v| [v, v, v, opaque]).collect(),
+        Layout::GreyAlpha => samples
+            .as_chunks::<2>()
+            .0
+            .iter()
+            .flat_map(|p| [p[0], p[0], p[0], p[1]])
+            .collect(),
+    }
+}
+
+/// Renders a decoded source by the colour-profile rules of docs/06
+/// ("Colour profiles"), at the source's own depth.
+fn render_source<'k>(src: SourcePixels, edit: &PhotoEdit, kept: &'k Kept) -> Rendered<'k> {
+    let colour_change = edit_plan(src.width, src.height, edit, false)
+        .colour
+        .is_some();
+    let icc = src.icc;
+    // With no colour change an RGB profile is kept and the pixels stay in
+    // it. Otherwise (a colour change, or a grey or other profile that
+    // cannot describe RGB output) the pixels are converted to sRGB.
+    let keep_profile = !colour_change && icc.as_deref().is_some_and(colour::is_rgb_profile);
+    let convert = if keep_profile { None } else { icc.as_deref() };
+    let has_alpha = src.layout.has_alpha();
+    let (w, h) = (src.width, src.height);
+    let (plan, px) = match src.samples {
+        Samples::U8(s) => {
+            let mut rgba = to_rgba(src.layout, s, u8::MAX);
+            if convert.is_some() {
+                let px = Pixels {
+                    width: w,
+                    height: h,
+                    full_width: w,
+                    full_height: h,
+                    rgba,
+                    has_alpha,
+                };
+                rgba = colour::to_srgb(px, convert).rgba;
+            }
+            let (plan, out) = render_rgba(w, h, &rgba, edit);
+            (plan, Work::U8(out))
+        }
+        Samples::U16(s) => {
+            let mut rgba = to_rgba(src.layout, s, u16::MAX);
+            colour::to_srgb_16(&mut rgba, convert);
+            let (plan, out) = render_rgba(w, h, &rgba, edit);
+            (plan, Work::U16(out))
+        }
+    };
+    let icc = if colour_change {
+        Some(colour::srgb_profile())
+    } else if keep_profile {
+        icc
+    } else {
+        None
+    };
+    Rendered {
+        width: plan.crop.width,
+        height: plan.crop.height,
+        has_alpha,
+        px,
+        icc,
+        kept,
+        srgb: colour_change,
+    }
+}
+
 /// `render_edit(source, edit, target_format, out_path)`: decodes `source`
-/// at full size through its format's handler, renders `edit`, encodes it
-/// as `target` and writes `out_path`. Answers the written width and
-/// height. Runs on the blocking pool; the page never calls it directly.
+/// at full size and its own depth through its format's handler, renders
+/// `edit`, encodes it as `target` with the original's metadata and writes
+/// `out_path`. Answers the written width and height. Runs on the blocking
+/// pool; the page never calls it directly.
 pub fn render_edit(
     source: &Path,
     format: &MediaFormat,
@@ -269,195 +498,21 @@ pub fn render_edit(
     target: SaveFormat,
     out_path: &Path,
 ) -> AppResult<(u32, u32)> {
-    let picture = format.handler.working(source).map_err(|e| {
+    let picture = format.handler.source(source).map_err(|e| {
         if e.code == crate::media::MediaErrorCode::TooLarge {
             AppError::new(ErrorCode::EditRenderFailed, text::edit::TOO_LARGE)
         } else {
             failed(e.message)
         }
     })?;
-    let (_, px) = render_pixels(&picture, edit);
-    let bytes = encode(&px, target)?;
+    let kept = metadata::read(source);
+    let rendered = render_source(picture, edit, &kept);
+    let size = (rendered.width, rendered.height);
+    let bytes = encode_rendered(&rendered, target)?;
+    drop(rendered);
     write_through_temp(out_path, &bytes).map_err(failed)?;
-    Ok((px.width, px.height))
+    Ok(size)
 }
 
 #[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::edit::model::{Colour, CropRect, IDENTITY};
-    use crate::media::format_of;
-
-    fn picture(w: u32, h: u32, f: impl Fn(u32, u32) -> [u8; 4]) -> Pixels {
-        let mut rgba = Vec::new();
-        for y in 0..h {
-            for x in 0..w {
-                rgba.extend(f(x, y));
-            }
-        }
-        Pixels {
-            width: w,
-            height: h,
-            full_width: w,
-            full_height: h,
-            rgba,
-            has_alpha: false,
-        }
-    }
-
-    const RED: [u8; 4] = [255, 0, 0, 255];
-    const BLUE: [u8; 4] = [0, 0, 255, 255];
-    const GREEN: [u8; 4] = [0, 255, 0, 255];
-    const WHITE: [u8; 4] = [255, 255, 255, 255];
-
-    #[test]
-    fn a_flip_puts_red_on_the_right() {
-        let src = picture(4, 2, |x, _| if x < 2 { RED } else { BLUE });
-        let (_, out) = render_pixels(
-            &src,
-            &PhotoEdit {
-                flip: true,
-                ..IDENTITY
-            },
-        );
-        assert_eq!(out.pixel(3, 0), RED);
-        assert_eq!(out.pixel(0, 1), BLUE);
-    }
-
-    #[test]
-    fn the_marked_corner_follows_each_quarter_turn() {
-        // The top-left pixel is marked.
-        let src = picture(4, 2, |x, y| if (x, y) == (0, 0) { RED } else { WHITE });
-        for (rotate, size, at) in [
-            (0, (4, 2), (0, 0)),
-            (90, (2, 4), (1, 0)),
-            (180, (4, 2), (3, 1)),
-            (270, (2, 4), (0, 3)),
-        ] {
-            let (_, out) = render_pixels(&src, &PhotoEdit { rotate, ..IDENTITY });
-            assert_eq!((out.width, out.height), size, "{rotate}");
-            assert_eq!(out.pixel(at.0, at.1), RED, "{rotate}");
-        }
-    }
-
-    #[test]
-    fn a_quadrant_crop_is_one_colour() {
-        let src = picture(400, 200, |x, y| match (x < 200, y < 100) {
-            (true, true) => RED,
-            (false, true) => GREEN,
-            (true, false) => BLUE,
-            (false, false) => WHITE,
-        });
-        let e = PhotoEdit {
-            crop: CropRect {
-                x: 0.5,
-                y: 0.0,
-                w: 0.5,
-                h: 0.5,
-            },
-            ..IDENTITY
-        };
-        let (_, out) = render_pixels(&src, &e);
-        assert_eq!((out.width, out.height), (200, 100));
-        assert!(out.rgba.as_chunks::<4>().0.iter().all(|p| *p == GREEN));
-    }
-
-    #[test]
-    fn a_turned_crop_keeps_the_same_part_of_the_picture() {
-        // The top-left quadrant is red; crop it, then turn and flip the edit.
-        let src = picture(40, 20, |x, y| if x < 20 && y < 10 { RED } else { WHITE });
-        let e = PhotoEdit {
-            crop: CropRect {
-                x: 0.0,
-                y: 0.0,
-                w: 0.5,
-                h: 0.5,
-            },
-            ..IDENTITY
-        };
-        for op in [
-            crate::edit::model::rotate_left,
-            crate::edit::model::rotate_right,
-            crate::edit::model::flip,
-        ] {
-            let (_, out) = render_pixels(&src, &op(&e));
-            assert!(out.rgba.as_chunks::<4>().0.iter().all(|p| *p == RED));
-        }
-    }
-
-    #[test]
-    fn straightening_never_samples_outside_the_picture() {
-        // A solid red picture: any empty corner would show as black.
-        let src = picture(60, 40, |_, _| RED);
-        let (plan, out) = render_pixels(
-            &src,
-            &PhotoEdit {
-                straighten: 10.0,
-                ..IDENTITY
-            },
-        );
-        assert!(plan.frame.w < 60 && plan.frame.h < 40);
-        assert!(out.rgba.as_chunks::<4>().0.iter().all(|p| *p == RED));
-    }
-
-    #[test]
-    fn colour_on_pixels() {
-        let grey = picture(8, 8, |_, _| [128, 128, 128, 255]);
-        let e = PhotoEdit {
-            colour: Colour {
-                brightness: 50.0,
-                ..Colour::NONE
-            },
-            ..IDENTITY
-        };
-        let (_, out) = render_pixels(&grey, &e);
-        assert_eq!(out.pixel(0, 0), [179, 179, 179, 255], "+51 levels");
-        let red = picture(2, 2, |_, _| RED);
-        let e = PhotoEdit {
-            colour: Colour {
-                saturation: -100.0,
-                ..Colour::NONE
-            },
-            ..IDENTITY
-        };
-        let p = render_pixels(&red, &e).1.pixel(0, 0);
-        assert!(p[0] == p[1] && p[1] == p[2], "{p:?}");
-    }
-
-    #[test]
-    fn render_edit_writes_a_file_through_a_temporary() {
-        let tmp = tempfile::tempdir().unwrap();
-        let src = tmp.path().join("in.png");
-        let px = picture(40, 20, |x, _| if x < 20 { RED } else { BLUE });
-        fs::write(&src, encode(&px, SaveFormat::Png).unwrap()).unwrap();
-        let out = tmp.path().join("out.jpg");
-        let format = format_of("in.png").unwrap();
-        let e = PhotoEdit {
-            rotate: 90,
-            ..IDENTITY
-        };
-        assert_eq!(
-            render_edit(&src, format, &e, SaveFormat::Jpeg, &out).unwrap(),
-            (20, 40)
-        );
-        let back = image::open(&out).unwrap().to_rgb8();
-        assert_eq!(back.dimensions(), (20, 40));
-        let files: Vec<_> = fs::read_dir(tmp.path()).unwrap().collect();
-        assert_eq!(files.len(), 2, "no temporary left behind");
-        let png_out = tmp.path().join("out.png");
-        render_edit(&src, format, &e, SaveFormat::Png, &png_out).unwrap();
-        assert_eq!(
-            image::open(&png_out).unwrap().to_rgb8().get_pixel(0, 0).0,
-            [255, 0, 0]
-        );
-    }
-
-    #[test]
-    fn transparency_is_flattened_onto_white_for_jpeg() {
-        let mut px = picture(8, 8, |_, _| [0, 0, 0, 0]);
-        px.has_alpha = true;
-        let jpeg = encode(&px, SaveFormat::Jpeg).unwrap();
-        let back = image::load_from_memory(&jpeg).unwrap().to_rgb8();
-        assert!(back.pixels().all(|p| p.0.iter().all(|v| *v > 250)));
-    }
-}
+mod tests;

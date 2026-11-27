@@ -73,6 +73,10 @@ moxcms = "0.8.1"
 # Thumbnail and zoom-copy JPEGs (docs/03-media-and-scanning.md, "Thumbnails
 # and the zoom copy"): 4:2:0 chroma, which `image`'s own encoder cannot write.
 jpeg-encoder = "0.7.1"
+# Lossless WebP for edited copies with their ICC profile, EXIF and XMP
+# (docs/06-editing-and-file-actions.md, "Output"), which `image`'s WebP
+# encoder cannot all pass on. The version `image` already depends on.
+image-webp = "0.2.4"
 # A JPEG's preview decoded at 1/2, 1/4 or 1/8 of its size in the DCT
 # (docs/03-media-and-scanning.md, "The still handler"), which `zune-jpeg`
 # cannot do. No rayon: the scan pool already decodes one photo per thread.

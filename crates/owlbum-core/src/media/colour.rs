@@ -45,6 +45,71 @@ pub fn is_srgb(icc: Option<&[u8]>) -> bool {
     icc.and_then(Conversion::new).is_none()
 }
 
+/// The bytes of an sRGB ICC profile, for an edited file whose pixels were
+/// converted to sRGB (docs/06, "Colour profiles").
+pub fn srgb_profile() -> Vec<u8> {
+    ColorProfile::new_srgb().encode().unwrap_or_default()
+}
+
+/// True when `icc` describes RGB: the only profile an RGB file may embed.
+pub fn is_rgb_profile(icc: &[u8]) -> bool {
+    icc.get(16..20) == Some(b"RGB ")
+}
+
+/// Converts 16-bit RGBA samples described by `icc` to sRGB in place, by
+/// the same rules as [`to_srgb`] (the edit renderer's 16-bit path). A
+/// profile that cannot be used, or that is sRGB already, leaves them.
+pub fn to_srgb_16(rgba: &mut [u16], icc: Option<&[u8]>) {
+    let Some(icc) = icc else { return };
+    if is_srgb(Some(icc)) || !rgba.len().is_multiple_of(4) {
+        return;
+    }
+    let built = catch_unwind(AssertUnwindSafe(|| {
+        let profile = ColorProfile::new_from_slice(icc).ok()?;
+        let (source, layout) = match profile.color_space {
+            DataColorSpace::Rgb => (Source::Rgb, moxcms::Layout::Rgba),
+            DataColorSpace::Gray => (Source::Grey, moxcms::Layout::GrayAlpha),
+            _ => return None,
+        };
+        let t = profile
+            .create_transform_16bit(
+                layout,
+                &ColorProfile::new_srgb(),
+                moxcms::Layout::Rgba,
+                TransformOptions::default(),
+            )
+            .ok()?;
+        Some((source, t))
+    }));
+    let Ok(Some((source, transform))) = built else {
+        return;
+    };
+    if let Source::Grey = source
+        && !rgba
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .all(|p| p[0] == p[1] && p[1] == p[2])
+    {
+        return;
+    }
+    let mut scratch = Vec::with_capacity(STRIP * 4);
+    for strip in rgba.chunks_mut(STRIP * 4) {
+        scratch.clear();
+        match source {
+            Source::Rgb => scratch.extend_from_slice(strip),
+            Source::Grey => {
+                scratch.extend(strip.as_chunks::<4>().0.iter().flat_map(|p| [p[0], p[3]]));
+            }
+        }
+        if transform.transform(&scratch, strip).is_err()
+            && let Source::Rgb = source
+        {
+            strip.copy_from_slice(&scratch);
+        }
+    }
+}
+
 /// What the profile describes.
 #[derive(Clone, Copy)]
 enum Source {

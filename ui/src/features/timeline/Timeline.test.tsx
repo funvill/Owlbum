@@ -79,7 +79,7 @@ describe("the timeline", () => {
     screenWith();
     useGridStore.getState().setQuery({ ...useGridStore.getState().query, sort: "name" });
     const tabs = await screen.findByRole("tablist", { name: timelineText.views.label });
-    expect(screen.getByRole("tab", { name: timelineText.views.map })).toBeDisabled();
+    expect(screen.getByRole("tab", { name: timelineText.views.map })).toBeEnabled();
     await userEvent.click(screen.getByRole("tab", { name: timelineText.views.timeline }));
     await waitFor(() => expect(runs().at(-1)?.view).toBe("timeline"));
     expect(runs().at(-1)?.sort).toBe("name");

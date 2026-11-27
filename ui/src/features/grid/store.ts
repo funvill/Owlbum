@@ -489,11 +489,10 @@ export const useGridStore = create<GridState>()((set, get) => {
             ),
           });
         // The view and timeline unit last chosen, for an album with no session
-        // (docs/02-data.md, "Settings"). The map is not built yet (#36): a
-        // saved map shows the grid.
+        // (docs/02-data.md, "Settings").
         const saved = useSettingsStore.getState().settings;
         if (saved !== null) {
-          const view = saved.view === "timeline" ? "timeline" : "grid";
+          const view = saved.view ?? "grid";
           set({
             query: {
               ...get().query,

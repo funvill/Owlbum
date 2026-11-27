@@ -1,5 +1,6 @@
 import type { Keep } from "../bindings/Keep";
 import type { Kept } from "../bindings/Kept";
+import type { MapPoint } from "../bindings/MapPoint";
 import type { MediaKind } from "../bindings/MediaKind";
 import type { PhotoAt } from "../bindings/PhotoAt";
 import type { QueryCommands } from "../bindings/query";
@@ -45,6 +46,8 @@ export interface FakePhoto {
   edit_plan?: JsonValue | null;
   /** Has a typed place or GPS. */
   has_location?: boolean;
+  /** The effective place, `[lat, lon]`, for `query_map`; absent or null when there is none. */
+  place?: [number, number] | null;
   /** The names of the people on it. */
   people?: string[];
   /** Its keyword labels. */
@@ -397,6 +400,20 @@ export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
       if (index >= 0) return { index };
       const folded = heldOf(token).stacks.folded.get(id);
       return folded === undefined ? null : { folded_in: folded.stack };
+    },
+    query_map: ({ token }) => {
+      const tiles = tilesOf(token);
+      const byId = new Map(list.map((p) => [p.id, p]));
+      const points: MapPoint[] = [];
+      for (const id of tiles) {
+        const p = byId.get(id);
+        const place = p?.place;
+        if (p === undefined || place === undefined || place === null) continue;
+        const [lat, lon] = place;
+        if (Math.abs(lat) > 90 || Math.abs(lon) > 180) continue;
+        points.push([id, lat, lon, `tk-${id}`, fileName(p.rel_path)]);
+      }
+      return { points, unlocated: tiles.length - points.length };
     },
   };
 

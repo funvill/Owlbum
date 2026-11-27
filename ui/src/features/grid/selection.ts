@@ -132,6 +132,11 @@ async function nearestSelected(index: number, selected: Set<number>, held: strin
 export function clickPhoto(at: PhotoAt, keys: ClickKeys): void {
   // A tile still showing the previous result's row is not a photo of this one.
   if (idAt(at.index) !== at.id) return;
+  clickAt(at, keys);
+}
+
+/** What a click on the photo at `at` does, once it is known to be a photo of this result. */
+function clickAt(at: PhotoAt, keys: ClickKeys): void {
   const { anchor, selection, current } = state();
   if (keys.shiftKey && anchor !== null) {
     selectRange(anchor, at.index, keys.ctrlKey);
@@ -300,4 +305,25 @@ export async function selectById(id: number): Promise<void> {
     await state().refresh();
     if (mine !== op) return;
   }
+}
+
+/**
+ * A click on a map marker (docs/04-browsing.md, "The map"): the photo becomes
+ * the current photo and the whole selection; with `add` (Ctrl) it is added
+ * to the selection or removed from it, as a Ctrl-click on a tile does. Only
+ * its id is known, so `query_locate` finds its index first.
+ */
+export async function pickById(id: number, add: boolean): Promise<void> {
+  if (!add) return selectById(id);
+  const mine = ++op;
+  const held = token();
+  if (held === null) return;
+  let located;
+  try {
+    located = await api().invoke("query_locate", { token: held, id });
+  } catch {
+    return;
+  }
+  if (!stillMine(mine, held) || located === null || !("index" in located)) return;
+  clickAt({ id, index: located.index }, { ctrlKey: true, shiftKey: false });
 }

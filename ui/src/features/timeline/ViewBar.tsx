@@ -8,8 +8,7 @@ import "./ViewBar.css";
 const VIEWS: SegmentOption[] = [
   { value: "grid", label: t.views.grid, icon: "grid" },
   { value: "timeline", label: t.views.timeline, icon: "timeline" },
-  // The map comes with its own issue (#36).
-  { value: "map", label: t.views.map, icon: "map", disabled: true },
+  { value: "map", label: t.views.map, icon: "map" },
 ];
 
 const UNITS: SegmentOption[] = [
@@ -44,7 +43,7 @@ export function ViewBar() {
         value={view}
         options={VIEWS}
         onChange={(value) => {
-          const next = value === "timeline" ? "timeline" : "grid";
+          const next = value === "timeline" || value === "map" ? value : "grid";
           if (next === view) return;
           change({ view: next });
           void useSettingsStore.getState().update({ view: next });

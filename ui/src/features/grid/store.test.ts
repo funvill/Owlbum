@@ -98,9 +98,9 @@ describe("grid store", () => {
     });
     await grid().start();
     expect(runs()).toHaveLength(1);
-    // The map is not built: a saved map shows the grid.
+    // A saved map view opens on the map (#36).
     expect(runs()[0]!.args).toMatchObject({
-      query: { view: "grid", sort: "name", filter: { hidden: "show" } },
+      query: { view: "map", sort: "name", filter: { hidden: "show" } },
     });
     await vi.waitFor(() => expect(grid().restored).toBe(true));
     expect(grid().current).toMatchObject({ id: 7 });

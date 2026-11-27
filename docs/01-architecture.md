@@ -222,7 +222,7 @@ The webview is restricted by policy:
 
 This is a policy, not an interception layer. Tauri offers no way to inspect and cancel every webview request, so Owlbum does not claim a proof that nothing else is contacted. A page test asserts that the built page contains no remote URL other than the tile host.
 
-Two more network facts, stated in About and on the site: the Windows installer may download Microsoft's WebView2 runtime if the computer lacks it, and tile requests carry the webview's user agent with `Owlbum/<version>` added.
+Two more network facts, stated in About and on the site: the Windows installer may download Microsoft's WebView2 runtime if the computer lacks it, and tile requests carry a user agent that ends in `Owlbum/<version>`.
 
 ## Capabilities
 

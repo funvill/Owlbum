@@ -3,6 +3,7 @@ import type { PhotoAt } from "../../api/bindings/PhotoAt";
 import { albumText } from "../../text/album";
 import { DetailsPanel, useDetail, type CurrentPhoto } from "../details";
 import { BrowseGrid, gridBlocks, selectNone, useGridStore } from "../grid";
+import { MapView } from "../map";
 import { toggleStack, toggleTileStar, useFlagKeys } from "../organise";
 import { Preview } from "../preview";
 import { ViewBar } from "../timeline";
@@ -45,6 +46,8 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
   // view-only album the tile's star is a badge, not a button.
   useFlagKeys();
   const writable = useAlbumStore((s) => s.status === null || viewOnlyReason(s.status) === null);
+  const folder = useAlbumStore((s) => s.status?.folder ?? "");
+  const view = useGridStore((s) => s.query.view);
   // The viewer belongs to the open album: it does not come back with the next one.
   useEffect(() => () => useViewerStore.setState({ open: false }), []);
 
@@ -52,12 +55,16 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
     <section className="ow-review" aria-label={albumText.photosRegion}>
       <div className="ow-review__photos">
         <ViewBar />
-        <BrowseGrid
-          busy={busy}
-          onOpen={open}
-          onStar={writable ? (r) => void toggleTileStar(r) : undefined}
-          onStack={toggleStack}
-        />
+        {view === "map" ? (
+          <MapView album={folder} onOpen={open} />
+        ) : (
+          <BrowseGrid
+            busy={busy}
+            onOpen={open}
+            onStar={writable ? (r) => void toggleTileStar(r) : undefined}
+            onStack={toggleStack}
+          />
+        )}
       </div>
       <div className="ow-review__preview">
         <Preview detail={detail.detail} onOpen={open} />

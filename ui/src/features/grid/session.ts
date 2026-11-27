@@ -46,8 +46,7 @@ export function sessionOf(
 /**
  * `query` with a restored session's fields put over it. Only fields the
  * `Query` has are taken, and only when their kind matches; Rust has already
- * dropped values it does not allow. The map is not built yet (#36): a saved
- * map view shows the grid.
+ * dropped values it does not allow.
  */
 export function withSession(query: Query, saved: SavedSession): Query {
   const out: Record<string, unknown> = { ...query };
@@ -59,6 +58,5 @@ export function withSession(query: Query, saved: SavedSession): Query {
     const sameKind = want === null || typeof v === typeof want;
     if (sameKind) out[k] = v;
   }
-  const q = out as unknown as Query;
-  return q.view === "map" ? { ...q, view: "grid" } : q;
+  return out as unknown as Query;
 }

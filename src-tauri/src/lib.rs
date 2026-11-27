@@ -136,6 +136,7 @@ pub fn run() {
     with_app_data(setup(tauri::Builder::default()), data)
         .plugin(tauri_plugin_dialog::init())
         .setup(move |app| {
+            main_window(app)?;
             app.manage(commands::app::FolderPicker(folder_dialog(
                 app.handle().clone(),
             )));
@@ -146,6 +147,40 @@ pub fn run() {
         })
         .run(context)
         .expect("Owlbum could not start");
+}
+
+/// Builds the main window from its configuration (which has `create:
+/// false`), with Owlbum's user agent, so map tile servers can tell which
+/// program is asking (docs/08-desktop-and-release.md, "Map-tile consent").
+fn main_window<R: Runtime>(app: &tauri::App<R>) -> tauri::Result<()> {
+    let config = app
+        .config()
+        .app
+        .windows
+        .iter()
+        .find(|w| w.label == "main")
+        .cloned()
+        .unwrap_or_default();
+    tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
+        .user_agent(&user_agent(
+            std::env::consts::OS,
+            &owlbum_core::app::version().version,
+        ))
+        .build()?;
+    Ok(())
+}
+
+/// The webview's user agent: a browser-like one for the platform, with
+/// `Owlbum/<version>` added. Tauri can only replace the user agent, not add
+/// to it, so the platform part is written here. It keeps the `Windows`
+/// token, which the page reads to address its custom scheme.
+pub fn user_agent(os: &str, version: &str) -> String {
+    let platform = match os {
+        "windows" => "Windows NT 10.0; Win64; x64",
+        "macos" => "Macintosh; Intel Mac OS X 10_15_7",
+        _ => "X11; Linux x86_64",
+    };
+    format!("Mozilla/5.0 ({platform}) AppleWebKit/537.36 (KHTML, like Gecko) Owlbum/{version}")
 }
 
 /// The native folder dialog, over the main window.
@@ -168,6 +203,14 @@ fn folder_dialog<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_user_agent_names_owlbum_and_keeps_the_platform() {
+        let windows = user_agent("windows", "1.2.3");
+        assert!(windows.ends_with(" Owlbum/1.2.3"));
+        assert!(windows.contains("Windows"));
+        assert!(user_agent("linux", "1.2.3").contains("Linux"));
+    }
 
     #[test]
     fn a_debug_build_is_a_development_build_whatever_its_identifier() {

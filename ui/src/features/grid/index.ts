@@ -11,6 +11,7 @@ export {
 export {
   clickPhoto,
   menuPhoto,
+  pickById,
   reduceToCurrent,
   selectAll,
   selectById,

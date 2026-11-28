@@ -330,6 +330,7 @@ The walker lists the files of the scope: the album root, or the scoped folder. I
 | Folder named `$RECYCLE.BIN`, `System Volume Information`, `@eaDir`, `#recycle`, `#snapshot` or `__MACOSX` (compared without case) | Skipped. These hold deleted files or another program's thumbnails. |
 | Symbolic link, to a file or a folder | Skipped and counted. On Windows this includes junctions; a test pins that the standard library's link test reports them. Cloud-drive folders are reparse points too but are not links, and are walked. |
 | Subfolder that holds `.owlbum/owlbum.sqlite` (a nested album root) | Skipped whole and recorded as a nested album. See below. |
+| Subfolder that holds a file `app.sqlite` (Owlbum's own app data folder, see [Data](02-data.md)) | Skipped whole, silently, like a system folder (#215). This only happens when `OWLBUM_DATA_DIR` points inside an album, or an album is opened at a folder above the app data; without it the scan would list its own thumbnail cache and keep finding new "photos" as it writes them. The test needs no extra look: the folder's own listing shows the file. The walk's own folder is never skipped this way. |
 | Subfolder that cannot be read | Recorded with its path and the system's message, then skipped. The walk continues. |
 | Supported file that is online-only (a cloud placeholder: Windows attribute `RECALL_ON_DATA_ACCESS`, `RECALL_ON_OPEN` or `OFFLINE`) | Counted as "stored online only" and not read, so a scan never downloads a whole cloud drive. The attributes come from the directory listing, which opens nothing. A row whose file is online-only is not gone: it is kept as it is, not read, not a move candidate and never marked missing. A recognised-but-unsupported file is counted as unsupported whether online or not (neither is read), and any other file is ignored as below. Folders are never tested: cloud folders are walked. Only Windows has these attributes; elsewhere no file is online-only. |
 | File name that is not valid Unicode | Counted as skipped with the reason "This file's name can't be read." |
@@ -339,7 +340,7 @@ The walker lists the files of the scope: the album root, or the scoped folder. I
 
 **Symbolic links are skipped on purpose.** Following them can loop, can leave the album, and can list one file under two paths. The count of skipped links is in the scan report.
 
-System folders and dot names are left out silently. Links, online-only files and unreadable names make up the `skipped` count of `album_status`; nested albums and unreadable folders are listed in the scan report instead.
+System folders, the app data folder and dot names are left out silently. Links, online-only files and unreadable names make up the `skipped` count of `album_status`; nested albums and unreadable folders are listed in the scan report instead.
 
 If the walk's own root cannot be read, the scan fails with `folder_unreadable`: "Can't read the folder {root}: {system message}". If it is not a folder: `not_a_folder`, "Not a readable folder: {root}". In both cases nothing in the database is changed.
 
@@ -734,7 +735,7 @@ While an album is open, Owlbum watches the scope with `notify` so that photos ad
 
 ### What is watched
 
-One recursive watch on the scope's folder, set on a thread of its own (a recursive inotify watch walks the whole tree), not following links and not asking for access events, so the scanner's own reads never look like changes. Events are dropped at once when any path component below the scope starts with `.` (this covers `.owlbum`, whose database journal changes on every write and must never cause a rescan) or is one of the walker's system folders, when the path is a link, or when the path is a file that is neither supported nor recognised-but-unsupported and is not a folder.
+One recursive watch on the scope's folder, set on a thread of its own (a recursive inotify watch walks the whole tree), not following links and not asking for access events, so the scanner's own reads never look like changes. Events are dropped at once when any path component below the scope starts with `.` (this covers `.owlbum`, whose database journal changes on every write and must never cause a rescan) or is one of the walker's system folders, when the path lies inside an app data folder (a folder on the way down holds `app.sqlite`, as the walker skips it), when the path is a link, or when the path is a file that is neither supported nor recognised-but-unsupported and is not a folder.
 
 ### Debounce
 

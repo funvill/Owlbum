@@ -42,6 +42,10 @@ the window's title shows the version that is running.
 
 ### Fixed
 
+- An album that holds Owlbum's own data folder (when the data folder
+  is moved inside an album for testing) no longer shows its own
+  thumbnails as photos, or keeps looking for photos while it makes
+  them.
 - With the thumbnails along the bottom, the strip is a filmstrip again:
   one row of tiles (two when the strip is tall enough at the tile
   size) that scrolls sideways, and it never grows past two rows or half

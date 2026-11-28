@@ -358,6 +358,11 @@ impl Job {
             return true;
         };
         for path in &event.paths {
+            // Owlbum's own app data inside the album: its thumbnail cache
+            // changes on every scan, and the walker skips it anyway.
+            if walk::in_app_data(&self.folder, path) {
+                continue;
+            }
             let Some(rel) = relative(&self.folder, &self.scope, path) else {
                 // A path the watch did not report under its folder: the
                 // whole scope is the safe answer.

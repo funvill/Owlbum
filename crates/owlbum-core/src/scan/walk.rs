@@ -158,6 +158,41 @@ fn is_album_root(dir: &Path) -> bool {
     std::fs::symlink_metadata(dir.join(".owlbum").join("owlbum.sqlite")).is_ok()
 }
 
+/// The file that marks Owlbum's own app data folder
+/// (docs/02-data.md, "The app data folder"). The walker skips a folder holding it, so
+/// an app data folder inside an album (`OWLBUM_DATA_DIR` pointed there, or
+/// an album opened above the app data) never lists its own thumbnails.
+pub const APP_DATA_MARK: &str = "app.sqlite";
+
+/// True when `dir` is an app data folder: it holds [`APP_DATA_MARK`].
+fn is_app_data(dir: &Path) -> bool {
+    std::fs::symlink_metadata(dir.join(APP_DATA_MARK)).is_ok_and(|m| m.is_file())
+}
+
+/// True when `path`, reported by a watch on `folder`, lies inside an app
+/// data folder below `folder` (the folder watcher drops such paths: the
+/// thumbnail cache changes on every scan). One look per folder on the way.
+pub fn in_app_data(folder: &Path, path: &Path) -> bool {
+    let mut dir = path.parent();
+    while let Some(d) = dir {
+        if d == folder || !d.starts_with(folder) {
+            return false;
+        }
+        if is_app_data(d) {
+            return true;
+        }
+        dir = d.parent();
+    }
+    false
+}
+
+/// True when a listed folder's entries include the app data mark.
+fn lists_app_data(entries: &[std::fs::DirEntry]) -> bool {
+    entries.iter().any(|e| {
+        e.file_name() == APP_DATA_MARK && e.file_type().is_ok_and(|t| t.is_file())
+    })
+}
+
 /// A directory entry's type, as the listing reports it (links are not
 /// followed).
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -357,6 +392,7 @@ fn reach(root: &Path, scope: &str, dir: &str) -> Reach {
         };
         match classify(name, Entry::from(meta.file_type())) {
             Rule::Descend if is_album_root(&abs) => return Reach::Nested(current),
+            Rule::Descend if is_app_data(&abs) => return Reach::Skip,
             Rule::Descend => {}
             // A file where the folder was: it holds nothing.
             Rule::List | Rule::Unsupported(_) => return Reach::Gone,
@@ -434,6 +470,11 @@ fn walk_from(
                 continue;
             }
         };
+        // Owlbum's own app data folder (and all under it): left out
+        // silently, like a system folder. The walk's own folder never is.
+        if !is_scope && lists_app_data(&entries) {
+            continue;
+        }
         for entry in entries {
             let Some(name) = entry.file_name().to_str().map(str::to_owned) else {
                 out.unreadable_names += 1;
@@ -815,6 +856,42 @@ pub(crate) mod tests {
         assert_eq!(listed(&w), ["c.jpg", "deep/y.jpg", "half/e.jpg"]);
         assert_eq!(w.nested, ["deep/x", "inner"]);
         assert!(w.complete);
+    }
+
+    #[test]
+    fn the_app_data_folder_inside_an_album_is_skipped() {
+        let tmp = tempfile::tempdir().unwrap();
+        let data = tmp.path().join("check").join("data");
+        // The real thing: app.sqlite as the app makes it.
+        drop(crate::appdata::AppData::open(&data).unwrap());
+        for rel in [
+            "check/data/thumbs/ab/abcd-s.jpg",
+            "check/data/full/abcd.jpg",
+            "check/a.jpg",
+            // A folder named like the cache but without the mark is walked.
+            "other/thumbs/b.jpg",
+        ] {
+            touch(tmp.path(), rel);
+        }
+        let w = run(tmp.path(), "");
+        assert_eq!(listed(&w), ["check/a.jpg", "other/thumbs/b.jpg"]);
+        assert!(w.nested.is_empty());
+        assert_eq!(w.skipped(), 0);
+        // A targeted walk (the watcher's) does not go in either.
+        let w = run_folders(
+            tmp.path(),
+            "",
+            &[("check/data/thumbs/ab", false), ("check/data", true)],
+        )
+        .unwrap();
+        assert!(listed(&w).is_empty());
+        // The watcher drops paths inside it, and only those.
+        let root = tmp.path();
+        assert!(in_app_data(root, &absolute(root, "check/data/thumbs/ab/abcd-s.jpg")));
+        assert!(in_app_data(root, &absolute(root, "check/data/thumbs")));
+        assert!(!in_app_data(root, &absolute(root, "check/a.jpg")));
+        assert!(!in_app_data(root, &absolute(root, "check/data")));
+        assert!(!in_app_data(root, &absolute(root, "other/thumbs/b.jpg")));
     }
 
     #[test]

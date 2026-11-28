@@ -58,7 +58,7 @@ use rusqlite::{Connection, OpenFlags, OptionalExtension, Row};
 
 use crate::album::sqlite_error;
 use crate::error::{AppError, AppResult};
-use crate::organise::{bursts, score};
+use crate::organise::{bursts, facts, score};
 use crate::scan::natural_cmp_text;
 use crate::text;
 
@@ -400,7 +400,7 @@ impl AlbumIndex {
     }
 
     /// Works out the bursts again (docs/05-organising.md, "Bursts"): the
-    /// sharpness list, every photo's `quality`, the bursts and their
+    /// sharpness list, every photo's `quality` and quality flags, the bursts and their
     /// keepers, then every score. The work runs on a copy of the records
     /// outside the lock; only putting the result in holds the write lock,
     /// so queries are not held up. A photo added while it ran is in no
@@ -411,10 +411,10 @@ impl AlbumIndex {
         let photos = self.read(|v| v.photos().to_vec());
         let sharpness = sharpness_of(&photos);
         let found = bursts::find(&photos);
-        let worked: Vec<(u32, f32, Option<NonZeroU32>)> = photos
+        let worked: Vec<(u32, f32, u8, Option<NonZeroU32>)> = photos
             .iter()
             .zip(found)
-            .map(|(p, b)| (p.id, bursts::quality(p, &sharpness), b))
+            .map(|(p, b)| (p.id, bursts::quality(p, &sharpness), facts::flags(p, &sharpness), b))
             .collect();
         drop(photos);
         let mut state = self.write();
@@ -422,11 +422,12 @@ impl AlbumIndex {
         let mut next = worked.iter().peekable();
         for photo in &mut state.photos {
             while next.next_if(|(id, ..)| *id < photo.id).is_some() {}
-            let (quality, burst) = match next.peek() {
-                Some((id, q, b)) if *id == photo.id => (*q, *b),
-                _ => (0.0, None),
+            let (quality, flags, burst) = match next.peek() {
+                Some((id, q, f, b)) if *id == photo.id => (*q, *f, *b),
+                _ => (0.0, 0, None),
             };
             photo.derived.quality = quality;
+            photo.derived.quality_flags = flags;
             photo.derived.burst = burst;
         }
         bursts::pick_keepers(&mut state.photos, None);
@@ -614,6 +615,7 @@ impl State {
         let found = bursts::find(&self.photos);
         for (photo, burst) in self.photos.iter_mut().zip(found) {
             photo.derived.quality = bursts::quality(photo, &self.sharpness);
+            photo.derived.quality_flags = facts::flags(photo, &self.sharpness);
             photo.derived.burst = burst;
         }
         bursts::pick_keepers(&mut self.photos, None);

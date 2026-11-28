@@ -25,6 +25,33 @@ pub fn bright(a: &Analysis) -> bool {
     a.mean_luma > 0.86 || a.clipped_highlights > 0.3
 }
 
+/// The quality flags of docs/05-organising.md, "Quality flags", as the bits
+/// of [`crate::index::record::quality`]. `sharpness` is the sorted list of
+/// the photo score's Focus line. A photo that is not analysed has none.
+pub fn flags(p: &Photo, sharpness: &[f32]) -> u8 {
+    use crate::index::record::quality::{BLURRY, BRIGHT, DARK, LOW_RES};
+    let Some(a) = p.analysis() else { return 0 };
+    let n = sharpness.len();
+    let mut out = 0;
+    if n >= 5 {
+        let p10 = sharpness[n / 10];
+        let median = sharpness[n / 2];
+        if a.sharpness <= p10 && a.sharpness < median * 0.5 {
+            out |= BLURRY;
+        }
+    }
+    if dark(a) {
+        out |= DARK;
+    }
+    if bright(a) {
+        out |= BRIGHT;
+    }
+    if p.kind != Kind::Video && u64::from(p.width) * u64::from(p.height) < 1_500_000 {
+        out |= LOW_RES;
+    }
+    out
+}
+
 /// `quality`, defined only for an analysed photo. `sharpness` is the
 /// sorted list of the photo score's Focus line.
 pub fn quality(p: &Photo, sharpness: &[f32]) -> Option<f64> {
@@ -189,6 +216,28 @@ mod tests {
         assert!(bright(&a(0.9, 0.0, 0.0)));
         assert!(bright(&a(0.5, 0.0, 0.31)));
         assert!(!bright(&a(0.5, 0.0, 0.3)));
+    }
+
+    #[test]
+    fn flags_at_their_thresholds() {
+        use crate::index::record::quality::{BLURRY, BRIGHT, DARK, LOW_RES};
+        let measured = |s: f64, luma: f64| {
+            analysis(luma, 0.0, 0.0, "").replace(r#""sharpness":10"#, &format!(r#""sharpness":{s}"#))
+        };
+        let big = |s: f64, luma: f64| photo("image", 2000, 1000, Some(measured(s, luma)));
+        let list = [10.0, 40.0, 50.0, 60.0, 70.0];
+        // p10 = 10, median = 50: blurry needs <= 10 and < 25.
+        assert_eq!(flags(&big(10.0, 0.5), &list), BLURRY);
+        assert_eq!(flags(&big(10.5, 0.5), &list), 0);
+        // Fewer than 5 photos: never blurry.
+        assert_eq!(flags(&big(10.0, 0.5), &list[..4]), 0);
+        assert_eq!(flags(&big(60.0, 0.15), &list), DARK);
+        assert_eq!(flags(&big(60.0, 0.87), &list), BRIGHT);
+        // 1,500,000 pixels is not low_res; one row fewer is.
+        assert_eq!(flags(&photo("image", 1500, 1000, Some(measured(60.0, 0.5))), &list), 0);
+        assert_eq!(flags(&photo("image", 1500, 999, Some(measured(60.0, 0.5))), &list), LOW_RES);
+        assert_eq!(flags(&photo("video", 100, 100, Some(measured(60.0, 0.5))), &list), 0);
+        assert_eq!(flags(&photo("image", 10, 10, None), &list), 0, "not analysed");
     }
 
     #[test]

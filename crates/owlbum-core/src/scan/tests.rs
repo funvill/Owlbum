@@ -2198,3 +2198,68 @@ fn the_trip_album_has_its_burst_and_its_duplicate_and_nothing_else() {
         ]
     );
 }
+
+/// The score thresholds of docs/05 ("Quality flags", "Bursts", "Photo
+/// score") checked against this pipeline's analysis on the `trip` fixture
+/// (docs/03, open question 10; issue 205). Run with `--nocapture` to see
+/// the measures.
+#[test]
+fn the_score_thresholds_hold_on_the_trip_fixture() {
+    use crate::index::record::quality;
+    let fx = Fx::trip();
+    fx.scan();
+    let index = fx.album().index().clone();
+    index.rebuild();
+    let id_of = |rel: &str| u32::try_from(fx.photo(rel).unwrap().id).unwrap();
+    let derived = |rel: &str| index.read(|v| v.get(id_of(rel)).unwrap().derived.clone());
+    let mut lines = Vec::new();
+    for f in &fx.manifest.files {
+        let Some(p) = fx.photo(&f.rel_path) else { continue };
+        let Some(a) = p.analysis.as_deref() else { continue };
+        let d = derived(&f.rel_path);
+        lines.push(format!(
+            "{:<28} {:?} {} flags={:04b} quality={:.2} score={:?} burst={:?} keeper={}",
+            f.rel_path, f.kind, a, d.quality_flags, d.quality, d.score, d.burst, d.keeper
+        ));
+    }
+    eprintln!("{}", lines.join("\n"));
+
+    // The blurred frame is the one flagged blurry.
+    assert_ne!(derived("day2/blurred.jpg").quality_flags & quality::BLURRY, 0);
+    // Ordinary photos carry no blurry, dark or bright flag.
+    let plain = quality::BLURRY | quality::DARK | quality::BRIGHT;
+    for f in fx.manifest.files.iter().filter(|f| {
+        matches!(f.kind, Kind::Landscape | Kind::Portrait | Kind::Square | Kind::Burst)
+    }) {
+        let d = derived(&f.rel_path);
+        assert_eq!(d.quality_flags & plain, 0, "{} {:04b}", f.rel_path, d.quality_flags);
+    }
+    // The small picture is low_res (so is every fixture photo under 1.5 MP).
+    for f in fx.manifest.of_kind(Kind::LowRes) {
+        assert_ne!(derived(&f.rel_path).quality_flags & quality::LOW_RES, 0, "{}", f.rel_path);
+    }
+    // Blurry: the blurred frame, and the BMP sample, a smooth picture with
+    // little detail (sharpness 52.5 against a median near 166; p10 is the
+    // third-lowest of 21).
+    let blurry: Vec<&str> = fx
+        .manifest
+        .files
+        .iter()
+        .filter(|f| fx.photo(&f.rel_path).is_some_and(|p| p.analysis.is_some()))
+        .filter(|f| derived(&f.rel_path).quality_flags & quality::BLURRY != 0)
+        .map(|f| f.rel_path.as_str())
+        .collect();
+    assert_eq!(blurry, ["day2/blurred.jpg", "formats/sample.bmp"]);
+    // The burst of five pairs into one burst with one keeper.
+    let shots: Vec<_> = fx.manifest.of_kind(Kind::Burst).map(|f| derived(&f.rel_path)).collect();
+    assert_eq!(shots.len(), 5);
+    let burst = shots[0].burst;
+    assert!(burst.is_some());
+    assert!(shots.iter().all(|d| d.burst == burst));
+    assert_eq!(shots.iter().filter(|d| d.keeper).count(), 1);
+    // The blurred frame scores below every shot painted like it.
+    let blurred = derived("day2/blurred.jpg").score.unwrap();
+    for d in &shots {
+        assert!(blurred < d.score.unwrap(), "blurred {blurred} vs {:?}", d.score);
+    }
+}

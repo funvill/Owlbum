@@ -198,3 +198,80 @@ fn write_profile() {
     println!("{pool} threads, reading a missing file per key: {secs:.2} s");
     let _ = std::fs::remove_dir_all(&d);
 }
+
+/// Where one photo's first scan spends its time, stage by stage, on one
+/// thread (#109): the key sample, the header read, the decode, the resize,
+/// and the two JPEG encodes. Timings for the issue, not a gate:
+///
+/// ```text
+/// OWLBUM_TIMING_ALBUM=<album> cargo test -p owlbum-core --release --lib \
+///     stage_profile -- --ignored --nocapture
+/// ```
+///
+/// Run it on a freshly made album to see the virus scanner's first-open
+/// cost in the sample stage, and again to see it warm.
+#[test]
+#[ignore]
+fn stage_profile() {
+    use crate::media::registry::format_of;
+    use crate::scan::reader::{MediaReader, Reader};
+    use crate::thumbs::make;
+
+    let Some(root) = std::env::var_os("OWLBUM_TIMING_ALBUM").map(PathBuf::from) else {
+        println!("OWLBUM_TIMING_ALBUM is not set");
+        return;
+    };
+    let walked = crate::scan::walk::walk(
+        &root,
+        "",
+        &std::sync::atomic::AtomicBool::new(false),
+        |_| {},
+    )
+    .unwrap();
+    let files: Vec<PathBuf> = walked
+        .files
+        .iter()
+        .map(|f| crate::scan::walk::absolute(&root, &f.rel_path))
+        .collect();
+    let reader = MediaReader;
+    let mut stages = [0f64; 6];
+    let names = ["sample", "metadata", "decode", "resize", "encode m", "encode s"];
+    let mut bytes = [0usize; 2];
+    for path in &files {
+        let format = format_of(path.file_name().unwrap().to_str().unwrap()).unwrap();
+        let mut lap = |i: usize, t: Instant| stages[i] += t.elapsed().as_secs_f64();
+        let t = Instant::now();
+        let _ = reader.sample(path).unwrap();
+        lap(0, t);
+        let t = Instant::now();
+        let _ = reader.metadata(format, path);
+        lap(1, t);
+        let t = Instant::now();
+        let px = reader.preview(format, path).unwrap();
+        lap(2, t);
+        let t = Instant::now();
+        let b = make::buffers(&px);
+        lap(3, t);
+        let t = Instant::now();
+        bytes[0] += make::encode(&b.medium, make::MEDIUM_QUALITY).len();
+        lap(4, t);
+        let t = Instant::now();
+        bytes[1] += make::encode(&b.small, make::SMALL_QUALITY).len();
+        lap(5, t);
+    }
+    let n = files.len().max(1) as f64;
+    let total: f64 = stages.iter().sum();
+    println!("{} photos, one thread, {total:.2} s in all", files.len());
+    for (name, s) in names.iter().zip(stages) {
+        println!(
+            "  {name:>9}: {s:7.2} s, {:6.1} ms a photo, {:4.1}%",
+            s * 1000.0 / n,
+            s * 100.0 / total
+        );
+    }
+    println!(
+        "  bytes: medium {} KB, small {} KB a photo",
+        bytes[0] / files.len().max(1) / 1000,
+        bytes[1] / files.len().max(1) / 1000
+    );
+}

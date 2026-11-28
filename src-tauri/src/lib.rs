@@ -34,6 +34,7 @@ pub fn setup<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
         .manage(session::Session::default())
         .manage(handoff::Handoff::default())
         .manage(commands::file::DragPrep::default())
+        .manage(commands::file::TrashAsked::default())
         .manage(closing::Closing::default())
         .manage(update::Updates::default())
         .manage(window::Geometry::default())

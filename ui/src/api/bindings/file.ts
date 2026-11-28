@@ -5,6 +5,7 @@ import type { CopiedFiles } from "./CopiedFiles";
 import type { CopiedImage } from "./CopiedImage";
 import type { CopiedPaths } from "./CopiedPaths";
 import type { Dragged } from "./Dragged";
+import type { TrashQuestion } from "./TrashQuestion";
 import type { Trashed } from "./Trashed";
 
 export type FileCommands = {
@@ -15,7 +16,8 @@ export type FileCommands = {
   file_prepare_drag: { args: { photo_ids: Array<number> }; result: null };
   file_reveal: { args: { photo_id: number }; result: null };
   file_start_drag: { args: { photo_ids: Array<number> }; result: Dragged };
-  file_trash: { args: { photo_ids: Array<number> }; result: Trashed };
+  file_trash: { args: { ticket: number }; result: Trashed };
+  file_trash_ask: { args: { photo_ids: Array<number> }; result: TrashQuestion | null };
 };
 
 export type FileEvents = {

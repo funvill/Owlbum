@@ -6,3 +6,4 @@ export { DRAG_START_PX, pressPhoto, resetDrag } from "./drag";
 export { FILE_KEY_IDS, fileKeyHandlers, isFileKey, useFileKeys, type FileKeyId } from "./keys";
 export { PhotoMenu, type PhotoMenuProps } from "./PhotoMenu";
 export { dragTargets, inResultOrder, selectedTargets } from "./targets";
+export { TrashQuestion, askTrash, resetTrashQuestion } from "./TrashQuestion";

@@ -12,7 +12,7 @@ use common::invoke;
 use image::{Rgb, RgbImage};
 use owlbum_core::album::{Album, OpenOptions};
 use owlbum_core::appdata::AppData;
-use owlbum_core::files::{CopiedFiles, CopiedImage, CopiedPaths, Trashed};
+use owlbum_core::files::{CopiedFiles, CopiedImage, CopiedPaths, TrashQuestion, Trashed};
 use owlbum_core::scan::ScanProgress;
 use owlbum_lib::commands::file::{Desktop, DesktopShell};
 use owlbum_lib::session::Session;
@@ -22,8 +22,6 @@ use tauri::{Listener, Manager};
 
 #[derive(Default)]
 struct Fake {
-    answer: Mutex<bool>,
-    asked: Mutex<Vec<String>>,
     text: Mutex<Option<String>>,
     image: Mutex<Option<(u32, u32)>>,
     files: Mutex<Vec<PathBuf>>,
@@ -32,10 +30,6 @@ struct Fake {
 }
 
 impl Desktop for Fake {
-    fn confirm_trash(&self, message: &str, _detail: &str) -> bool {
-        self.asked.lock().unwrap().push(message.to_owned());
-        *self.answer.lock().unwrap()
-    }
     fn trash(&self, path: &Path) -> Result<(), String> {
         std::fs::rename(path, self.bin.join(path.file_name().unwrap())).map_err(|e| e.to_string())
     }
@@ -157,44 +151,64 @@ impl Fixture {
 }
 
 #[test]
-fn trash_asks_first_and_a_cancel_changes_nothing() {
+fn trash_asks_first_and_moves_nothing_until_told() {
     let f = fixture();
     let root = f.open();
     let a = f.id_of("a.png");
-    let out: Trashed = f.call("file_trash", json!({ "photo_ids": [a] })).unwrap();
-    assert!(out.cancelled);
-    assert!(out.trashed.is_empty());
+    let q: TrashQuestion = f.call("file_trash_ask", json!({ "photo_ids": [a] })).unwrap();
+    assert_eq!(q.count, 1);
+    assert!(q.message.starts_with("Move \"a.png\" to the "), "{q:?}");
+    assert!(q.detail.starts_with("You can restore it from the "), "{q:?}");
+    assert!(q.button.starts_with("Move to "), "{q:?}");
+    assert!(root.join("a.png").exists(), "asking moves nothing");
+    // A ticket that was never handed out does nothing.
+    let out: Trashed = f.call("file_trash", json!({ "ticket": q.ticket + 7 })).unwrap();
+    assert!(out.cancelled && out.trashed.is_empty());
     assert!(root.join("a.png").exists());
-    let asked = f.fake.asked.lock().unwrap().clone();
-    assert_eq!(asked.len(), 1);
-    assert!(asked[0].starts_with("Move \"a.png\" to the "), "{asked:?}");
 }
 
 #[test]
-fn trash_moves_the_files_and_marks_the_rows_missing() {
+fn trash_moves_the_photos_asked_about_once() {
     let f = fixture();
     let root = f.open();
-    *f.fake.answer.lock().unwrap() = true;
     let (a, b) = (f.id_of("a.png"), f.id_of("b.png"));
     let (send, receive) = mpsc::channel();
     f.app.listen_any("album_changed", move |event| {
         let _ = send.send(event.payload().to_owned());
     });
-    let out: Trashed = f
-        .call("file_trash", json!({ "photo_ids": [b, a] }))
+    let q: TrashQuestion = f
+        .call("file_trash_ask", json!({ "photo_ids": [b, a] }))
         .unwrap();
+    assert!(q.message.starts_with("Move 2 photos"), "{q:?}");
+    let out: Trashed = f.call("file_trash", json!({ "ticket": q.ticket })).unwrap();
     assert_eq!(out.trashed, vec![b, a]);
-    assert!(out.failed.is_empty());
+    assert!(out.failed.is_empty() && !out.cancelled);
     assert!(!root.join("a.png").exists());
     assert!(f.tmp.path().join("bin/a.png").exists());
-    assert!(f.fake.asked.lock().unwrap()[0].starts_with("Move 2 photos"));
     let changed = receive.recv_timeout(Duration::from_secs(5)).unwrap();
     assert!(changed.contains("\"trashed\""), "{changed}");
-    // Gone from the album's photos: another call cannot name them.
+    // The ticket is used up.
+    let again: Trashed = f.call("file_trash", json!({ "ticket": q.ticket })).unwrap();
+    assert!(again.cancelled && again.trashed.is_empty());
+    // Gone from the album's photos: another question cannot name them.
     let err = f
-        .call::<Trashed>("file_trash", json!({ "photo_ids": [a] }))
+        .call::<Option<TrashQuestion>>("file_trash_ask", json!({ "photo_ids": [a] }))
         .unwrap_err();
     assert_eq!(err["code"], "photo_not_found");
+}
+
+#[test]
+fn a_newer_question_replaces_the_older_ticket() {
+    let f = fixture();
+    let root = f.open();
+    let (a, b) = (f.id_of("a.png"), f.id_of("b.png"));
+    let first: TrashQuestion = f.call("file_trash_ask", json!({ "photo_ids": [a] })).unwrap();
+    let second: TrashQuestion = f.call("file_trash_ask", json!({ "photo_ids": [b] })).unwrap();
+    let stale: Trashed = f.call("file_trash", json!({ "ticket": first.ticket })).unwrap();
+    assert!(stale.cancelled);
+    assert!(root.join("a.png").exists());
+    let out: Trashed = f.call("file_trash", json!({ "ticket": second.ticket })).unwrap();
+    assert_eq!(out.trashed, vec![b]);
 }
 
 #[test]

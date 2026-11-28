@@ -6,6 +6,7 @@
 import { api, mediaPlatform, toAppError } from "../../api";
 import { showToast } from "../../controls/toastQueue";
 import { binName, filesText } from "../../text/files";
+import { askTrash } from "./TrashQuestion";
 
 const t = filesText.toast;
 
@@ -33,14 +34,17 @@ export function resetFileNotes(): void {
 }
 
 /**
- * Moves `ids` to the Recycle Bin or Trash. Rust asks first. Moved photos
+ * Moves `ids` to the Recycle Bin or Trash after Rust's question, shown in
+ * the page's dialog with Cancel as its default (issue 188). Moved photos
  * leave the result when the grid re-runs for `album_changed`; failures
  * show one error toast. Answers the ids moved.
  */
 export async function trashPhotos(ids: readonly number[]): Promise<number[]> {
   if (ids.length === 0) return [];
   try {
-    const out = await api().invoke("file_trash", { photo_ids: [...ids] });
+    const question = await api().invoke("file_trash_ask", { photo_ids: [...ids] });
+    if (question === null || !(await askTrash(question))) return [];
+    const out = await api().invoke("file_trash", { ticket: question.ticket });
     const first = out.failed[0];
     if (first !== undefined) {
       showToast({

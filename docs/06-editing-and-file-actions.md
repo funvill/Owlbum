@@ -709,7 +709,7 @@ Every view-only tooltip is the first sentence of the view-only banner in force (
 
 ### Move to the Recycle Bin or Trash
 
-`file_trash(photo_ids)` is called by the Delete key and by the menu item. It is the only way Owlbum removes a photo, and it never erases.
+The Delete key and the menu item call `file_trash_ask(photo_ids)`, show its question, and on yes call `file_trash(ticket)`. It is the only way Owlbum removes a photo, and it never erases.
 
 | Rule | Detail |
 |---|---|
@@ -717,7 +717,7 @@ Every view-only tooltip is the first sentence of the view-only banner in force (
 | The viewer | The Delete key is left out of the viewer on purpose, so a stray press while looking through photos full-screen removes nothing. The menu item is still offered there, because choosing it is deliberate. |
 | Targets | The selected photos that are shown, else the current photo. Photos hidden by a filter or folded inside a stack are not included. |
 | Check | Rust keeps the ids whose files exist. If none is left, nothing happens. |
-| Confirm | A native warning box, modal to the window. Rust shows it, so the page cannot skip it. |
+| Confirm | Rust writes the question and hands out a ticket for exactly the photos it names; the page shows it in an alert dialog. `file_trash` takes only the latest unused ticket, so nothing moves unless that question was answered yes. A stale ticket answers `cancelled` and changes nothing. |
 | Moving | Files are moved one at a time. A file that cannot be moved stays where it is and is reported. It is never retried another way. |
 | A drive with no bin | Some network and removable drives have no Recycle Bin or Trash. The move must fail there; it must never become a permanent delete. On Windows Rust sends a file to the bin only when it is on a local fixed drive; any other file (a network share, a mapped network drive, a removable drive) fails with "This drive has no Recycle Bin." without calling the system. On Linux the `trash` library refuses a mount with no trash folder. |
 | The row | Each moved photo's row is marked `missing = 1` in one transaction. It keeps its typed info, its edit and its tags, and it leaves every result. If the file is restored from the bin, the next scan finds it and the row is used again. **Tidy** removes missing rows for good (see [Organising](05-organising.md)). |
@@ -736,7 +736,7 @@ The confirm:
 | Buttons | "Move to Recycle Bin", "Cancel" | "Move to Trash", "Cancel" |
 | Default button and Esc | Cancel | Cancel |
 
-The box is `tauri-plugin-dialog`'s message box with custom buttons. It cannot choose its default button, so the first one ("Move to …") is the default on Windows; Esc still cancels. #188 tracks making Cancel the default.
+The question is the page's alert dialog (title: the message; body: the detail), with focus starting on Cancel, so Enter and Esc both keep the photos. "Move to …" is a Default button in the danger style. It was a native message box until #188: `tauri-plugin-dialog` cannot choose a message box's default button, and a native task dialog with a Cancel default needs common controls version 6 loaded at run time, which the shell's test programs lack.
 
 Results:
 
@@ -849,7 +849,8 @@ Every command takes photo ids. An unknown id answers `photo_not_found`. A comman
 | `edit_save_to_file` | `photo_ids` | `{ saved: [id], failed: [{ id, name, message }], skipped, warnings, revision }` | The sequence above, one photo after another. `warnings` holds "A later change to <name> was not saved". |
 | `edit_save_all` | | the same | `file` mode only (`not_supported` in `album` mode). |
 | `edit_save_as` | `photo_id` | `{ cancelled, saved_name, in_album, photo_id, warning, revision }` | Rust opens the dialog. One flat shape: `cancelled` true leaves the rest empty. |
-| `file_trash` | `photo_ids` | `{ trashed: [id], failed: [{ id, name, message }], cancelled, revision }` | Rust shows the confirm. |
+| `file_trash_ask` | `photo_ids` | `{ ticket, count, message, detail, button }` or null when no file is left | Rust writes the question; the page shows it. |
+| `file_trash` | `ticket` | `{ trashed: [id], failed: [{ id, name, message }], cancelled, revision }` | Only the latest unused ticket moves anything. |
 | `file_reveal` | `photo_id` | nothing | |
 | `file_copy_image` | `photo_id` | `{ scaled, file }` | `file` when a video's file was copied instead. The picture has the stored edit drawn. |
 | `file_copy_files` | `photo_ids` | `{ copied, dropped, as, with_edits }` | `as` is `files` or `paths`. |
@@ -962,7 +963,7 @@ Error codes this part adds to `AppError`:
 | Rotate keys | `]` with three photos selected calls `edit_turn` once with three ids; in a text field it types a bracket. |
 | Markers | The dot and badge follow `edit_target`; the viewer draws through `EditedImage`. |
 | Menu | The items and their order; each disabled state and tooltip from the table; the save items are hidden in edit mode and in `album` mode as specified; the labels follow the count; each closing rule. |
-| Delete key | Calls `file_trash` with the shown, selected ids; moves the selection to the next photo from the reply; does nothing in a text field, the viewer or edit mode. |
+| Delete key | Asks with `file_trash_ask` for the shown, selected ids, then calls `file_trash`; moves the selection to the next photo from the reply; does nothing in a text field, the viewer or edit mode. |
 | Ctrl+C | One photo calls `file_copy_image`; several call `file_copy_files`; each toast text, including the 500 limit, the paths fallback and "(without their edits)". |
 | Dragging | Pointer-down calls `file_prepare_drag`; a 5 px move calls `file_start_drag` with the same ids; a 3 px move does not; a failure shows the message. |
 | Capabilities | With drag-out reported as not supported, no drag call is made. |

@@ -14,7 +14,8 @@ trashed: Array<number>,
  */
 failed: Array<FileFailure>, 
 /**
- * The user said Cancel; nothing changed.
+ * The ticket was not the latest question's (already used, or another
+ * question was asked since); nothing changed.
  */
 cancelled: boolean, 
 /**

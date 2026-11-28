@@ -18,6 +18,7 @@ import { resetViewer } from "../viewer/store";
 import { bin, resetFileNotes } from "./actions";
 import { resetCapabilities } from "./capabilities";
 import { resetDrag } from "./drag";
+import { TrashQuestion, resetTrashQuestion } from "./TrashQuestion";
 import { FILE_KEY_IDS, fileKeyHandlers } from "./keys";
 
 class FakeResizeObserver {
@@ -49,7 +50,12 @@ function setup(overrides: Parameters<typeof createFakeApi>[0] = {}) {
 
 /** Renders the review screen with photo `id` current and `also` selected too. */
 async function show(id: number, also: number[] = []) {
-  render(<Review busy={() => false} />);
+  render(
+    <>
+      <Review busy={() => false} />
+      <TrashQuestion />
+    </>,
+  );
   await waitFor(() => expect(screen.getAllByRole("gridcell").length).toBeGreaterThan(0));
   act(() =>
     grid().setSelection({ current: { id, index: id - 1 }, anchor: { id, index: id - 1 }, selection: [id, ...also] }),
@@ -58,6 +64,12 @@ async function show(id: number, also: number[] = []) {
 
 const press = (key: string, init: Partial<KeyboardEventInit> = {}) =>
   fireEvent.keyDown(document.activeElement ?? document.body, { key, ...init });
+
+/** Agrees to the trash question. */
+async function agree() {
+  const dialog = await screen.findByRole("alertdialog");
+  fireEvent.click(within(dialog).getByRole("button", { name: /^Move to/ }));
+}
 
 const callsOf = (command: string) => fake.calls.filter((c) => c.command === command).map((c) => c.args);
 const toasts = () => useToasts.getState().toasts.map((t) => t.message);
@@ -71,6 +83,7 @@ beforeEach(() => {
   resetCapabilities();
   resetDrag();
   resetImageCache(noLoad);
+  resetTrashQuestion();
   useToasts.setState({ toasts: [] });
   useAlbumStore.setState(initialAlbum, true);
   useSettingsStore.setState({ settings: null, error: null });
@@ -107,10 +120,29 @@ describe("keys", () => {
 });
 
 describe("the Delete key", () => {
-  it("sends the selected photos in the order of the result", async () => {
+  it("asks about the selected photos in the order of the result, then moves them", async () => {
     await show(4, [2]);
     press("Delete");
-    await waitFor(() => expect(callsOf("file_trash")).toEqual([{ photo_ids: [2, 4] }]));
+    await waitFor(() => expect(callsOf("file_trash_ask")).toEqual([{ photo_ids: [2, 4] }]));
+    await agree();
+    await waitFor(() => expect(callsOf("file_trash")).toEqual([{ ticket: 2 }]));
+  });
+
+  it("asks in a dialog whose default button is Cancel; Cancel and Esc move nothing", async () => {
+    await show(3);
+    press("Delete");
+    const dialog = await screen.findByRole("alertdialog", { name: 'Move "p3.jpg" to the Recycle Bin?' });
+    expect(within(dialog).getByText("You can restore it from the Recycle Bin.")).toBeInTheDocument();
+    expect(within(dialog).getByRole("button", { name: "Cancel" })).toHaveFocus();
+    fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }));
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    press("Delete");
+    await screen.findByRole("alertdialog");
+    press("Escape");
+    await waitFor(() => expect(screen.queryByRole("alertdialog")).toBeNull());
+    await new Promise((r) => setTimeout(r, 0));
+    expect(callsOf("file_trash_ask")).toHaveLength(2);
+    expect(callsOf("file_trash")).toEqual([]);
   });
 
   it("does nothing in a text field, an auto-repeat, the viewer or a view-only album", async () => {
@@ -127,20 +159,21 @@ describe("the Delete key", () => {
     useAlbumStore.setState({ status: fakeStatus("D:/Photos", { view_only: "read_only" }) });
     press("Delete");
     await new Promise((r) => setTimeout(r, 0));
-    expect(callsOf("file_trash")).toEqual([]);
+    expect(callsOf("file_trash_ask")).toEqual([]);
   });
 
   it("reports files that could not be moved", async () => {
     setup({
-      file_trash: ({ photo_ids }) => ({
+      file_trash: ({ ticket }) => ({
         trashed: [],
-        failed: [{ id: photo_ids[0]!, name: "p3.jpg", message: "in use" }],
+        failed: [{ id: ticket, name: "p3.jpg", message: "in use" }],
         cancelled: false,
         revision: 1,
       }),
     });
     await show(3);
     press("Delete");
+    await agree();
     await waitFor(() => expect(toasts()).toContain(`Couldn't move p3.jpg to the ${bin()}: in use`));
   });
 });
@@ -221,7 +254,8 @@ describe("the photo menu", () => {
 
     fireEvent.contextMenu(tile(0), { clientX: 10, clientY: 10 });
     fireEvent.click(await screen.findByRole("menuitem", { name: /Move to/ }));
-    await waitFor(() => expect(callsOf("file_trash")).toEqual([{ photo_ids: [1, 2] }]));
+    await agree();
+    await waitFor(() => expect(callsOf("file_trash")).toEqual([{ ticket: 1 }]));
   });
 
   it("disables what changes the album in a view-only album, with the banner's reason", async () => {
@@ -253,7 +287,7 @@ describe("the photo menu", () => {
     expect(screen.getByRole("menu")).toBeInTheDocument();
     press("Delete");
     expect(screen.queryByRole("menu")).toBeNull();
-    await waitFor(() => expect(callsOf("file_trash")).toEqual([{ photo_ids: [1, 2] }]));
+    await waitFor(() => expect(callsOf("file_trash_ask")).toEqual([{ photo_ids: [1, 2] }]));
   });
 
   it("opens in the viewer on a right-click; Esc closes the menu and not the viewer", async () => {

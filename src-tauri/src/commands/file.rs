@@ -7,7 +7,7 @@
 //! fills with the real ones (`crate::desktop`) and shell tests with fakes.
 
 use std::path::{Path, PathBuf};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Instant;
 
 use crate::commands::off_main;
@@ -16,7 +16,7 @@ use crate::{area, command};
 use owlbum_core::album::{AlbumChanged, ChangeReason};
 use owlbum_core::files::{
     self, Capabilities, CopiedFiles, CopiedImage, CopiedPaths, CopyAs, DragCache, Dragged, Target,
-    Trashed,
+    TrashQuestion, Trashed,
 };
 use owlbum_core::media::MediaKind;
 use owlbum_core::scan::Scanner;
@@ -35,6 +35,7 @@ area! {
         file_reveal,
         file_start_drag,
         file_trash,
+        file_trash_ask,
     ],
     events: [],
 }
@@ -42,9 +43,6 @@ area! {
 /// The platform calls of file actions. Each answers a reason for the user
 /// when it fails.
 pub trait Desktop: Send + Sync {
-    /// The native warning box before moving to the bin, modal to the
-    /// window. True when the user chose to move.
-    fn confirm_trash(&self, message: &str, detail: &str) -> bool;
     /// Moves one file to the Recycle Bin or Trash; never deletes it.
     fn trash(&self, path: &Path) -> Result<(), String>;
     /// Opens the file manager with the file selected.
@@ -83,6 +81,26 @@ pub struct PreparedDrag {
     icon: Vec<u8>,
 }
 
+/// The latest trash question: its ticket and the photos it named. Asking
+/// again replaces it; `file_trash` uses it once. Managed as state by
+/// `setup`.
+#[derive(Default)]
+pub struct TrashAsked(Mutex<(u64, Option<Vec<i64>>)>);
+
+impl TrashAsked {
+    fn ask(&self, ids: Vec<i64>) -> u64 {
+        let mut held = self.0.lock().unwrap_or_else(|p| p.into_inner());
+        held.0 += 1;
+        held.1 = Some(ids);
+        held.0
+    }
+
+    fn take(&self, ticket: u64) -> Option<Vec<i64>> {
+        let mut held = self.0.lock().unwrap_or_else(|p| p.into_inner());
+        if held.0 == ticket { held.1.take() } else { None }
+    }
+}
+
 /// The one prepared drag, managed as state by `setup`.
 #[derive(Default)]
 pub struct DragPrep(pub DragCache<PreparedDrag>);
@@ -107,35 +125,64 @@ fn resolve(scanner: &Scanner, ids: &[i64], limit: usize) -> Result<files::Target
 }
 
 command! {
-    /// Moves the photos `photo_ids` to the Recycle Bin or Trash after the
-    /// native confirm (docs/06, "Move to the Recycle Bin or Trash"). Only
-    /// photos whose files exist are offered; none left answers an empty
-    /// reply and shows nothing. Moved photos' rows are marked missing and
-    /// `album_changed` is sent with reason `trashed`. Errors: `view_only`,
-    /// `photo_not_found`, `no_album`, `trash_failed`.
-    pub async fn file_trash<R: Runtime>(photo_ids: Vec<i64>; app: AppHandle<R>) -> Trashed {
+    /// The question before moving the photos `photo_ids` to the Recycle
+    /// Bin or Trash (docs/06, "Move to the Recycle Bin or Trash"). Only
+    /// photos whose files exist are asked about; none left answers None
+    /// and the page shows nothing. The page shows the question in its own
+    /// dialog, where Cancel is the default button, and passes the ticket
+    /// to `file_trash` on yes. Errors: `view_only`, `photo_not_found`,
+    /// `no_album`.
+    pub async fn file_trash_ask<R: Runtime>(photo_ids: Vec<i64>; app: AppHandle<R>) -> Option<TrashQuestion> {
         let scanner = scanner(&app)?;
-        let desktop = desktop(&app)?;
-        let out = off_main(text::files::TRASHING, move || {
+        off_main(text::files::TRASHING, move || {
             files::check_writable(scanner.album())?;
             let targets = resolve(&scanner, &photo_ids, usize::MAX)?;
-            let album = scanner.album();
             let Some(first) = targets.photos.first() else {
-                return Ok(Trashed { revision: album.revision(), ..Trashed::default() });
+                return Ok(None);
             };
-            let n = targets.photos.len();
-            let asked = desktop.confirm_trash(
-                &text::files::trash_message(n, &first.name),
-                &text::files::trash_detail(n),
-            );
-            if !asked {
+            let count = targets.photos.len();
+            let ids = targets.photos.iter().map(|t| t.photo.id).collect();
+            let ticket = app.state::<TrashAsked>().ask(ids);
+            Ok(Some(TrashQuestion {
+                ticket,
+                count,
+                message: text::files::trash_message(count, &first.name),
+                detail: text::files::trash_detail(count),
+                button: text::files::trash_button(),
+            }))
+        })
+        .await
+    }
+}
+
+command! {
+    /// Moves the photos of the trash question `ticket` to the Recycle Bin
+    /// or Trash, after the user agreed (docs/06, "Move to the Recycle Bin
+    /// or Trash"). A ticket that is not the latest question's, or was
+    /// used, answers `cancelled` and changes nothing. Photos whose files
+    /// went since the question are left out. Moved photos' rows are
+    /// marked missing and `album_changed` is sent with reason `trashed`.
+    /// Errors: `view_only`, `no_album`, `trash_failed`.
+    pub async fn file_trash<R: Runtime>(ticket: u64; app: AppHandle<R>) -> Trashed {
+        let scanner = scanner(&app)?;
+        let desktop = desktop(&app)?;
+        let asked = app.state::<TrashAsked>().take(ticket);
+        let out = off_main(text::files::TRASHING, move || {
+            files::check_writable(scanner.album())?;
+            let album = scanner.album();
+            let Some(photo_ids) = asked else {
                 return Ok(Trashed { cancelled: true, revision: album.revision(), ..Trashed::default() });
-            }
+            };
+            let targets = match resolve(&scanner, &photo_ids, usize::MAX) {
+                Ok(t) => t.photos,
+                Err(e) if e.code == ErrorCode::PhotoNotFound => Vec::new(),
+                Err(e) => return Err(e),
+            };
             let bin = |p: &Path| match files::no_bin_reason(p) {
                 Some(reason) => Err(reason),
                 None => desktop.trash(p),
             };
-            files::trash(album, &targets.photos, &bin)
+            files::trash(album, &targets, &bin)
         })
         .await
         .map_err(|e| match e.code {

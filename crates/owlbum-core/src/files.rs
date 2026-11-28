@@ -167,6 +167,23 @@ pub struct FileFailure {
     pub message: String,
 }
 
+/// `file_trash_ask`'s answer: the question the page shows before moving
+/// photos to the bin (docs/06, "Move to the Recycle Bin or Trash"). The
+/// page passes `ticket` to `file_trash` when the user agrees; the ticket
+/// stands for exactly the photos asked about.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct TrashQuestion {
+    pub ticket: u64,
+    /// How many photos would move.
+    pub count: usize,
+    /// `Move "<name>" to the Recycle Bin?` or `Move <n> photos to the …?`.
+    pub message: String,
+    /// "You can restore it from the Recycle Bin." and the like.
+    pub detail: String,
+    /// The accepting button: "Move to Recycle Bin" or "Move to Trash".
+    pub button: String,
+}
+
 /// `file_trash`'s answer.
 #[derive(Debug, Clone, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
 pub struct Trashed {
@@ -174,7 +191,8 @@ pub struct Trashed {
     pub trashed: Vec<i64>,
     /// The photos whose files stayed where they were.
     pub failed: Vec<FileFailure>,
-    /// The user said Cancel; nothing changed.
+    /// The ticket was not the latest question's (already used, or another
+    /// question was asked since); nothing changed.
     pub cancelled: bool,
     /// The album's revision afterwards.
     pub revision: u64,

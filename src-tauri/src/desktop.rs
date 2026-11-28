@@ -1,6 +1,6 @@
 //! The real platform calls behind file actions
-//! ([`crate::commands::file::Desktop`]): the native confirm, the bin, the
-//! file manager, the clipboard and dragging out.
+//! ([`crate::commands::file::Desktop`]): the bin, the file manager, the
+//! clipboard, dragging out and the native Save and close dialogs.
 
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -38,24 +38,6 @@ impl<R: Runtime> NativeDesktop<R> {
 }
 
 impl<R: Runtime> Desktop for NativeDesktop<R> {
-    fn confirm_trash(&self, message: &str, detail: &str) -> bool {
-        use tauri_plugin_dialog::{DialogExt, MessageDialogButtons, MessageDialogKind};
-        let mut dialog = self
-            .app
-            .dialog()
-            .message(format!("{message}\n\n{detail}"))
-            .title(owlbum_core::text::files::trash_button())
-            .kind(MessageDialogKind::Warning)
-            .buttons(MessageDialogButtons::OkCancelCustom(
-                owlbum_core::text::files::trash_button(),
-                owlbum_core::text::files::CANCEL.to_owned(),
-            ));
-        if let Some(window) = self.app.get_webview_window("main") {
-            dialog = dialog.parent(&window);
-        }
-        dialog.blocking_show()
-    }
-
     fn save_dialog(&self, d: &owlbum_core::edit::save::SaveAsDialog) -> Option<PathBuf> {
         use tauri_plugin_dialog::DialogExt;
         let exts: Vec<&str> = d.extensions.iter().map(String::as_str).collect();

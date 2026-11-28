@@ -48,6 +48,8 @@ export const filesText = {
     editsNotInFiles:
       "Photos are dragged as they are on disk, without edits kept in the album. Use Save as… for an edited copy.",
   },
+  /** The trash question's refusing button, its default (Rust writes the rest). */
+  trashCancel: "Cancel",
   /** The shortcut overlay's note where dragging out is not offered. */
   dragWindowsOnly: "Windows only for now",
 };

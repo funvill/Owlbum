@@ -74,6 +74,7 @@
     "allow-tagging-focus",
     "allow-tagging-models",
     "allow-tagging-pause",
+    "allow-tagging-regenerate",
     "allow-tagging-remove",
     "allow-tagging-restart",
     "allow-tagging-retry-failed",

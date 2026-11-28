@@ -356,17 +356,12 @@ struct AlbumNames<'a> {
 impl Names for AlbumNames<'_> {
     fn folders(&mut self) -> (String, Vec<String>) {
         self.album.index().read(|v| {
-            // A flag per folder rather than a set: one pass over 100,000
-            // photos stays well inside `query_parse`'s 2 ms (#125).
-            let mut used = vec![false; v.folder_count()];
-            for p in v.photos() {
-                if let Some(u) = used.get_mut(p.folder as usize) {
-                    *u = true;
-                }
-            }
-            let mut folders: Vec<String> = (0..used.len())
-                .filter(|&f| used[f])
-                .map(|f| v.folder(f as u32).to_owned())
+            // The index counts each folder's photos: a pass over 100,000
+            // photos took about 1.5 ms of `query_parse`'s 2 (issue 162).
+            let mut folders: Vec<String> = (0..v.folder_count())
+                .filter_map(|f| u32::try_from(f).ok())
+                .filter(|&f| v.folder_has_photos(f))
+                .map(|f| v.folder(f).to_owned())
                 .collect();
             folders.sort_unstable();
             (v.scope().to_owned(), folders)

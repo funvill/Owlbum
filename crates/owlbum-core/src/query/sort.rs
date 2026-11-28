@@ -33,15 +33,14 @@ pub fn order(view: &IndexView<'_>, shown: &[&Photo], sort: QuerySort) -> Vec<u32
             // and kept for the photos shown, which are records of the same
             // slice (a binary search of the sharpness list each time is
             // most of the cost).
+            // Both passes are split over the processors: at 100,000 photos
+            // they took about 30 ms on one (issue 162).
             let photos = view.photos();
             let sharpness = view.sharpness();
-            let quality: Vec<Option<f64>> = photos
-                .iter()
-                .map(|p| facts::quality(p, sharpness))
-                .collect();
+            let quality: Vec<Option<f64>> = par_map(photos, |p| facts::quality(p, sharpness));
             let range = facts::quality_range(quality.iter().flatten().copied());
             let base = photos.as_ptr() as usize;
-            by(shown, |p| {
+            by_par(shown, |p| {
                 let at = (std::ptr::from_ref(p) as usize).wrapping_sub(base) / size_of::<Photo>();
                 let q = match quality.get(at) {
                     Some(&q) if std::ptr::eq(&photos[at], p) => q,
@@ -64,9 +63,42 @@ pub fn order(view: &IndexView<'_>, shown: &[&Photo], sort: QuerySort) -> Vec<u32
 
 /// Sorts `shown` by `key`, then by the name order.
 fn by<K: Ord>(shown: &[&Photo], key: impl Fn(&Photo) -> K) -> Vec<u32> {
-    let mut keyed: Vec<(K, u32, u32)> = shown.iter().map(|p| (key(p), p.name_rank, p.id)).collect();
+    sorted(shown.iter().map(|p| (key(p), p.name_rank, p.id)).collect())
+}
+
+/// [`by`] with the keys worked out on several threads, for a key that
+/// costs more than a field read.
+fn by_par<K: Ord + Send>(shown: &[&Photo], key: impl Fn(&Photo) -> K + Sync) -> Vec<u32> {
+    sorted(par_map(shown, |p| (key(p), p.name_rank, p.id)))
+}
+
+fn sorted<K: Ord>(mut keyed: Vec<(K, u32, u32)>) -> Vec<u32> {
     keyed.sort_unstable_by(|a, b| a.0.cmp(&b.0).then(a.1.cmp(&b.1)).then(a.2.cmp(&b.2)));
     keyed.into_iter().map(|(_, _, id)| id).collect()
+}
+
+/// Below this many items [`par_map`] stays on one thread.
+const PAR_ABOVE: usize = 16_384;
+
+/// `f` of every item, in order, split over the processors (at most 8
+/// threads) when there are many items.
+fn par_map<T: Sync, U: Send>(items: &[T], f: impl Fn(&T) -> U + Sync) -> Vec<U> {
+    let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get).min(8);
+    if items.len() < PAR_ABOVE || threads < 2 {
+        return items.iter().map(f).collect();
+    }
+    let chunk = items.len().div_ceil(threads);
+    let f = &f;
+    std::thread::scope(|s| {
+        let parts: Vec<_> = items
+            .chunks(chunk)
+            .map(|c| s.spawn(move || c.iter().map(f).collect::<Vec<U>>()))
+            .collect();
+        parts
+            .into_iter()
+            .flat_map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
+            .collect()
+    })
 }
 
 /// A float as an integer with the same order as [`f32::total_cmp`].

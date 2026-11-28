@@ -52,6 +52,17 @@ fn names(index: &AlbumIndex) -> Vec<String> {
     })
 }
 
+/// Checks each folder's kept count against the photos.
+fn assert_folders_counted(index: &AlbumIndex) {
+    index.read(|v| {
+        for f in 0..v.folder_count() {
+            let f = u32::try_from(f).unwrap();
+            let held = v.photos().iter().any(|p| p.folder == f);
+            assert_eq!(v.folder_has_photos(f), held, "folder {:?}", v.folder(f));
+        }
+    });
+}
+
 /// Checks the name order and the ranks agree.
 fn assert_ranks_consistent(index: &AlbumIndex) {
     index.read(|v| {
@@ -217,6 +228,32 @@ fn bad_rows_do_not_stop_the_load() {
         assert_eq!(p.analysis(), None);
         assert_eq!(p.date(), None);
     });
+}
+
+#[test]
+fn each_folder_counts_its_photos_through_adds_moves_and_removals() {
+    let conn = db();
+    let a = add(&conn, "x", "a.jpg");
+    let b = add(&conn, "y", "b.jpg");
+    let index = AlbumIndex::load(&conn, "").unwrap();
+    assert_folders_counted(&index);
+    // A new folder, then a move out of `x`, which leaves it empty.
+    let c = add(&conn, "z", "c.jpg");
+    index.refresh(&conn, &[c]).unwrap();
+    set(&conn, a, "rel_dir = 'y', rel_path = 'y/a.jpg'");
+    index.refresh(&conn, &[a]).unwrap();
+    assert_folders_counted(&index);
+    assert!(index.read(|v| (0..v.folder_count()).any(|f| v.folder(u32::try_from(f).unwrap()) == "x")));
+    // Removals, then one back.
+    set(&conn, b, "missing = 1");
+    set(&conn, c, "missing = 1");
+    index.refresh(&conn, &[b, c]).unwrap();
+    assert_folders_counted(&index);
+    set(&conn, c, "missing = 0");
+    index.refresh(&conn, &[c]).unwrap();
+    assert_folders_counted(&index);
+    index.remove(&[i64::from(id(a))]);
+    assert_folders_counted(&index);
 }
 
 #[test]
@@ -666,4 +703,29 @@ fn a_keeper_that_leaves_hands_the_burst_to_the_next_best() {
     set(&conn, c, "missing = 1");
     index.refresh(&conn, &[c]).unwrap();
     assert!(index.read(|v| v.get(id(b)).unwrap().derived.keeper));
+}
+
+#[test]
+fn a_load_from_the_file_on_several_connections_equals_the_one_connection_load() {
+    let dir = tempfile::TempDir::new().unwrap();
+    let path = dir.path().join("album.sqlite");
+    let mut conn = Connection::open(&path).unwrap();
+    schema::migrate_with(&mut conn, MIGRATIONS, NewAlbumMeta::now).unwrap();
+    // Ids far apart, so the ranges of several readers each hold some, and
+    // one row outside the scope.
+    for (n, rel_dir) in [(1, "a"), (9_000, "a/b"), (20_000, "c"), (40_000, "a"), (70_001, "a")] {
+        let id = add(&conn, rel_dir, &format!("p{n}.jpg"));
+        conn.execute("UPDATE photos SET id = ?1 WHERE id = ?2", (n, id))
+            .unwrap();
+    }
+    for scope in ["", "a"] {
+        let one = AlbumIndex::load(&conn, scope).unwrap();
+        let many = AlbumIndex::load_file(&path, scope).unwrap();
+        assert_eq!(ids(&many), ids(&one), "scope {scope:?}");
+        assert_eq!(names(&many), names(&one));
+        assert_ranks_consistent(&many);
+        assert_folders_counted(&many);
+    }
+    assert_eq!(ids(&AlbumIndex::load_file(&path, "a").unwrap()), [1, 9_000, 40_000, 70_001]);
+    drop(conn);
 }

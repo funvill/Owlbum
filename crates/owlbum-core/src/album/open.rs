@@ -582,13 +582,8 @@ struct Preload(JoinHandle<Option<AlbumIndex>>);
 impl Preload {
     fn start(db_path: &Path, scope: &str) -> Self {
         let (path, scope) = (db_path.to_path_buf(), scope.to_owned());
-        Self(std::thread::spawn(move || {
-            let flags = rusqlite::OpenFlags::SQLITE_OPEN_READ_ONLY
-                | rusqlite::OpenFlags::SQLITE_OPEN_NO_MUTEX;
-            let conn = rusqlite::Connection::open_with_flags(&path, flags).ok()?;
-            conn.busy_timeout(db::BUSY_TIMEOUT).ok()?;
-            AlbumIndex::load(&conn, &scope).ok()
-        }))
+        // The rows are read on several connections at once (issue 162).
+        Self(std::thread::spawn(move || AlbumIndex::load_file(&path, &scope).ok()))
     }
 
     /// The index, or None when it could not be read (it is then read again

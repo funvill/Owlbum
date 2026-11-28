@@ -75,22 +75,30 @@ pub fn find(photos: &[Photo]) -> Vec<Option<NonZeroU32>> {
         .filter(|&i| dhash(&photos[i]).is_some())
         .collect();
 
-    // Both dated: a sliding window over the date order.
-    let mut dated: Vec<usize> = hashed
+    // Both dated: a sliding window over the date order. The window reads
+    // a compact copy of each photo's date and hash, in that order, so its
+    // many cheap tests never touch the records themselves (at 100,000
+    // photos they took 0.35 to 0.5 s when they did, issue 162).
+    let mut dated: Vec<Dated> = hashed
         .iter()
-        .copied()
-        .filter(|&i| photos[i].date().is_some())
+        .filter_map(|&i| {
+            let p = &photos[i];
+            p.date().is_some().then(|| Dated {
+                date: p.date,
+                rank: p.name_rank,
+                hash: dhash(p).unwrap_or_default(),
+                at: i,
+            })
+        })
         .collect();
-    dated.sort_unstable_by_key(|&i| (photos[i].date, photos[i].name_rank));
-    for (at, &i) in dated.iter().enumerate() {
-        let a = &photos[i];
-        for &j in dated[at + 1..].iter().take(LOOKAHEAD) {
-            let b = &photos[j];
+    dated.sort_unstable_by_key(|d| (d.date, d.rank));
+    for (at, a) in dated.iter().enumerate() {
+        for b in dated[at + 1..].iter().take(LOOKAHEAD) {
             if b.date - a.date > MAX_MINUTES * 60 {
                 break;
             }
-            if close(a, b, DATED_BITS) && pairs(a, b) {
-                sets.union(i, j);
+            if (a.hash ^ b.hash).count_ones() <= DATED_BITS && pairs(&photos[a.at], &photos[b.at]) {
+                sets.union(a.at, b.at);
             }
         }
     }
@@ -144,6 +152,15 @@ pub fn find(photos: &[Photo]) -> Vec<Option<NonZeroU32>> {
         }
     }
     out
+}
+
+/// What the dated window reads of one photo.
+struct Dated {
+    date: i64,
+    rank: u32,
+    hash: u64,
+    /// The photo's place in the slice given to [`find`].
+    at: usize,
 }
 
 /// The keeper order (docs/05, "The keeper"): the member that sorts first is

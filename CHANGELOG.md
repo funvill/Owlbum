@@ -13,6 +13,14 @@ the window's title shows the version that is running.
 
 - Show on map: beside Pick on map in the details panel, for a photo with a
   place. It switches to the map with the photo's marker in the middle.
+- The photo menu opens with a right-click in the full-screen viewer and on
+  a photo's marker on the map.
+- Photos can be dragged out of the preview into other programs, as from a
+  tile, while the preview is not zoomed in.
+- Videos the system shell has no thumbnail for get their poster frame
+  from Windows' own video decoders (Media Foundation), a second into the
+  video.
+- The details of MKV and WebM videos name their video and audio codecs.
 
 ### Changed
 
@@ -26,6 +34,13 @@ the window's title shows the version that is running.
 - The details panel's Copy button moved into the Photo section, under the
   photo score. Its buttons have icons as well as words, including
   Regenerate and the date's "Use the camera's date".
+- Copy (Ctrl+C) of one photo copies the picture with its edit applied,
+  as Owlbum shows it.
+- A key that does something on the review screen closes the photo menu
+  and then does it, instead of being ignored while the menu is open.
+- Large albums open about twice as fast (under a second to the first
+  screen at 100,000 photos), and sorting by score, most interesting or
+  colour with stacks on is several times quicker.
 
 ## [0.1.3] - 2026-11-27
 

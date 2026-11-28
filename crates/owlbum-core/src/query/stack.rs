@@ -11,12 +11,16 @@
 //!
 //! A stack's id is its burst's id. Everything here is two linear passes
 //! over the sorted ids with tables indexed by id (ids are dense row ids),
-//! so folding 100,000 photos costs a few milliseconds.
+//! so folding 100,000 photos costs a few milliseconds. What folding reads
+//! of each photo (its burst, star and keeper) is copied first, in id
+//! order, into one of those tables: a sort other than by date visits the
+//! photos in an order unrelated to where they lie in the index, and
+//! looking each up there cost 60 to 80 ms at 100,000 photos (issue 162).
 
 use std::collections::{HashMap, HashSet};
 
 use super::shape::RowStack;
-use crate::index::IndexView;
+use crate::index::Photo;
 
 /// A table slot holding this is empty.
 const NONE: u32 = u32::MAX;
@@ -83,6 +87,67 @@ impl Table {
     }
 }
 
+/// What folding reads of one photo.
+#[derive(Debug, Clone, Copy)]
+struct Fact {
+    /// The burst's id, or [`NONE`].
+    burst: u32,
+    star: bool,
+    keeper: bool,
+}
+
+const NO_FACT: Fact = Fact {
+    burst: NONE,
+    star: false,
+    keeper: false,
+};
+
+/// The facts of the photos shown, by id.
+enum Facts {
+    Dense(Vec<Fact>),
+    Sparse(HashMap<u32, Fact>),
+}
+
+impl Facts {
+    /// The facts of `shown`, read in the order given (id order, which is
+    /// the index's own); None when no photo is in a burst.
+    fn of(shown: &[&Photo]) -> Option<Self> {
+        let largest = shown.iter().map(|p| p.id).max()?;
+        let mut facts = if (largest as usize) <= shown.len().saturating_mul(4).saturating_add(65_536)
+        {
+            Self::Dense(vec![NO_FACT; largest as usize + 1])
+        } else {
+            Self::Sparse(HashMap::new())
+        };
+        let mut any = false;
+        for p in shown {
+            let Some(burst) = p.derived.burst else {
+                continue;
+            };
+            any = true;
+            let fact = Fact {
+                burst: burst.get(),
+                star: p.star(),
+                keeper: p.derived.keeper,
+            };
+            match &mut facts {
+                Self::Dense(t) => t[p.id as usize] = fact,
+                Self::Sparse(m) => {
+                    m.insert(p.id, fact);
+                }
+            }
+        }
+        any.then_some(facts)
+    }
+
+    fn get(&self, id: u32) -> Fact {
+        match self {
+            Self::Dense(t) => t.get(id as usize).copied().unwrap_or(NO_FACT),
+            Self::Sparse(m) => m.get(&id).copied().unwrap_or(NO_FACT),
+        }
+    }
+}
+
 /// What pass one learns of each burst in the sorted list.
 struct Burst {
     id: u32,
@@ -94,29 +159,25 @@ struct Burst {
     stack: u32,
 }
 
-/// Folds `sorted`, the ids of a result in sort order, into tiles. Answers
-/// the tiles and their stacks; `sorted` comes back unchanged with no
-/// stacks when no burst has two members in it.
-pub fn fold(view: &IndexView<'_>, sorted: Vec<u32>, open_stacks: &[i64]) -> (Vec<u32>, Stacks) {
+/// Folds `sorted`, the ids of `shown` (the photos that pass, in id
+/// order) in sort order, into tiles. Answers the tiles and their stacks;
+/// `sorted` comes back unchanged with no stacks when no burst has two
+/// members in it.
+pub fn fold(shown: &[&Photo], sorted: Vec<u32>, open_stacks: &[i64]) -> (Vec<u32>, Stacks) {
+    let Some(facts) = Facts::of(shown) else {
+        return (sorted, Stacks::default());
+    };
     // Pass one: each photo's burst, and per burst its count, first member,
     // first starred member and keeper, in sort order.
     let mut burst_of: Vec<u32> = Vec::with_capacity(sorted.len());
     let mut bursts: Vec<Burst> = Vec::new();
     let mut largest = 0;
-    let mut any = false;
     for &id in &sorted {
-        let b = view
-            .get(id)
-            .and_then(|p| p.derived.burst)
-            .map_or(NONE, |b| b.get());
+        let b = facts.get(id).burst;
         if b != NONE {
             largest = largest.max(b);
-            any = true;
         }
         burst_of.push(b);
-    }
-    if !any {
-        return (sorted, Stacks::default());
     }
     let mut slot = Table::new(largest, sorted.len());
     for (pos, (&id, &b)) in sorted.iter().zip(&burst_of).enumerate() {
@@ -141,13 +202,12 @@ pub fn fold(view: &IndexView<'_>, sorted: Vec<u32>, open_stacks: &[i64]) -> (Vec
         };
         let burst = &mut bursts[at];
         burst.count += 1;
-        if let Some(p) = view.get(id) {
-            if burst.starred == NONE && p.star() {
-                burst.starred = pos;
-            }
-            if burst.keeper == NONE && p.derived.keeper {
-                burst.keeper = pos;
-            }
+        let fact = facts.get(id);
+        if burst.starred == NONE && fact.star {
+            burst.starred = pos;
+        }
+        if burst.keeper == NONE && fact.keeper {
+            burst.keeper = pos;
         }
     }
 

@@ -51,12 +51,13 @@ pub mod record;
 use std::cmp::Ordering;
 use std::collections::{HashMap, HashSet};
 use std::num::NonZeroU32;
+use std::path::Path;
 use std::sync::{RwLock, RwLockWriteGuard};
 
-use rusqlite::{Connection, OptionalExtension, Row};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, Row};
 
 use crate::album::sqlite_error;
-use crate::error::AppResult;
+use crate::error::{AppError, AppResult};
 use crate::organise::{bursts, score};
 use crate::scan::natural_cmp_text;
 use crate::text;
@@ -110,6 +111,9 @@ struct State {
     /// Folder paths by [`Photo::folder`].
     folders: Vec<Box<str>>,
     folder_ids: HashMap<Box<str>, u32>,
+    /// How many photos each folder holds, by [`Photo::folder`]; a folder
+    /// whose photos all left keeps its index with 0.
+    folder_photos: Vec<u32>,
     /// Every file name, one after another; a photo points into it.
     names: String,
     /// Bytes of `names` no photo points at any more.
@@ -132,6 +136,117 @@ const SELECT: &str = "SELECT p.id, p.rel_dir, p.file_name, p.kind, p.captured_at
    FROM photos p
   WHERE p.missing = 0 AND p.scan_error IS NULL
     AND (?1 = '' OR p.rel_dir = ?1 OR substr(p.rel_dir, 1, length(?1) + 1) = ?1 || '/')";
+
+/// The rows of `scope` in id order, those with ids in `ids` only when
+/// given.
+fn read_rows(conn: &Connection, scope: &str, ids: Option<(i64, i64)>) -> AppResult<Vec<PhotoFacts>> {
+    let failed = sqlite_error(text::album::READING_DATABASE);
+    let (from, to) = ids.unwrap_or((i64::MIN, i64::MAX));
+    let mut stmt = conn
+        .prepare(&format!("{SELECT} AND p.id BETWEEN ?2 AND ?3 ORDER BY p.id"))
+        .map_err(&failed)?;
+    let mut rows = stmt.query((scope, from, to)).map_err(&failed)?;
+    let mut all = Vec::new();
+    while let Some(row) = rows.next().map_err(&failed)? {
+        all.push(facts_from_row(row).map_err(&failed)?);
+    }
+    Ok(all)
+}
+
+/// Rows per thread at least when a load reads in parallel.
+const READ_SHARE: i64 = 8192;
+
+/// The rows of `scope` in id order, read from the database at `path` on
+/// several read-only connections at once, each a range of ids: reading
+/// and copying the rows was most of an open's 1 s at 100,000 photos
+/// (issue 162). Only for a database no one writes to while it reads (the
+/// open holds the album's lock and has not started its writer).
+fn read_rows_parallel(path: &Path, scope: &str) -> AppResult<Vec<PhotoFacts>> {
+    let failed = sqlite_error(text::album::READING_DATABASE);
+    let open = || {
+        let flags = OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX;
+        let conn = Connection::open_with_flags(path, flags).map_err(&failed)?;
+        conn.busy_timeout(crate::album::db::BUSY_TIMEOUT)
+            .map_err(&failed)?;
+        Ok::<_, AppError>(conn)
+    };
+    let conn = open()?;
+    let (lo, hi): (Option<i64>, Option<i64>) = conn
+        .query_row("SELECT min(id), max(id) FROM photos", [], |r| Ok((r.get(0)?, r.get(1)?)))
+        .map_err(&failed)?;
+    let (Some(lo), Some(hi)) = (lo, hi) else {
+        return Ok(Vec::new());
+    };
+    let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+    let span = hi.saturating_sub(lo).saturating_add(1);
+    let parts = i64::try_from(threads.min(8))
+        .unwrap_or(1)
+        .min(span / READ_SHARE)
+        .max(1);
+    if parts == 1 {
+        return read_rows(&conn, scope, None);
+    }
+    let step = (span + parts - 1) / parts;
+    let ranges: Vec<(i64, i64)> = (0..parts)
+        .map(|k| {
+            let from = lo.saturating_add(k * step);
+            let to = if k == parts - 1 { i64::MAX } else { from + step - 1 };
+            (if k == 0 { i64::MIN } else { from }, to)
+        })
+        .collect();
+    let read: Vec<AppResult<Vec<PhotoFacts>>> = std::thread::scope(|s| {
+        let handles: Vec<_> = ranges
+            .iter()
+            .map(|&range| s.spawn(move || read_rows(&open()?, scope, Some(range))))
+            .collect();
+        handles
+            .into_iter()
+            .map(|h| h.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
+            .collect()
+    });
+    let mut all = Vec::new();
+    for part in read {
+        all.extend(part?);
+    }
+    Ok(all)
+}
+
+/// Below this many rows a load builds its records on one thread.
+const BUILD_ALONE: usize = 4096;
+
+/// [`record::build`] of every row, in order, split over the processors:
+/// at 100,000 photos one thread took about 0.3 s, mostly reading the
+/// `analysis` JSON (issue 162).
+fn build_all(all: &[PhotoFacts], folders: &[u32]) -> Vec<Option<Photo>> {
+    let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get);
+    if all.len() < BUILD_ALONE || threads < 2 {
+        return all
+            .iter()
+            .zip(folders)
+            .map(|(f, &folder)| record::build(f, folder))
+            .collect();
+    }
+    let chunk = all.len().div_ceil(threads.min(8));
+    std::thread::scope(|s| {
+        let parts: Vec<_> = all
+            .chunks(chunk)
+            .zip(folders.chunks(chunk))
+            .map(|(facts, folders)| {
+                s.spawn(move || {
+                    facts
+                        .iter()
+                        .zip(folders)
+                        .map(|(f, &folder)| record::build(f, folder))
+                        .collect::<Vec<_>>()
+                })
+            })
+            .collect();
+        parts
+            .into_iter()
+            .flat_map(|p| p.join().unwrap_or_else(|e| std::panic::resume_unwind(e)))
+            .collect()
+    })
+}
 
 /// When a change re-places more names than one in this many photos, the
 /// whole name order is sorted again instead of placing them one by one.
@@ -163,6 +278,19 @@ impl AlbumIndex {
     /// with `missing = 0` and no `scan_error`, in one `SELECT`.
     pub fn load(conn: &Connection, scope: &str) -> AppResult<Self> {
         let mut state = State::load(conn, scope)?;
+        state.rebuild();
+        Ok(Self {
+            state: RwLock::new(state),
+        })
+    }
+
+    /// [`AlbumIndex::load`] from the database file at `path`, read on
+    /// several read-only connections at once. Only for a database no one
+    /// writes to meanwhile: the album open, before its writer starts.
+    pub fn load_file(path: &Path, scope: &str) -> AppResult<Self> {
+        let all = read_rows_parallel(path, scope)?;
+        let mut state = State::from_rows(scope, &all);
+        drop(all);
         state.rebuild();
         Ok(Self {
             state: RwLock::new(state),
@@ -384,6 +512,15 @@ impl IndexView<'_> {
         &self.state.folders[folder as usize]
     }
 
+    /// Whether the folder `folder` holds a photo now: one kept count per
+    /// folder, so `query_parse` need not pass over every photo (issue 162).
+    pub fn folder_has_photos(&self, folder: u32) -> bool {
+        self.state
+            .folder_photos
+            .get(folder as usize)
+            .is_some_and(|&n| n > 0)
+    }
+
     /// The number of folders. Folder indexes run from 0 to this; a folder
     /// whose photos have all left the index may still be listed.
     pub fn folder_count(&self) -> usize {
@@ -414,29 +551,34 @@ impl IndexView<'_> {
 
 impl State {
     fn load(conn: &Connection, scope: &str) -> AppResult<Self> {
-        let failed = sqlite_error(text::album::READING_DATABASE);
+        let all = read_rows(conn, scope, None)?;
+        Ok(Self::from_rows(scope, &all))
+    }
+
+    /// The state of `all`, the rows of the scope in id order.
+    fn from_rows(scope: &str, all: &[PhotoFacts]) -> Self {
         let mut state = Self {
             scope: scope.to_owned(),
             ..Self::default()
         };
-        let mut stmt = conn
-            .prepare(&format!("{SELECT} ORDER BY p.id"))
-            .map_err(&failed)?;
-        let mut rows = stmt.query([scope]).map_err(&failed)?;
-        while let Some(row) = rows.next().map_err(&failed)? {
-            let facts = facts_from_row(row).map_err(&failed)?;
-            let folder = state.intern_folder(&facts.rel_dir);
+        // Folders are numbered in row order, before the records are built
+        // on several threads (reading each `analysis` is most of the work).
+        let folders: Vec<u32> = all.iter().map(|f| state.intern_folder(&f.rel_dir)).collect();
+        let built = build_all(all, &folders);
+        state.photos.reserve(all.len());
+        for (facts, photo) in all.iter().zip(built) {
             // An id beyond 32 bits cannot be in a result; it is skipped
             // rather than cut short to someone else's id.
-            if let Some(mut photo) = record::build(&facts, folder) {
+            if let Some(mut photo) = photo {
                 state.place_name(&mut photo, &facts.file_name);
+                state.count_folder(photo.folder, true);
                 state.photos.push(photo);
             }
         }
         state.sort_names();
         state.photos.shrink_to_fit();
         state.names.shrink_to_fit();
-        Ok(state)
+        state
     }
 
     fn rescore(&mut self) {
@@ -502,6 +644,16 @@ impl State {
         scope.is_empty()
             || rel_dir == scope
             || (rel_dir.starts_with(scope) && rel_dir.as_bytes().get(scope.len()) == Some(&b'/'))
+    }
+
+    /// One photo more (`add`) or fewer in `folder`.
+    fn count_folder(&mut self, folder: u32, add: bool) {
+        let at = folder as usize;
+        if self.folder_photos.len() <= at {
+            self.folder_photos.resize(at + 1, 0);
+        }
+        let n = &mut self.folder_photos[at];
+        *n = if add { *n + 1 } else { n.saturating_sub(1) };
     }
 
     fn intern_folder(&mut self, rel_dir: &str) -> u32 {
@@ -619,11 +771,14 @@ impl State {
                         self.place_name(&mut photo, &f.file_name);
                         placed.push(id);
                     }
+                    self.count_folder(old.folder, false);
+                    self.count_folder(photo.folder, true);
                     self.photos[at] = photo;
                 }
                 Err(_) => {
                     self.place_name(&mut photo, &f.file_name);
                     placed.push(id);
+                    self.count_folder(photo.folder, true);
                     added.push(photo);
                 }
             }
@@ -635,16 +790,21 @@ impl State {
 
         if !gone.is_empty() {
             let mut dead = 0;
+            let mut left = Vec::new();
             self.photos.retain(|p| {
                 let keep = !gone.contains(&p.id);
                 if !keep {
                     dead += usize::from(p.name_len);
+                    left.push(p.folder);
                     // A burst that lost a member may have lost its keeper.
                     rekeep.extend(p.derived.burst);
                 }
                 keep
             });
             self.dead_names += dead;
+            for folder in left {
+                self.count_folder(folder, false);
+            }
         }
         if !added.is_empty() {
             let in_order = added.is_sorted_by_key(|p| p.id)

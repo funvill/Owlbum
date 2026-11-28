@@ -140,7 +140,7 @@ impl QueryEngine {
                 let sorted = sort::order(v, &passed.shown, order);
                 let photos = sorted.len();
                 let (tiles, stacks) = if folding {
-                    stack::fold(v, sorted, &query.open_stacks)
+                    stack::fold(&passed.shown, sorted, &query.open_stacks)
                 } else {
                     (sorted, Stacks::default())
                 };

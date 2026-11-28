@@ -957,7 +957,7 @@ The buttons link to the release page rather than to a file, because file names c
 | 2. Core integration tests | Whole features against a real album in a temp folder: scan, thumbnails, database, queries, edits, tagging with fake models. | `crates/owlbum-core/tests/` | `cargo test`, fixtures from `owlbum-fixtures` |
 | 3. Shell tests | Commands through Tauri's mock runtime (`tauri::test`) where the wiring matters: argument checks, error mapping, menu text per update state, the capability file, the CSP string, the key table against the menu. | `src-tauri/src/**`, `src-tauri/tests/` | `cargo test` |
 | 4. Page tests | Components and flows against a faked `ui/src/api/` module. No Tauri, no Rust. | `ui/src/**/*.test.tsx` | Vitest, Testing Library, jsdom |
-| 5. Smoke test (optional) | The built program starts, opens the `trip` fixture, shows tiles, stars a photo, and quits cleanly. (Not built yet: issue 204. There is no `e2e/` folder; the owner's checklist on #69 stands in for it.) | `e2e/` | `tauri-driver` and WebdriverIO |
+| 5. Smoke test (optional) | The release program, in its real window, against a generated `trip` album: the window title before and after opening and closing a folder, F1, F2, F11, Ctrl+O, Ctrl+W and Ctrl+Q (F1 also while typing, and ignored inside a dialog as Typing above says), the `?` overlay and its Settings button, T and I, the More menu, thumbnails and the preview actually drawing, starring with F, the map asking before it loads tiles, and no CSP errors. Issue 204 lists which items of the owner's checklist (#69) it covers. | `e2e/`, `scripts/smoke.sh` | `tauri-driver`, msedgedriver and a small WebDriver client in `e2e/webdriver.mjs` (no packages) |
 
 Rules for the layers:
 
@@ -965,7 +965,9 @@ Rules for the layers:
 - **Page tests never import `@tauri-apps/api`.** They use the fake in `ui/src/api/fake/`, which implements the same TypeScript interface as the real module. The compiler therefore keeps the fake honest.
 - **The updater is always faked** in tests, behind a small trait in the shell.
 - **No test uses the network.** No test reads a personal photo. Model tests use tiny fake models; a test against real models runs only when `OWLBUM_TEST_MODELS_DIR` is set, and is skipped otherwise.
-- **The smoke test is not required for an issue.** It is run by hand before a release, on both platforms.
+- **The smoke test is not required for an issue.** It is run by hand before a release (Windows only while Linux is paused). `scripts/check.sh` does not run it, and CI does not either: GitHub's Windows runner would need a release build and an msedgedriver matching its WebView2, which is more time than the check is worth on every push.
+
+**Running the smoke test.** Once: `cargo install tauri-driver --locked`, and download the msedgedriver whose version matches the installed WebView2 runtime (the `pv` value under `HKLM\SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\{F3017226-FE2A-4295-8BDF-00C3A9A7E4C5}`; `https://msedgedriver.microsoft.com/<version>/edgedriver_win64.zip`), outside the repository. Then `MSEDGEDRIVER=<path to msedgedriver.exe> ./scripts/smoke.sh` builds the release program and runs the checks (`--no-build` reuses the last build; `SMOKE_KEEP=1` keeps the temp folder). The program runs on a copy of the exe with `OWLBUM_DATA_DIR` in a temp folder (msedgedriver gives WebView2 a fresh profile, kept in the same folder), without update checks or What's new, with `OWLBUM_NO_BROWSER` and `OWLBUM_PICK_FOLDER` standing in for the browser and the folder dialog (WebDriver cannot reach native windows). It never uses the network or the registry. Since worktrees share the target directory, the script refuses an exe that does not know `OWLBUM_NO_BROWSER` (another branch's build), which would show the real folder dialog and open the real browser.
 
 ### Running them
 
@@ -984,7 +986,7 @@ Tests run locally, on Windows and on Linux under WSL, and on GitHub Actions on W
 | Page build | `npm --prefix ui run build` |
 | Core tests only | `cargo test -p owlbum-core` |
 | Rewrite the TypeScript bindings | `./scripts/bindings.sh` |
-| Smoke test | `npm --prefix e2e test` after `npm --prefix ui run tauri build -- --debug` |
+| Smoke test (Windows, opt-in) | `MSEDGEDRIVER=<msedgedriver.exe> ./scripts/smoke.sh` |
 
 `scripts/check.sh` first checks that text files are UTF-8 and that the website is sound (`node scripts/check-site.mjs`, see [The marketing site](#the-marketing-site)). It then installs the page's packages when `ui/node_modules` is missing or older than `ui/package-lock.json`, waits for any other gate run that shares the build directory (a lock folder in it), then runs the eight rows after it, in that order, and stops at the first failure. `./scripts/check.sh --quick` runs only format, lint, bindings, page types and page lint: the merge check for one issue, with the full run on `main` every few merges. There is one script for both systems; on Windows it runs under Git Bash. It points `CARGO_TARGET_DIR` at the main checkout's `target/` when the variable is not set, so every git worktree of a clone shares one build directory.
 
@@ -1044,6 +1046,8 @@ Done once, at final review, by a person (these wait for the owner): create the s
 | `OWLBUM_UPDATE_FEED` | Shell | Replaces the update feed address. For testing. |
 | `OWLBUM_NO_WHATS_NEW` | Shell | Any non-empty value stops What's new from showing at start. |
 | `OWLBUM_LOG` | Shell | `debug` adds debug lines to the log. |
+| `OWLBUM_PICK_FOLDER` | Shell, smoke test | The folder dialog is not shown and answers this folder. An empty value is the same as unset. |
+| `OWLBUM_NO_BROWSER` | Shell, smoke test | Any non-empty value logs the addresses the program would open (Give feedback, release notes) instead of opening the browser. |
 | `OWLBUM_TEST_MODELS_DIR` | Tests | Points the real-model test at downloaded models. Unset skips it. |
 | `OWLBUM_ORT_DYLIB` | Shell, tests | The full path of ONNX Runtime, used when the program's resources hold none (a development build). See [ONNX Runtime](#onnx-runtime). |
 | `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | `release.yml` | The updater signing key. Secrets; never set on a developer's computer for ordinary work. |

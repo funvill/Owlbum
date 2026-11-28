@@ -195,12 +195,25 @@ pub fn run() {
             // Step 8: the window, hidden, with the restored geometry.
             let window = main_window(app, dev)?;
             self::window::place(&window, &saved_window);
-            app.manage(commands::app::FolderPicker(folder_dialog(
-                app.handle().clone(),
-            )));
-            app.manage(commands::app::Browser(Arc::new(|url: &str| {
-                tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
-            })));
+            // The smoke test (e2e/, issue 204) answers the folder dialog
+            // and stops the browser through two variables, since WebDriver
+            // cannot reach native windows.
+            let picked = test_var(PICK_FOLDER_VAR).map(std::path::PathBuf::from);
+            app.manage(commands::app::FolderPicker(match picked {
+                Some(folder) => Arc::new(move || Some(folder.clone())),
+                None => folder_dialog(app.handle().clone()),
+            }));
+            let browser: Arc<commands::app::OpenAddress> = if test_var(NO_BROWSER_VAR).is_some() {
+                Arc::new(|url: &str| {
+                    tracing::info!(target: "app", "not opened ({NO_BROWSER_VAR}): {url}");
+                    Ok(())
+                })
+            } else {
+                Arc::new(|url: &str| {
+                    tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
+                })
+            };
+            app.manage(commands::app::Browser(browser));
             app.manage(commands::file::DesktopShell(Arc::new(
                 desktop::NativeDesktop::new(app.handle().clone()),
             )));
@@ -404,6 +417,17 @@ pub fn user_agent(os: &str, version: &str) -> String {
         _ => "X11; Linux x86_64",
     };
     format!("Owlbum/{version} ({platform}; +https://github.com/funvill/Owlbum)")
+}
+
+/// For tests: the folder dialog is not shown and answers this folder.
+pub const PICK_FOLDER_VAR: &str = "OWLBUM_PICK_FOLDER";
+/// For tests: any non-empty value logs addresses instead of opening the
+/// browser.
+pub const NO_BROWSER_VAR: &str = "OWLBUM_NO_BROWSER";
+
+/// A test variable's value; an empty value is the same as unset.
+fn test_var(name: &str) -> Option<String> {
+    std::env::var(name).ok().filter(|v| !v.is_empty())
 }
 
 /// The native folder dialog, over the main window.

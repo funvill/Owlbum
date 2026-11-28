@@ -52,8 +52,8 @@ Owlbum/
     src/controls/         the base controls: buttons, inputs, menus, dialogs, toasts, tooltips
     src/icons/            the icon set, inline SVG
     src/keys/keymap.json  the one table of keyboard shortcuts
-  e2e/                    the thin WebdriverIO smoke test, run by hand before a release (not built yet: issue 204)
-  scripts/                check.sh (the gate, on Windows under Git Bash and on Linux), bindings.sh, the notices generator (notices.mjs), fetch-ort.mjs, build-installer.sh, build-test.sh (a numbered test build), countries.mjs, check-site.mjs, check-utf8.mjs, prune-target.sh and env.sh (sourced by the others)
+  e2e/                    the smoke test (tauri-driver, a small WebDriver client, no packages), run by hand with scripts/smoke.sh before a release
+  scripts/                check.sh (the gate, on Windows under Git Bash and on Linux), bindings.sh, the notices generator (notices.mjs), fetch-ort.mjs, build-installer.sh, build-test.sh (a numbered test build), countries.mjs, check-site.mjs, check-utf8.mjs, prune-target.sh, smoke.sh (the opt-in smoke test) and env.sh (sourced by the others)
   site/                   the marketing page (static HTML), deployed to GitHub Pages by a workflow
   fixtures/               edit-plans.json, edit plans shared by the Rust and page tests
   docs/                   these documents; docs/archive holds the old program's
@@ -265,7 +265,7 @@ These are the starting choices. A prototype may replace one; the replacement is 
 | Single instance | `tauri-plugin-single-instance` | |
 | Native dialogs | `tauri-plugin-dialog`; `rfd` for the fatal-error box shown when the page cannot show it | |
 | Page | React, TypeScript, Vite, zustand, Leaflet, `leaflet.markercluster`, Vitest, Testing Library, ESLint | |
-| Smoke test | WebdriverIO with `tauri-driver` | Run by hand before a release. (Not built yet: issue 204.) |
+| Smoke test | `tauri-driver` and msedgedriver, driven by a small WebDriver client in `e2e/` (no packages) | Run by hand before a release with `scripts/smoke.sh`. |
 
 ## What is deliberately absent
 

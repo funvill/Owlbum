@@ -3,12 +3,19 @@
 
 import { create } from "zustand";
 
-export const useSettingsOpen = create<{ open: boolean }>(() => ({ open: false }));
+/** A section the dialog scrolls to when it opens. */
+export type SettingsSection = "tagging";
 
-export function openSettings(): void {
-  useSettingsOpen.setState({ open: true });
+export const useSettingsOpen = create<{ open: boolean; section: SettingsSection | null }>(() => ({
+  open: false,
+  section: null,
+}));
+
+/** Opens Settings, at `section` when one is given (the tagging notes' Settings link). */
+export function openSettings(section: SettingsSection | null = null): void {
+  useSettingsOpen.setState({ open: true, section });
 }
 
 export function closeSettings(): void {
-  useSettingsOpen.setState({ open: false });
+  useSettingsOpen.setState({ open: false, section: null });
 }

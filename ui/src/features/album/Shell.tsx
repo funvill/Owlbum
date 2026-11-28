@@ -16,14 +16,15 @@ import { Notices } from "./Notices";
 import { OpenQuestions } from "./OpenQuestions";
 import { ReadingBar } from "./ReadingBar";
 import { useAlbumStore } from "./session";
+import { TaggingBar } from "./TaggingBar";
 import { TopBar } from "./TopBar";
 import "./Shell.css";
 
 /**
  * The whole window, top to bottom (docs/04-browsing.md, "Whole window"):
- * the top bar, the album banners, the reading bar, the notices, the filter
- * bar (while an album with photos is open) and the body, with the questions
- * opening asks over them. The tagging bar comes with its issue.
+ * the top bar, the album banners, the reading bar, the tagging bar, the
+ * notices, the filter bar (while an album with photos is open) and the body,
+ * with the questions opening asks over them.
  */
 export function Shell() {
   const review = useAlbumStore((s) => bodyState(s) === "review");
@@ -52,6 +53,7 @@ export function Shell() {
       <TopBar />
       <AlbumBanners />
       <ReadingBar />
+      <TaggingBar />
       <Notices />
       {review && <FilterBar />}
       <main className="ow-shell__body">

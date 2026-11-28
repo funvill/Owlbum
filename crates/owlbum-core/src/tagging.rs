@@ -10,6 +10,7 @@
 //! - [`results`]: turning raw model output into what is stored.
 //! - [`store`]: the `tags`, `vectors` and `photo_labels` rows.
 //! - [`runtime`]: the tagging thread, its queue and its status.
+//! - [`tags`]: one photo's tags as the details panel shows them.
 //! - [`service`]: everything above for one program: settings, the
 //!   download thread, the runtime.
 
@@ -24,4 +25,5 @@ pub mod results;
 pub mod runtime;
 pub mod service;
 pub mod store;
+pub mod tags;
 pub mod vocabulary;

@@ -161,9 +161,12 @@ fn run<R: Runtime>(app: &AppHandle<R>) {
     drop(scanner);
     // 3. The window geometry.
     crate::window::save(app);
-    // 4. Close the album: its writer finishes and its lock goes.
+    // 4. Tagging stops: the download is cancelled, the run in hand is told
+    //    to end and the models are unloaded.
+    crate::commands::tagging::shutdown(app);
+    // 5. Close the album: its writer finishes and its lock goes.
     app.state::<Session>().close();
-    // 5. Exit.
+    // 6. Exit.
     tracing::info!(target: "app", "closing");
     app.exit(0);
 }

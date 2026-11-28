@@ -141,6 +141,7 @@ struct ControlState {
     fail_next_load: bool,
     lost_left: usize,
     delay: Duration,
+    hang: Duration,
     loads: Vec<&'static str>,
     runs: Vec<(Part, String)>,
     captions: u32,
@@ -164,6 +165,12 @@ impl FakeControl {
     /// Every run waits this long first.
     pub fn set_delay(&self, delay: Duration) {
         self.state().delay = delay;
+    }
+
+    /// Photos named `hang-…` block this long whatever the deadline says
+    /// (a run stuck inside the runtime), then answer `Timeout`.
+    pub fn set_hang(&self, hang: Duration) {
+        self.state().hang = hang;
     }
 
     /// The models loaded so far, in order.
@@ -215,6 +222,11 @@ impl FakeBackend {
             std::thread::sleep(Duration::from_millis(2));
         }
         let name = image.name.to_lowercase();
+        if name.starts_with("hang-") {
+            let hang = self.control.state().hang;
+            std::thread::sleep(hang);
+            return Err(BackendError::Timeout);
+        }
         if name.starts_with("slow-") {
             return Err(BackendError::Timeout);
         }

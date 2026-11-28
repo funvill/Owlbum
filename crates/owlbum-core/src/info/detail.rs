@@ -68,10 +68,10 @@ pub struct PhotoDetail {
     /// The stored edit itself, where edit mode starts
     /// (docs/06-editing-and-file-actions.md, "Edit mode"); null for none.
     pub edit: Option<crate::edit::PhotoEdit>,
-    /// What tagging found (`PhotoTags`, docs/07-tagging.md). Always null
-    /// until the "What's in it" section is built (#55), which gives it its
-    /// type.
-    pub tags: Option<serde_json::Value>,
+    /// What tagging found (docs/07-tagging.md, "\"What's in it\" in the
+    /// details panel"). Filled by the shell, which knows this computer's
+    /// choice of models; null where it does not.
+    pub tags: Option<crate::tagging::tags::PhotoTags>,
 }
 
 /// A photo's dates: `YYYY-MM-DDTHH:MM:SS`, wall-clock, no zone.

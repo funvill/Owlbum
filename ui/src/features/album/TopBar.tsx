@@ -106,7 +106,7 @@ export function TopBar() {
         </div>
       )}
       <div className="ow-topbar__settings">
-        <IconButton icon="settings" label={settingsText.open} onClick={openSettings} />
+        <IconButton icon="settings" label={settingsText.open} onClick={() => openSettings()} />
       </div>
     </header>
   );

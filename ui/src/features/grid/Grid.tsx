@@ -26,6 +26,7 @@ import {
   type GridLayout,
   type VisibleRange,
 } from "./layout";
+import { reportShown, startFocus } from "./focus";
 import { HEAD, groupOfRow, rowAt, rowTiles, rowTop } from "./groups";
 import { MonthRail } from "./MonthRail";
 import { railFits, railShown, railYears } from "./rail";
@@ -103,6 +104,8 @@ export function Grid(props: GridProps) {
   );
 
   const busy = useRef(props.busy);
+  // The photos to tag first follow what is shown.
+  useEffect(() => startFocus(), []);
   useEffect(() => {
     void useGridStore
       .getState()
@@ -180,6 +183,7 @@ export function Grid(props: GridProps) {
     placeLayer();
     const next = visibleRange(v.layout, real, viewport, v.count);
     setRange((before) => (sameRange(before, next) ? before : next));
+    reportShown(next.firstIndex, next.lastIndex);
     // The first photo in view, kept with the album's session.
     setGridTop(viewIndex(v.layout, real, viewport, v.count, null) ?? 0);
     const nextSticky = stickyAt(v.layout, real);

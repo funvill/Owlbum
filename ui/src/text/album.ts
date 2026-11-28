@@ -113,3 +113,20 @@ export const albumText = {
   notWatching:
     "Owlbum can't watch this folder for changes. It checks when you come back to the window; use Rescan to check now.",
 };
+
+/** The tagging bar (docs/07-tagging.md, "The tagging bar"). */
+export const taggingBarText = {
+  label: "Tagging photos",
+  progress: (seen: number, total: number) => `Tagging ${count(seen)} of ${count(total)}`,
+  failedPart: (failed: number) => ` · ${count(failed)} failed`,
+  pausedPart: " · paused",
+  pause: "Pause",
+  resume: "Resume",
+  stopped: (problem: string) => `Tagging stopped: ${problem}`,
+  notWorking: "Tagging is not working: a chosen model is damaged or would not load.",
+  settings: "Settings",
+  tryAgain: "Try again",
+  couldNotTag: (failed: number) => `${count(failed)} ${plural(failed, "photo", "photos")} could not be tagged.`,
+  retryFailed: "Try failed photos again",
+  hide: "Hide",
+};

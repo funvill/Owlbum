@@ -89,6 +89,17 @@ fn write_jpeg(path: &Path, shade: u8) {
 
 impl Fx {
     fn new(files: &[&str]) -> Self {
+        Self::with_limits(
+            files,
+            Limits {
+                progress_event: Duration::ZERO,
+                tags_event: Duration::from_secs(5),
+                ..Limits::default()
+            },
+        )
+    }
+
+    fn with_limits(files: &[&str], limits: Limits) -> Self {
         let tmp = tempfile::tempdir().unwrap();
         let root = tmp.path().join("album");
         for (i, f) in files.iter().enumerate() {
@@ -108,11 +119,6 @@ impl Fx {
                 Ok(Box::new(FakeBackend::new(Arc::clone(&control)))
                     as Box<dyn crate::tagging::backend::TagBackend>)
             })
-        };
-        let limits = Limits {
-            progress_event: Duration::ZERO,
-            tags_event: Duration::from_secs(5),
-            ..Limits::default()
         };
         let runtime = Runtime::new(
             factory,
@@ -686,4 +692,204 @@ fn the_runtime_that_will_not_start_stops_both_parts() {
     drop(runtime);
     scanner.cancel();
     drop(scanner);
+}
+
+// ------------------------------------------------------- what's in it --
+
+#[test]
+fn photo_tags_follow_the_states_table() {
+    use crate::tagging::tags::TagsState;
+    let mut fx = Fx::new(&["lake dog.jpg", "fail-cat.jpg"]);
+    fx.open();
+    let id = fx.id("lake dog.jpg");
+    let tags = |fx: &Fx, id| fx.tagging.photo_tags(fx.album(), id).unwrap();
+    assert_eq!(tags(&fx, id).state, TagsState::Off);
+    fx.tagging.runtime().pause(true);
+    fx.choose(Some(D), Some(K));
+    let t = tags(&fx, id);
+    assert_eq!(t.state, TagsState::Waiting);
+    assert_eq!(t.waiting_for.as_deref(), Some("Fake describer small"));
+    assert_eq!(t.description, None);
+    fx.tagging.runtime().pause(false);
+    fx.finished();
+    let t = tags(&fx, id);
+    assert_eq!(t.state, TagsState::Done);
+    assert_eq!(t.description.as_deref(), Some("A picture of lake dog."));
+    assert_eq!(t.written_by.as_deref(), Some("Fake describer small"));
+    assert_eq!(t.keywords, ["lake", "dog"]);
+    assert_eq!(t.objects[0].label, "lake");
+    assert_eq!(t.objects[0].count, 2);
+    assert!(t.can_regenerate);
+    assert_eq!(t.waiting_for, None);
+    let failed = tags(&fx, fx.id("fail-cat.jpg"));
+    assert_eq!(failed.state, TagsState::Failed);
+    assert_eq!(
+        failed.error.as_deref(),
+        Some("The fake model refused this picture.")
+    );
+
+    // Another describe model: the old results stay, waiting for the new one.
+    fx.tagging.runtime().pause(true);
+    fx.choose(Some("fake-describe-large"), Some(K));
+    let t = tags(&fx, id);
+    assert_eq!(t.state, TagsState::Waiting);
+    assert_eq!(t.waiting_for.as_deref(), Some("Fake describer large"));
+    assert_eq!(t.description.as_deref(), Some("A picture of lake dog."));
+    assert!(!t.can_regenerate, "the shown row is not the active model's");
+
+    // Off, with rows from before: done.
+    fx.tagging.set(None, None).unwrap();
+    let t = tags(&fx, id);
+    assert_eq!(t.state, TagsState::Done);
+    assert!(!t.can_regenerate);
+}
+
+#[test]
+fn regenerate_replaces_only_the_sentence_for_the_photo_and_its_copies() {
+    let mut fx = Fx::new(&["lake.jpg", "other.jpg"]);
+    std::fs::create_dir_all(fx.root.join("b")).unwrap();
+    std::fs::copy(fx.root.join("lake.jpg"), fx.root.join("b/lake again.jpg")).unwrap();
+    fx.choose(Some(D), Some(K));
+    fx.open();
+    fx.finished();
+    let id = fx.id("lake.jpg");
+    let before_k = fx.row("lake.jpg", K).unwrap();
+    let before_other = fx.row("other.jpg", D).unwrap();
+    // It works while paused.
+    fx.tagging.runtime().pause(true);
+    let t = fx.tagging.regenerate(fx.album(), id).unwrap();
+    assert_eq!(t.description.as_deref(), Some("Another look at lake (1)."));
+    let d = fx.row("lake.jpg", D).unwrap();
+    assert_eq!(d.description.as_deref(), Some("Another look at lake (1)."));
+    assert_eq!(d.objects[0].label, "lake", "objects are kept");
+    assert_eq!(fx.row("lake.jpg", K).unwrap(), before_k, "keywords are kept");
+    assert_eq!(
+        fx.row("lake again.jpg", D).unwrap().description.as_deref(),
+        Some("Another look at lake (1).")
+    );
+    assert_eq!(fx.row("other.jpg", D).unwrap(), before_other);
+    let t = fx.tagging.regenerate(fx.album(), id).unwrap();
+    assert_eq!(t.description.as_deref(), Some("Another look at lake (2)."));
+    assert!(
+        fx.events
+            .named("album_changed")
+            .iter()
+            .any(|v| v["reason"] == "tags")
+    );
+}
+
+#[test]
+fn regenerate_tries_once_more_after_a_lost_model_and_words_its_errors() {
+    let mut fx = Fx::new(&["lost-lake.jpg", "b.jpg"]);
+    fx.open();
+    let lake = fx.id("lost-lake.jpg");
+    let e = fx.tagging.regenerate(fx.album(), lake).unwrap_err();
+    assert_eq!(e.code, ErrorCode::NoDescribeModel);
+
+    fx.tagging.runtime().pause(true);
+    fx.choose(Some(D), None);
+    let e = fx.tagging.regenerate(fx.album(), lake).unwrap_err();
+    assert_eq!(e.code, ErrorCode::NotDescribedYet);
+    assert_eq!(
+        e.message,
+        "Fake describer small has not described this photo yet."
+    );
+    let e = fx.tagging.regenerate(fx.album(), 999_999).unwrap_err();
+    assert_eq!(e.code, ErrorCode::PhotoNotFound);
+
+    fx.tagging.runtime().pause(false);
+    fx.finished();
+    // One loss: the second attempt works.
+    fx.control.set_lost(1);
+    let t = fx.tagging.regenerate(fx.album(), lake).unwrap();
+    assert!(
+        t.description
+            .unwrap()
+            .starts_with("Another look at lost lake")
+    );
+    // Two losses: tagging_lost, and the old sentence stays.
+    fx.control.set_lost(2);
+    let before = fx.row("lost-lake.jpg", D).unwrap().description;
+    let e = fx.tagging.regenerate(fx.album(), lake).unwrap_err();
+    assert_eq!(e.code, ErrorCode::TaggingLost);
+    assert_eq!(e.message, "Fake describer small stopped working. Try again.");
+    assert_eq!(fx.row("lost-lake.jpg", D).unwrap().description, before);
+}
+
+#[test]
+fn regenerate_in_a_view_only_album_is_refused() {
+    let mut fx = Fx::new(&["a.jpg"]);
+    fx.choose(Some(D), None);
+    fx.open();
+    fx.finished();
+    let id = fx.id("a.jpg");
+    fx.tagging.runtime().attach(None);
+    if let Some(s) = fx.scanner.take() {
+        s.cancel();
+    }
+    let options = OpenOptions {
+        view_only: true,
+        ..OpenOptions::default()
+    };
+    let album = Album::open(&fx.root, &options).unwrap();
+    let e = fx.tagging.regenerate(&album, id).unwrap_err();
+    assert_eq!(e.code, ErrorCode::ViewOnly);
+    assert!(!fx.tagging.photo_tags(&album, id).unwrap().can_regenerate);
+}
+
+#[test]
+fn a_stuck_run_writes_the_thread_off_and_a_new_one_carries_on() {
+    let mut fx = Fx::with_limits(
+        &["hang-a.jpg", "zebra.jpg"],
+        Limits {
+            progress_event: Duration::ZERO,
+            describe: Duration::from_millis(50),
+            stuck: Duration::from_millis(100),
+            ..Limits::default()
+        },
+    );
+    fx.control.set_hang(Duration::from_millis(1500));
+    fx.choose(Some(D), None);
+    fx.open();
+    let s = fx.finished();
+    assert_eq!((s.total, s.done, s.failed), (2, 1, 1));
+    assert!(s.not_working.is_empty(), "one loss does not stop the part");
+    assert_eq!(
+        fx.row("hang-a.jpg", D).unwrap().error.as_deref(),
+        Some("Tagging this photo took too long.")
+    );
+    assert_eq!(
+        fx.factory_calls.load(Ordering::Relaxed),
+        2,
+        "a new thread with empty slots"
+    );
+    // The stuck thread returns later and writes nothing.
+    let rows = fx.rows();
+    std::thread::sleep(Duration::from_millis(1600));
+    assert_eq!(fx.rows(), rows);
+    assert_eq!(
+        fx.row("hang-a.jpg", D).unwrap().error.as_deref(),
+        Some("Tagging this photo took too long.")
+    );
+}
+
+#[test]
+fn shutdown_does_not_wait_forever_for_a_stuck_run() {
+    let mut fx = Fx::with_limits(
+        &["hang-a.jpg"],
+        Limits {
+            describe: Duration::from_secs(60),
+            stuck: Duration::from_millis(100),
+            ..Limits::default()
+        },
+    );
+    fx.control.set_hang(Duration::from_millis(2000));
+    fx.choose(Some(D), None);
+    fx.open();
+    fx.until("the run", |_| !fx.control.runs().is_empty());
+    let start = Instant::now();
+    fx.tagging.shutdown();
+    assert!(start.elapsed() < Duration::from_millis(1500));
+    // Let the left-behind thread finish before the folder goes.
+    std::thread::sleep(Duration::from_millis(2100));
 }

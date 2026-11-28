@@ -17,6 +17,9 @@ use super::catalogue::{Catalogue, ModelChoice, Part, Size};
 use super::download::{self, Fetch, Job, Outcome};
 use super::install::{self, InstallState};
 use super::runtime::Runtime;
+use super::store;
+use super::tags::{self, PhotoTags, TagsContext};
+use crate::album::Album;
 use crate::appdata::AppData;
 use crate::error::AppResult;
 use crate::events::{Emitter, Event, emit};
@@ -486,6 +489,46 @@ impl Tagging {
         self.runtime.clear_not_working();
         self.apply_choice();
         Ok(self.choice())
+    }
+
+    /// One photo's tags for the details panel.
+    pub fn photo_tags(&self, album: &Album, id: i64) -> AppResult<PhotoTags> {
+        let choice = self.choice();
+        let active = self.runtime.active(Part::Describe).map(|m| m.id);
+        let cx = TagsContext {
+            catalogue: self.inner.catalogue,
+            chosen: [choice.describe.as_deref(), choice.keywords.as_deref()],
+            active_describe: active,
+            view_only: album.is_view_only(),
+        };
+        album.db().read(|c| tags::photo_tags(c, id, &cx))
+    }
+
+    /// `tagging_regenerate` (docs/07-tagging.md, "Regenerate"): a new
+    /// description for one photo from the active describe model. Answers
+    /// the photo's new tags; on every error the old sentence stays.
+    pub fn regenerate(&self, album: &Album, id: i64) -> AppResult<PhotoTags> {
+        if let Some(m) = album.db().view_only_message() {
+            return Err(AppError::new(ErrorCode::ViewOnly, m));
+        }
+        let m = self
+            .runtime
+            .active(Part::Describe)
+            .ok_or_else(|| AppError::new(ErrorCode::NoDescribeModel, words::NO_DESCRIBE_MODEL))?;
+        let (exists, row) = album.db().read(|c| {
+            let exists = c
+                .query_row("SELECT 1 FROM photos WHERE id = ?1 AND missing = 0", [id], |_| Ok(()))
+                .is_ok();
+            Ok((exists, store::row(c, id, m.id)?))
+        })?;
+        if !exists {
+            return Err(AppError::new(ErrorCode::PhotoNotFound, crate::text::photo::NOT_FOUND));
+        }
+        if row.is_none_or(|r| r.status != store::Status::Done) {
+            return Err(AppError::new(ErrorCode::NotDescribedYet, words::not_described_yet(m.label)));
+        }
+        self.runtime.regenerate(id, m)?;
+        self.photo_tags(album, id)
     }
 
     /// Owlbum closes: the download is cancelled and the models unloaded.

@@ -89,7 +89,7 @@ fn a_photo_answers_its_facts_camera_and_clipping() {
     assert_eq!((d.description.as_deref(), d.notes.as_deref()), (None, None));
     assert_eq!(d.edit_plan, None);
     assert_eq!(d.edit, None);
-    assert_eq!(d.tags, None);
+    assert!(d.tags.is_none());
 }
 
 #[test]

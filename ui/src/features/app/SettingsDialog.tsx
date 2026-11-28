@@ -7,6 +7,7 @@ import { settingsText as t } from "../../text/app";
 import { formatSize } from "../details/facts";
 import { refreshEditStatus } from "../edit/save";
 import { useSettingsStore } from "./settings";
+import { useSettingsOpen } from "./settingsOpen";
 import { TaggingSettings } from "./TaggingSettings";
 import "./SettingsDialog.css";
 
@@ -48,9 +49,9 @@ async function save(patch: SettingsPatch): Promise<boolean> {
   return true;
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
+function Section({ title, id, children }: { title: string; id?: string; children: ReactNode }) {
   return (
-    <section className="ow-settings__section" aria-label={title}>
+    <section id={id} className="ow-settings__section" aria-label={title}>
       <h3 className="ow-settings__heading">{title}</h3>
       {children}
     </section>
@@ -179,6 +180,12 @@ function SettingsBody() {
       .then((v) => setVersion(v.version))
       .catch(() => setVersion(null));
   }, []);
+  const section = useSettingsOpen((s) => s.section);
+  const shown = settings !== null;
+  useEffect(() => {
+    // Opened at a section: bring it into view.
+    if (shown && section !== null) document.getElementById(`ow-settings-${section}`)?.scrollIntoView?.({ block: "start" });
+  }, [shown, section]);
   if (settings === null) return null;
 
   return (
@@ -219,7 +226,7 @@ function SettingsBody() {
           onChange={(on) => void save({ maps_online: on })}
         />
       </Section>
-      <Section title={t.tagging}>
+      <Section title={t.tagging} id="ow-settings-tagging">
         <TaggingSettings />
       </Section>
       <Section title={t.updates}>

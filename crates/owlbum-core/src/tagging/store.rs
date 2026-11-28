@@ -368,6 +368,35 @@ pub fn retry_failed(tx: &Transaction<'_>, models: &[&str], scope: &str) -> AppRe
     Ok(cleared.len() as u64)
 }
 
+/// Regenerate: puts the new sentence into the photo's done row for `model`
+/// and every copy's, with a new `made_at`; keeps labels and search in step.
+/// Answers the photos written to.
+pub fn set_description(
+    tx: &Transaction<'_>,
+    id: i64,
+    model: &str,
+    description: &str,
+    made_at: i64,
+) -> AppResult<Vec<i64>> {
+    let mut all = vec![id];
+    all.extend(copies(tx, id)?);
+    let mut touched = Vec::new();
+    for a in all {
+        let n = tx
+            .execute(
+                "UPDATE tags SET description = ?3, made_at = ?4
+                 WHERE photo_id = ?1 AND model_id = ?2 AND status = 'done'",
+                params![a, model, description, made_at],
+            )
+            .map_err(failed)?;
+        if n > 0 {
+            relabel(tx, a)?;
+            touched.push(a);
+        }
+    }
+    Ok(touched)
+}
+
 /// The row of one photo for one model.
 pub fn row(conn: &Connection, id: i64, model: &str) -> AppResult<Option<TagRow>> {
     conn.query_row(

@@ -12,7 +12,7 @@ use std::collections::{BTreeSet, VecDeque};
 use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{Arc, Condvar, Mutex, MutexGuard};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, mpsc};
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
@@ -27,6 +27,7 @@ use super::results;
 use super::store::{self, Status, TagRow};
 use super::vocabulary::VOCABULARY;
 use crate::album::{Album, AlbumChanged, ChangeReason};
+use crate::error::{AppError, AppResult, ErrorCode};
 use crate::events::{Emitter, Event, emit};
 use crate::text::tagging as words;
 
@@ -41,6 +42,11 @@ pub struct Limits {
     pub load: Duration,
     pub describe: Duration,
     pub keywords: Duration,
+    /// One sampled caption (Regenerate).
+    pub caption: Duration,
+    /// A run that has not returned this long after it was asked to end
+    /// writes the tagging thread off ("Timeouts", step 3).
+    pub stuck: Duration,
     pub idle_unload: Duration,
     /// `album_changed { reason: "tags" }` at most this often while tagging.
     pub tags_event: Duration,
@@ -55,6 +61,8 @@ impl Default for Limits {
             // A caption and the object detection, 120 s each.
             describe: Duration::from_secs(240),
             keywords: Duration::from_secs(30),
+            caption: Duration::from_secs(120),
+            stuck: Duration::from_secs(30),
             idle_unload: Duration::from_secs(300),
             tags_event: Duration::from_secs(5),
             progress_event: Duration::from_millis(250),
@@ -108,8 +116,63 @@ pub struct AlbumWork {
     pub scanning: Arc<dyn Fn() -> bool + Send + Sync>,
 }
 
+/// The answer to a Regenerate, taken by whoever answers first: the tagging
+/// thread, or the watchdog when it writes the thread off.
+type Reply = Arc<Mutex<Option<mpsc::Sender<AppResult<()>>>>>;
+
+fn answer(reply: &Reply, result: AppResult<()>) {
+    if let Some(tx) = reply.lock().unwrap_or_else(|p| p.into_inner()).take() {
+        let _ = tx.send(result);
+    }
+}
+
+fn stopped() -> AppError {
+    AppError::new(ErrorCode::TaggingStopped, words::TAGGING_STOPPED)
+}
+
+/// A Regenerate waiting for the tagging thread.
+struct Job {
+    id: i64,
+    model: &'static ModelChoice,
+    reply: Reply,
+}
+
+/// What the tagging thread is running now, for the watchdog.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum RunKind {
+    Load,
+    Photo,
+    Regenerate,
+}
+
+#[derive(Clone)]
+struct InRun {
+    epoch: u64,
+    generation: u64,
+    kind: RunKind,
+    id: i64,
+    model: &'static ModelChoice,
+    /// When the run was asked to end: its deadline, or earlier when it was
+    /// told to stop.
+    ends: Instant,
+    reply: Option<Reply>,
+}
+
+/// The run in hand is told to end now (the album closed, Owlbum closes).
+fn ask_to_end(s: &mut State) {
+    let now = Instant::now();
+    if let Some(r) = s.in_run.as_mut() {
+        r.ends = r.ends.min(now);
+    }
+}
+
 struct State {
     album: Option<AlbumWork>,
+    /// Bumped when the tagging thread is written off; a thread whose epoch
+    /// is not this one ends and writes nothing.
+    epoch: u64,
+    in_run: Option<InRun>,
+    jobs: VecDeque<Job>,
     /// Bumped on every album open and close.
     generation: u64,
     active: [Option<&'static ModelChoice>; 2],
@@ -144,12 +207,15 @@ struct Shared {
     threads: usize,
     limits: Limits,
     text: Mutex<Option<(&'static str, Arc<dyn TextEmbedder>)>>,
+    /// The tagging thread now.
+    thread: Mutex<Option<JoinHandle<()>>>,
 }
 
 /// The tagging thread and its queue.
 pub struct Runtime {
     shared: Arc<Shared>,
-    thread: Mutex<Option<JoinHandle<()>>>,
+    /// The watchdog that writes a stuck tagging thread off.
+    watch: Mutex<Option<JoinHandle<()>>>,
 }
 
 impl Runtime {
@@ -165,6 +231,9 @@ impl Runtime {
             shared: Arc::new(Shared {
                 state: Mutex::new(State {
                     album: None,
+                    epoch: 0,
+                    in_run: None,
+                    jobs: VecDeque::new(),
                     generation: 0,
                     active: [None, None],
                     paused: false,
@@ -191,8 +260,9 @@ impl Runtime {
                 threads,
                 limits,
                 text: Mutex::new(None),
+                thread: Mutex::new(None),
             }),
-            thread: Mutex::new(None),
+            watch: Mutex::new(None),
         }
     }
 
@@ -201,12 +271,24 @@ impl Runtime {
     }
 
     fn ensure_thread(&self) {
-        let mut t = self.thread.lock().unwrap_or_else(|p| p.into_inner());
-        if t.is_none() {
+        if self.shared.lock().shutdown {
+            return;
+        }
+        let none = self
+            .shared
+            .thread
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .is_none();
+        if none {
+            spawn_worker(&self.shared);
+        }
+        let mut w = self.watch.lock().unwrap_or_else(|p| p.into_inner());
+        if w.is_none() {
             let shared = Arc::clone(&self.shared);
-            *t = std::thread::Builder::new()
-                .name("owlbum-tagging".into())
-                .spawn(move || run(&shared))
+            *w = std::thread::Builder::new()
+                .name("owlbum-tagging-watch".into())
+                .spawn(move || watch(&shared))
                 .ok();
         }
     }
@@ -225,8 +307,16 @@ impl Runtime {
     /// The open album, or none. Clears the pause, the focus list and the
     /// problem; the run in hand is told to end and its result is dropped.
     pub fn attach(&self, album: Option<AlbumWork>) {
+        let jobs = {
+            let mut s = self.state();
+            std::mem::take(&mut s.jobs)
+        };
+        for job in jobs {
+            answer(&job.reply, Err(stopped()));
+        }
         self.change(|s| {
             s.stop.store(true, Ordering::Relaxed);
+            ask_to_end(s);
             s.stop = Arc::new(AtomicBool::new(false));
             s.generation += 1;
             s.album = album;
@@ -347,16 +437,66 @@ impl Runtime {
             .clone()
     }
 
-    /// Stops the thread and unloads the models (Owlbum closes).
+    /// The active model of a part: chosen, installed and working.
+    pub fn active(&self, part: Part) -> Option<&'static ModelChoice> {
+        let s = self.state();
+        s.active[part.index()].filter(|_| !s.not_working.contains(&part))
+    }
+
+    /// Regenerate (docs/07-tagging.md, "Regenerate"): a new sampled
+    /// caption for one photo from `model`, run on the tagging thread after
+    /// the photo in hand and before the next one, even while paused.
+    /// Returns when the new sentence is written, or with the error.
+    pub fn regenerate(&self, id: i64, model: &'static ModelChoice) -> AppResult<()> {
+        let (tx, rx) = mpsc::channel();
+        let reply: Reply = Arc::new(Mutex::new(Some(tx)));
+        self.change(|s| {
+            s.jobs.push_back(Job {
+                id,
+                model,
+                reply: Arc::clone(&reply),
+            });
+        });
+        if self.state().shutdown {
+            answer(&reply, Err(stopped()));
+        }
+        rx.recv().unwrap_or_else(|_| Err(stopped()))
+    }
+
+    /// Stops the thread and unloads the models (Owlbum closes). Waits for
+    /// the run in hand to end, at most `stuck`; a thread still running
+    /// then is left behind.
     pub fn shutdown(&self) {
-        {
+        let jobs = {
             let mut s = self.state();
             s.shutdown = true;
             s.stop.store(true, Ordering::Relaxed);
+            ask_to_end(&mut s);
+            std::mem::take(&mut s.jobs)
+        };
+        for job in jobs {
+            answer(&job.reply, Err(stopped()));
         }
         self.shared.wake.notify_all();
-        if let Some(t) = self.thread.lock().unwrap_or_else(|p| p.into_inner()).take() {
-            let _ = t.join();
+        if let Some(w) = self.watch.lock().unwrap_or_else(|p| p.into_inner()).take() {
+            let _ = w.join();
+        }
+        let thread = self
+            .shared
+            .thread
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .take();
+        if let Some(t) = thread {
+            let start = Instant::now();
+            while !t.is_finished() && start.elapsed() < self.shared.limits.stuck {
+                std::thread::sleep(Duration::from_millis(5));
+            }
+            if t.is_finished() {
+                let _ = t.join();
+            } else {
+                tracing::warn!(target: "tagging", "the tagging thread did not end after it was asked to; left behind");
+            }
         }
     }
 }
@@ -461,9 +601,123 @@ impl Shared {
     }
 }
 
+/// Starts a tagging thread for the current epoch.
+fn spawn_worker(shared: &Arc<Shared>) {
+    let epoch = shared.lock().epoch;
+    let for_thread = Arc::clone(shared);
+    let handle = std::thread::Builder::new()
+        .name("owlbum-tagging".into())
+        .spawn(move || run(&for_thread, epoch))
+        .ok();
+    *shared.thread.lock().unwrap_or_else(|p| p.into_inner()) = handle;
+}
+
+/// The watchdog ("Timeouts", step 3): a run that has not returned `stuck`
+/// after it was asked to end writes its thread off. A new thread starts
+/// with empty slots; the old one's result is ignored when it returns.
+fn watch(shared: &Arc<Shared>) {
+    let tick = (shared.limits.stuck / 4).clamp(Duration::from_millis(5), Duration::from_secs(1));
+    loop {
+        let mut s = shared.lock();
+        if s.shutdown {
+            return;
+        }
+        let late = s.in_run.as_ref().is_some_and(|r| {
+            r.epoch == s.epoch && Instant::now() >= r.ends + shared.limits.stuck
+        });
+        if !late {
+            let _ = shared.wake.wait_timeout(s, tick);
+            continue;
+        }
+        let Some(r) = s.in_run.take() else { continue };
+        s.epoch += 1;
+        tracing::warn!(target: "tagging", "{} did not end {:?} after it was asked to; the tagging thread is written off", r.model.id, shared.limits.stuck);
+        let part = r.model.part;
+        let mut write = None;
+        match r.kind {
+            RunKind::Load => {
+                s.not_working.insert(part);
+            }
+            RunKind::Photo => {
+                s.losses[part.index()] += 1;
+                if s.losses[part.index()] >= MAX_LOSSES {
+                    s.not_working.insert(part);
+                }
+                if s.generation == r.generation {
+                    write = s.album.clone();
+                }
+            }
+            RunKind::Regenerate => {}
+        }
+        s.counts = None;
+        s.running = false;
+        drop(s);
+        if let Some(reply) = &r.reply {
+            answer(reply, Err(AppError::new(ErrorCode::TaggingTimeout, words::tagging_timeout(r.model.label))));
+        }
+        if let Some(work) = write {
+            // As a timeout: a failed row for the photo.
+            let row = TagRow::failed(part, r.model.id, words::TOOK_TOO_LONG, store::now_ms());
+            let id = r.id;
+            let _ = work.album.db().write(move |tx| store::write(tx, id, &[row]));
+            let mut s = shared.lock();
+            s.tags_pending = true;
+        }
+        *shared.text.lock().unwrap_or_else(|p| p.into_inner()) = None;
+        spawn_worker(shared);
+        shared.wake.notify_all();
+        shared.publish(true);
+    }
+}
+
+/// Marks what the thread runs now, for the watchdog.
+fn running(
+    shared: &Shared,
+    epoch: u64,
+    generation: u64,
+    kind: RunKind,
+    id: i64,
+    model: &'static ModelChoice,
+    limit: Duration,
+    reply: Option<&Reply>,
+) {
+    let mut s = shared.lock();
+    if s.epoch == epoch {
+        s.in_run = Some(InRun {
+            epoch,
+            generation,
+            kind,
+            id,
+            model,
+            ends: Instant::now() + limit,
+            reply: reply.cloned(),
+        });
+        if s.stop.load(Ordering::Relaxed) || s.shutdown {
+            ask_to_end(&mut s);
+        }
+    }
+}
+
+/// The run in hand returned. False when this thread was written off
+/// meanwhile: it must stop and write nothing.
+fn returned(shared: &Shared, epoch: u64) -> bool {
+    let mut s = shared.lock();
+    if s.epoch != epoch {
+        return false;
+    }
+    s.in_run = None;
+    true
+}
+
 /// What the thread does next.
 enum Next {
     Wait(Option<Duration>),
+    Regenerate {
+        work: AlbumWork,
+        job: Job,
+        generation: u64,
+        stop: Arc<AtomicBool>,
+    },
     Tag {
         work: AlbumWork,
         id: i64,
@@ -476,10 +730,14 @@ enum Next {
 }
 
 /// The tagging thread.
-fn run(shared: &Arc<Shared>) {
+fn run(shared: &Arc<Shared>, epoch: u64) {
     let mut backend: Option<Box<dyn TagBackend>> = None;
     let mut last_work = Instant::now();
     loop {
+        if shared.lock().epoch != epoch {
+            // Written off by the watchdog: a new thread has taken over.
+            return;
+        }
         // Unloads asked for.
         let unload: Vec<Part> = std::mem::take(&mut shared.lock().unload)
             .into_iter()
@@ -491,6 +749,24 @@ fn run(shared: &Arc<Shared>) {
             shared.set_text(&**b);
         }
         let next = pick(shared);
+        if let Next::Tag { .. } | Next::Regenerate { .. } = next
+            && backend.is_none()
+        {
+            match (shared.factory)() {
+                Ok(b) => backend = Some(b),
+                Err(reason) => {
+                    let mut s = shared.lock();
+                    s.problem = Some(words::runtime_failed(&reason));
+                    s.not_working.extend(Part::ALL);
+                    drop(s);
+                    if let Next::Regenerate { job, .. } = &next {
+                        answer(&job.reply, Err(AppError::new(ErrorCode::ModelLoadFailed, words::model_load_failed(job.model.label))));
+                    }
+                    shared.publish(true);
+                    continue;
+                }
+            }
+        }
         match next {
             Next::Exit => {
                 if let Some(mut b) = backend.take() {
@@ -525,6 +801,20 @@ fn run(shared: &Arc<Shared>) {
                 );
                 let _ = shared.wake.wait_timeout(s, wait);
             }
+            Next::Regenerate {
+                work,
+                job,
+                generation,
+                stop,
+            } => {
+                last_work = Instant::now();
+                let Some(b) = backend.as_mut() else { continue };
+                let result = regenerate(shared, &mut **b, &work, &job, generation, &stop, epoch);
+                if shared.lock().epoch != epoch {
+                    return;
+                }
+                answer(&job.reply, result);
+            }
             Next::Tag {
                 work,
                 id,
@@ -534,29 +824,19 @@ fn run(shared: &Arc<Shared>) {
                 first_of_focus,
             } => {
                 last_work = Instant::now();
-                if backend.is_none() {
-                    match (shared.factory)() {
-                        Ok(b) => backend = Some(b),
-                        Err(reason) => {
-                            let mut s = shared.lock();
-                            s.problem = Some(words::runtime_failed(&reason));
-                            s.not_working.extend(Part::ALL);
-                            drop(s);
-                            shared.publish(true);
-                            continue;
-                        }
-                    }
-                }
                 let Some(b) = backend.as_mut() else { continue };
                 tag(
                     shared,
                     &mut **b,
                     &work,
-                    id,
+                    &Turn {
+                        id,
+                        generation,
+                        epoch,
+                        stop: &stop,
+                        first_of_focus,
+                    },
                     &models,
-                    generation,
-                    &stop,
-                    first_of_focus,
                 );
             }
         }
@@ -576,8 +856,22 @@ fn pick(shared: &Shared) -> Next {
         .collect();
     let Some(work) = s.album.clone() else {
         s.running = false;
+        let jobs = std::mem::take(&mut s.jobs);
+        drop(s);
+        for job in jobs {
+            answer(&job.reply, Err(stopped()));
+        }
         return Next::Wait(None);
     };
+    // Regenerate comes before the next photo, paused or not.
+    if let Some(job) = s.jobs.pop_front() {
+        return Next::Regenerate {
+            work,
+            job,
+            generation: s.generation,
+            stop: Arc::clone(&s.stop),
+        };
+    }
     let blocked = work.album.is_view_only() || models.is_empty() || s.problem.is_some();
     let scanning = (work.scanning)();
     if std::mem::replace(&mut s.was_scanning, scanning) && !scanning {
@@ -674,12 +968,19 @@ fn pick(shared: &Shared) -> Next {
 
 /// Loads `model` if its slot does not hold it. A failed load verifies the
 /// files and puts the part in the not-working set.
-fn ensure_loaded(shared: &Shared, b: &mut dyn TagBackend, model: &'static ModelChoice) -> bool {
+fn ensure_loaded(
+    shared: &Shared,
+    b: &mut dyn TagBackend,
+    model: &'static ModelChoice,
+    turn: (u64, u64, i64),
+) -> bool {
     if b.loaded(model.part) == Some(model.id) {
         return true;
     }
+    let (epoch, generation, id) = turn;
     let dir = install::model_dir(&shared.models, model);
     let deadline = Deadline::after(shared.limits.load);
+    running(shared, epoch, generation, RunKind::Load, id, model, shared.limits.load, None);
     let loaded = match install::quick_state(&dir, model) {
         install::InstallState::Ok => {
             match catch_unwind(AssertUnwindSafe(|| {
@@ -694,6 +995,9 @@ fn ensure_loaded(shared: &Shared, b: &mut dyn TagBackend, model: &'static ModelC
             "files missing or unchecked",
         ))),
     };
+    if !returned(shared, epoch) {
+        return false;
+    }
     match loaded {
         Ok(()) => {
             shared.set_text(b);
@@ -713,21 +1017,37 @@ fn ensure_loaded(shared: &Shared, b: &mut dyn TagBackend, model: &'static ModelC
     }
 }
 
+/// One photo's turn on the tagging thread.
+struct Turn<'a> {
+    id: i64,
+    generation: u64,
+    /// The thread's epoch: a thread written off writes nothing.
+    epoch: u64,
+    stop: &'a Arc<AtomicBool>,
+    first_of_focus: bool,
+}
+
 /// Tags one photo with the active models.
-#[allow(clippy::too_many_arguments)]
 fn tag(
     shared: &Shared,
     b: &mut dyn TagBackend,
     work: &AlbumWork,
-    id: i64,
+    turn: &Turn<'_>,
     models: &[&'static ModelChoice],
-    generation: u64,
-    stop: &Arc<AtomicBool>,
-    first_of_focus: bool,
 ) {
+    let Turn {
+        id,
+        generation,
+        epoch,
+        stop,
+        first_of_focus,
+    } = *turn;
     let album = &work.album;
     let scope = album.location().scope.clone();
-    let current = || shared.lock().generation == generation && !stop.load(Ordering::Relaxed);
+    let current = || {
+        let s = shared.lock();
+        s.generation == generation && s.epoch == epoch && !stop.load(Ordering::Relaxed)
+    };
     // Copies' rows first: no model runs for them.
     let _ = album.db().write(move |tx| store::take_from_copies(tx, id));
     let mut todo = Vec::new();
@@ -780,7 +1100,10 @@ fn tag(
                 ));
                 continue;
             };
-            if !ensure_loaded(shared, b, m) {
+            if !ensure_loaded(shared, b, m, (epoch, generation, id)) {
+                if !current() {
+                    return;
+                }
                 continue;
             }
             let image = TagImage { rgb, name: &name };
@@ -789,10 +1112,11 @@ fn tag(
                 Part::Keywords => shared.limits.keywords,
             };
             let deadline = Deadline::new(limit, Arc::clone(stop));
+            running(shared, epoch, generation, RunKind::Photo, id, m, limit, None);
             let outcome = catch_unwind(AssertUnwindSafe(|| {
                 run_model(b, m, &image, &deadline, made_at)
             }));
-            if !current() {
+            if !returned(shared, epoch) || !current() {
                 return;
             }
             match outcome {
@@ -850,6 +1174,92 @@ fn tag(
     }
     shared.publish(false);
     shared.flush_tags(first_of_focus);
+}
+
+/// Regenerate on the tagging thread: up to two attempts, the second only
+/// after a lost model; the new sentence goes to the row and every copy's.
+fn regenerate(
+    shared: &Shared,
+    b: &mut dyn TagBackend,
+    work: &AlbumWork,
+    job: &Job,
+    generation: u64,
+    stop: &Arc<AtomicBool>,
+    epoch: u64,
+) -> AppResult<()> {
+    let m = job.model;
+    let id = job.id;
+    let current = || {
+        let s = shared.lock();
+        s.generation == generation && s.epoch == epoch && !stop.load(Ordering::Relaxed)
+    };
+    let (rgb, name) = match work.pictures.picture(id) {
+        Picture::Ready(rgb, name) => (rgb, name),
+        Picture::Gone => {
+            return Err(AppError::new(ErrorCode::PhotoNotFound, crate::text::photo::NOT_FOUND));
+        }
+        Picture::Unreadable(_) => return Err(AppError::internal(words::COULD_NOT_READ_PHOTO)),
+    };
+    let image = TagImage { rgb: &rgb, name: &name };
+    for attempt in 1..=2 {
+        if !ensure_loaded(shared, b, m, (epoch, generation, id)) {
+            if !current() {
+                return Err(stopped());
+            }
+            return Err(AppError::new(ErrorCode::ModelLoadFailed, words::model_load_failed(m.label)));
+        }
+        let deadline = Deadline::new(shared.limits.caption, Arc::clone(stop));
+        running(
+            shared,
+            epoch,
+            generation,
+            RunKind::Regenerate,
+            id,
+            m,
+            shared.limits.caption,
+            Some(&job.reply),
+        );
+        let outcome = catch_unwind(AssertUnwindSafe(|| b.caption(&image, &deadline)));
+        if !returned(shared, epoch) || !current() {
+            return Err(stopped());
+        }
+        match outcome {
+            Ok(Ok(text)) => {
+                let text = text.trim().to_owned();
+                if text.is_empty() {
+                    return Err(AppError::new(ErrorCode::EmptyDescription, words::empty_description(m.label)));
+                }
+                let model = m.id;
+                let made_at = store::now_ms();
+                work.album
+                    .db()
+                    .write(move |tx| store::set_description(tx, id, model, &text, made_at))?;
+                {
+                    let mut s = shared.lock();
+                    s.tags_pending = true;
+                    s.last_tags_at = None;
+                }
+                shared.flush_tags(true);
+                return Ok(());
+            }
+            Ok(Err(BackendError::Timeout)) => {
+                b.unload(m.part);
+                shared.set_text(b);
+                return Err(AppError::new(ErrorCode::TaggingTimeout, words::tagging_timeout(m.label)));
+            }
+            Ok(Err(BackendError::Photo(message))) => {
+                return Err(AppError::new(ErrorCode::TaggingLost, message));
+            }
+            Ok(Err(BackendError::Lost(_) | BackendError::Load(_))) | Err(_) => {
+                b.unload(m.part);
+                shared.set_text(b);
+                if attempt == 2 {
+                    return Err(AppError::new(ErrorCode::TaggingLost, words::tagging_lost(m.label)));
+                }
+            }
+        }
+    }
+    Err(AppError::new(ErrorCode::TaggingLost, words::tagging_lost(m.label)))
 }
 
 /// Done and failed, for each photo that counts (eligible, in scope).

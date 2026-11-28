@@ -263,8 +263,13 @@ function ModelActions({ model, state, onAsk, onCancel, onRemove }: ModelActionsP
     const percent = running.total > 0 ? Math.floor((running.received / running.total) * 100) : 0;
     return (
       <>
-        <div className="ow-tagging-settings__bar" role="group" aria-label={t.downloading(model.label)}>
-          <ProgressBar label={t.percent(percent)} value={running.received} max={running.total} />
+        <div className="ow-tagging-settings__bar">
+          <ProgressBar
+            label={t.percent(percent)}
+            name={t.downloading(model.label)}
+            value={running.received}
+            max={running.total}
+          />
         </div>
         <Button size="sm" onClick={onCancel}>
           {t.cancel}

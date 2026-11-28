@@ -3,6 +3,7 @@ import type { ModelInfo } from "../bindings/ModelInfo";
 import type { ModelsState } from "../bindings/ModelsState";
 import type { TaggingProgress } from "../bindings/TaggingProgress";
 import type { AreaHandlers } from "./types";
+import type { AppError } from "../bindings/AppError";
 
 /** One catalogue model as Settings lists it, not downloaded. */
 function model(
@@ -82,4 +83,11 @@ export const taggingHandlers: AreaHandlers<TaggingCommands> = {
   tagging_restart: () => null,
   tagging_retry_failed: () => ({ cleared: 0 }),
   tagging_focus: () => null,
+  tagging_regenerate: () => {
+    const e: AppError = {
+      code: "no_describe_model",
+      message: "There is no working descriptions model. Choose one in Settings.",
+    };
+    throw e;
+  },
 };

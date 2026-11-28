@@ -5,8 +5,8 @@ import type { DateInfo } from "./DateInfo";
 import type { EditPlan } from "./EditPlan";
 import type { MediaKind } from "./MediaKind";
 import type { PhotoEdit } from "./PhotoEdit";
+import type { PhotoTags } from "./PhotoTags";
 import type { Place } from "./Place";
-import type { JsonValue } from "./serde_json/JsonValue";
 
 /**
  * What `photo_detail` answers.
@@ -67,8 +67,8 @@ edit_plan: EditPlan | null,
  */
 edit: PhotoEdit | null, 
 /**
- * What tagging found (`PhotoTags`, docs/07-tagging.md). Always null
- * until the "What's in it" section is built (#55), which gives it its
- * type.
+ * What tagging found (docs/07-tagging.md, "\"What's in it\" in the
+ * details panel"). Filled by the shell, which knows this computer's
+ * choice of models; null where it does not.
  */
-tags: JsonValue | null, };
+tags: PhotoTags | null, };

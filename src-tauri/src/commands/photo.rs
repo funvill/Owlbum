@@ -24,11 +24,16 @@ command! {
     /// One photo's details for the details panel (docs/04-browsing.md,
     /// "The details panel"). `photo_not_found` when the id is not a photo
     /// the album shows; `no_album` when no album is open.
-    pub async fn photo_detail(id: i64; session: State<'_, Session>) -> PhotoDetail {
-        let (scanner, _) = session.queries()?;
+    pub async fn photo_detail<R: Runtime>(id: i64; app: AppHandle<R>) -> PhotoDetail {
+        let (scanner, _) = app.state::<Session>().queries()?;
+        let tagging = crate::commands::tagging::tagging(&app);
         off_main(text::photo::READING_DETAIL, move || {
             let open = scanner.open();
-            detail::photo_detail(open.album, open.overlay, id)
+            let mut d = detail::photo_detail(open.album, open.overlay, id)?;
+            if let Some(t) = tagging {
+                d.tags = Some(t.photo_tags(open.album, id)?);
+            }
+            Ok(d)
         })
         .await
     }

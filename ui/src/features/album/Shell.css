@@ -108,6 +108,30 @@
   border-bottom: 1px solid var(--line-soft);
 }
 
+/* Tagging bar (docs/07-tagging.md, "The tagging bar") */
+
+.ow-tagging-bar {
+  position: relative;
+  z-index: var(--z-bar);
+  flex: none;
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-2) var(--space-4);
+  background: var(--panel);
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.ow-tagging-bar__progress,
+.ow-tagging-bar__text {
+  flex: 1;
+  min-width: 0;
+}
+
+.ow-tagging-bar--error .ow-tagging-bar__text {
+  color: var(--error);
+}
+
 /* Body */
 
 .ow-shell__body {

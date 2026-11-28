@@ -3,6 +3,7 @@
 
 import type { DownloadProgress } from "./DownloadProgress";
 import type { ModelsState } from "./ModelsState";
+import type { PhotoTags } from "./PhotoTags";
 import type { RetryCleared } from "./RetryCleared";
 import type { TaggingChoice } from "./TaggingChoice";
 import type { TaggingProgress } from "./TaggingProgress";
@@ -13,6 +14,7 @@ export type TaggingCommands = {
   tagging_focus: { args: { ids: Array<number> }; result: null };
   tagging_models: { args: Record<string, never>; result: ModelsState };
   tagging_pause: { args: { paused: boolean }; result: null };
+  tagging_regenerate: { args: { id: number }; result: PhotoTags };
   tagging_remove: { args: { model: string }; result: null };
   tagging_restart: { args: Record<string, never>; result: null };
   tagging_retry_failed: { args: Record<string, never>; result: RetryCleared };

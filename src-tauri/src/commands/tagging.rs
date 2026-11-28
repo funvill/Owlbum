@@ -1,6 +1,5 @@
-//! Tagging models and the queue (`tagging_`; docs/07-tagging.md, "Commands
-//! and events"). Regenerate and search by meaning come with "What's in
-//! it" (#55) and search by meaning (#56).
+//! Tagging models, the queue and Regenerate (`tagging_`; docs/07-tagging.md,
+//! "Commands and events").
 
 use std::sync::{Arc, OnceLock};
 
@@ -11,6 +10,7 @@ use owlbum_core::tagging::download::HttpFetch;
 use owlbum_core::tagging::onnx::{self, OnnxBackend};
 use owlbum_core::tagging::runtime::{Limits, Runtime as TagRuntime, TaggingProgress};
 use owlbum_core::tagging::service::{DownloadProgress, ModelsState, Tagging, TaggingChoice};
+use owlbum_core::tagging::tags::PhotoTags;
 use owlbum_core::{AppError, ErrorCode, text};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, Runtime, State};
@@ -34,6 +34,7 @@ area! {
         tagging_restart,
         tagging_retry_failed,
         tagging_focus,
+        tagging_regenerate,
     ],
     events: [TaggingProgress, DownloadProgress],
 }
@@ -72,6 +73,14 @@ pub fn tagging<R: Runtime>(app: &AppHandle<R>) -> Option<Tagging> {
             })
             .clone(),
     )
+}
+
+/// Owlbum closes: the download is cancelled, the queue stops and the
+/// models are unloaded. Nothing to do when tagging was never started.
+pub fn shutdown<R: Runtime>(app: &AppHandle<R>) {
+    if let Some(t) = app.try_state::<TaggingState>().and_then(|s| s.0.get().cloned()) {
+        t.shutdown();
+    }
 }
 
 fn need<R: Runtime>(app: &AppHandle<R>) -> Result<Tagging, AppError> {
@@ -185,5 +194,16 @@ command! {
     pub fn tagging_focus<R: Runtime>(ids: Vec<i64>; app: AppHandle<R>) -> () {
         need(&app)?.runtime().focus(&ids);
         Ok(())
+    }
+}
+
+command! {
+    /// A new description for one photo (docs/07-tagging.md, "Regenerate").
+    /// Answers the photo's new tags; on every error the old sentence stays.
+    pub async fn tagging_regenerate<R: Runtime>(id: i64; app: AppHandle<R>, session: State<'_, Session>) -> PhotoTags {
+        writable(&session)?;
+        let (scanner, _) = session.queries()?;
+        let t = need(&app)?;
+        off_main(text::album::WRITING_DATABASE, move || t.regenerate(scanner.album(), id)).await
     }
 }

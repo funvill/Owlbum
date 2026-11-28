@@ -2,6 +2,8 @@
 // docs/09-visual-design.md, "The three columns"). Pure, so it is tested
 // without a browser.
 
+import { GAP, PAD, STRIP_ROWS, THUMB_DEFAULT } from "../grid";
+
 export const GRID_DEFAULT = 420;
 export const GRID_MIN = 200;
 export const DETAILS_DEFAULT = 340;
@@ -59,18 +61,44 @@ export function columnWidths(
   };
 }
 
-/** The bottom strip's height as shown, and the most its splitter allows. */
+/** The bottom strip's height as shown, the most its splitter allows, and its one-row height. */
 export interface Strip {
   height: number;
   max: number;
+  /** One row of tiles at the chosen size, under the view switch: the splitter's double-click. */
+  one: number;
+}
+
+/**
+ * What the strip holds besides its tiles: the view switch above them and
+ * the sideways scrollbar under them. The page measures it; this is used
+ * until it has.
+ */
+export const STRIP_CHROME = 64;
+
+/** What sizes the strip's rows: its measured chrome and the thumbnail size. */
+export interface StripFit {
+  chrome: number;
+  tile: number;
+}
+
+/** The strip's height for `rows` rows of tiles of side `tile` (rows run sideways, issue 216). */
+export function stripFor(rows: number, fit: StripFit): number {
+  return fit.chrome + 2 * PAD + rows * fit.tile + (rows - 1) * GAP;
 }
 
 /**
  * The bottom strip's height for the stored one, in a review screen `room`
- * pixels tall (null until measured): at least 120, and at most what leaves
- * the preview 200 above it. The stored height is never changed here.
+ * pixels tall (null until measured): at least 120, and at most the least
+ * of two rows of tiles at the chosen size (a filmstrip, issue 216), half
+ * the screen, and what leaves the preview 200 above it. The stored height
+ * is never changed here.
  */
-export function stripHeight(room: number | null, stored: number): Strip {
-  const max = room === null ? Infinity : Math.max(STRIP_MIN, room - PREVIEW_MIN_HEIGHT - SPLITTER);
-  return { height: clamp(stored, STRIP_MIN, max), max };
+export function stripHeight(room: number | null, stored: number, fit: StripFit = { chrome: STRIP_CHROME, tile: THUMB_DEFAULT }): Strip {
+  const rows = stripFor(STRIP_ROWS, fit);
+  const max = Math.max(
+    STRIP_MIN,
+    room === null ? rows : Math.min(rows, Math.floor(room / 2), room - PREVIEW_MIN_HEIGHT - SPLITTER),
+  );
+  return { height: clamp(stored, STRIP_MIN, max), max, one: clamp(stripFor(1, fit), STRIP_MIN, max) };
 }

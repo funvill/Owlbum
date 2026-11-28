@@ -23,9 +23,18 @@ export interface MapViewProps {
 /** Where the map was left, so switching views and back keeps it. */
 let kept: { album: string; lat: number; lon: number; zoom: number } | null = null;
 
-/** Forgets where the map was left (tests). */
+/**
+ * The newest located photos, kept past the view: a map made again for the
+ * same result (the thumbnails moved to the bottom or back, issue 216) starts
+ * from them. No new result comes then, so it would otherwise wait for ever
+ * and show no markers.
+ */
+let lastAnswer: { token: string; map: MapPoints } | null = null;
+
+/** Forgets where the map was left, and its points (tests). */
 export function resetMapPlace(): void {
   kept = null;
+  lastAnswer = null;
 }
 
 /**
@@ -46,7 +55,9 @@ export function MapView({ album, onOpen, onMenu }: MapViewProps) {
   const anchor = useGridStore((s) => s.anchor);
   const tiles = useMapTiles();
   const { tilesOn } = tiles;
-  const [answer, setAnswer] = useState<{ token: string; map: MapPoints } | null>(null);
+  const [answer, setAnswer] = useState<{ token: string; map: MapPoints } | null>(() =>
+    lastAnswer !== null && lastAnswer.token === useGridStore.getState().result?.token ? lastAnswer : null,
+  );
   const [failing, setFailing] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
   const frameRef = useRef<HTMLDivElement>(null);
@@ -55,6 +66,8 @@ export function MapView({ album, onOpen, onMenu }: MapViewProps) {
   const fitted = useRef(false);
   // The result shown when the view opened was made for the grid or the
   // timeline; switching re-runs the query, so the map waits for that answer.
+  // A map made again for a result it already answered (the panel moved)
+  // starts from that answer instead.
   const [before] = useState(() => useGridStore.getState().result?.token ?? null);
 
   // The map itself, for as long as the view is shown.
@@ -102,7 +115,9 @@ export function MapView({ album, onOpen, onMenu }: MapViewProps) {
       .invoke("query_map", { token })
       .then(
         (map) => {
-          if (live) setAnswer({ token, map });
+          if (!live) return;
+          lastAnswer = { token, map };
+          setAnswer(lastAnswer);
         },
         (e: unknown) => {
           if (live && isAppError(e) && e.code === "query_expired") void useGridStore.getState().refresh();
@@ -135,9 +150,14 @@ export function MapView({ album, onOpen, onMenu }: MapViewProps) {
     void map.centre(focus);
   }, [answer, focus]);
 
-  // The current photo's marker, brought into view when it changes.
+  // The current photo's marker, brought into view when it changes. Not when
+  // the map is made: one made again with its markers (the panel moved)
+  // keeps the place it was left at instead of zooming into a cluster.
   const currentId = current?.id ?? null;
+  const shownCurrent = useRef(currentId);
   useEffect(() => {
+    if (shownCurrent.current === currentId) return;
+    shownCurrent.current = currentId;
     mapRef.current?.setCurrent(currentId, true);
   }, [currentId]);
 

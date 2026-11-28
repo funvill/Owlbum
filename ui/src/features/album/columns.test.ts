@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { columnWidths, stripHeight } from "./columns";
+import { columnWidths, stripFor, stripHeight } from "./columns";
 
 describe("columnWidths", () => {
   it("shows the stored widths while the row has room, and before it is measured", () => {
@@ -72,14 +72,24 @@ describe("columns that are hidden or at the bottom", () => {
 });
 
 describe("stripHeight", () => {
+  // Chrome 64 and 160 px tiles: one row is 64 + 24 + 160 = 248, two rows 416.
+  const fit = { chrome: 64, tile: 160 };
+
   it("keeps the stored height while it fits, and before the screen is measured", () => {
-    expect(stripHeight(800, 200)).toEqual({ height: 200, max: 594 });
-    expect(stripHeight(null, 900)).toEqual({ height: 900, max: Infinity });
+    expect(stripHeight(900, 200, fit)).toEqual({ height: 200, max: 416, one: 248 });
+    expect(stripHeight(null, 300, fit)).toEqual({ height: 300, max: 416, one: 248 });
   });
 
-  it("stays at least 120 and leaves the preview 200 above it", () => {
-    expect(stripHeight(800, 50).height).toBe(120);
-    expect(stripHeight(500, 400)).toEqual({ height: 294, max: 294 });
-    expect(stripHeight(300, 400)).toEqual({ height: 120, max: 120 });
+  it("is at most two rows of tiles at the chosen size, so it stays a filmstrip", () => {
+    expect(stripHeight(1200, 900, fit).height).toBe(416);
+    expect(stripHeight(1200, 900, { chrome: 64, tile: 96 })).toEqual({ height: 288, max: 288, one: 184 });
+    expect(stripFor(2, fit)).toBe(416);
+  });
+
+  it("stays at least 120, at most half the screen, and leaves the preview 200 above it", () => {
+    expect(stripHeight(800, 50, fit).height).toBe(120);
+    expect(stripHeight(700, 900, fit)).toEqual({ height: 350, max: 350, one: 248 });
+    expect(stripHeight(500, 400, fit)).toEqual({ height: 250, max: 250, one: 248 });
+    expect(stripHeight(300, 400, fit)).toEqual({ height: 120, max: 120, one: 120 });
   });
 });

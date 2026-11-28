@@ -81,8 +81,24 @@
 .ow-grid--across .ow-grid__head-cell,
 .ow-grid--across .ow-grid__note-cell {
   height: 100%;
+  padding: 0;
   writing-mode: vertical-rl;
   transform: rotate(180deg);
+}
+
+/* In the strip a timeline heading is a separator between days or months:
+   a line before the group, with the date in small text beside it, cut
+   short when the strip is low (issue 216). */
+.ow-grid--across .ow-grid__head-row {
+  border-left: 1px solid var(--line-strong);
+}
+
+.ow-grid--across .ow-grid__head {
+  overflow: hidden;
+  color: var(--muted);
+  font: var(--text-xs);
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
 
 /* A tile: a square placed by transform, its picture under its marks. */

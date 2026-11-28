@@ -21,6 +21,7 @@ import {
   DETAILS_MIN,
   GRID_DEFAULT,
   GRID_MIN,
+  STRIP_CHROME,
   STRIP_DEFAULT,
   STRIP_MIN,
   columnWidths,
@@ -36,10 +37,11 @@ type Width = "panel.grid_width" | "panel.details_width" | "panel.strip_height";
  * The review row's column widths: the stored ones (settings), a width being
  * moved by a splitter until it is saved, and the row's measured width.
  */
-function useColumns(inRow: InRow) {
+function useColumns(inRow: InRow, chrome: number) {
   const ref = useRef<HTMLElement>(null);
   const [room, setRoom] = useState<{ width: number; height: number } | null>(null);
   const stored = useSettingsStore((s) => s.settings);
+  const tile = useGridStore((s) => s.thumbSize);
   const [moving, setMoving] = useState<Partial<Record<Width, number>>>({});
 
   useLayoutEffect(() => {
@@ -91,11 +93,37 @@ function useColumns(inRow: InRow) {
   return {
     ref,
     columns: columnWidths(room?.width ?? null, grid, details, inRow),
-    strip: stripHeight(room?.height ?? null, strip),
+    strip: stripHeight(room?.height ?? null, strip, { chrome, tile }),
     move,
     save,
     collapse,
   };
+}
+
+/**
+ * What the bottom strip holds besides its tiles (the view switch and the
+ * sideways scrollbar), measured while the strip shows the grid, so its
+ * height can be worked out in rows of tiles (issue 216).
+ */
+function useStripChrome(on: boolean, view: string) {
+  const ref = useRef<HTMLDivElement>(null);
+  const [value, setValue] = useState(STRIP_CHROME);
+  useLayoutEffect(() => {
+    const el = ref.current;
+    if (!on || el === null) return;
+    const measure = () => {
+      const box = el.querySelector<HTMLElement>(".ow-grid--across");
+      if (box === null || el.clientHeight <= 0) return;
+      const next = el.clientHeight - box.clientHeight;
+      if (next > 0) setValue((v) => (v === next ? v : next));
+    };
+    measure();
+    if (typeof ResizeObserver === "undefined") return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, [on, view]);
+  return [ref, value] as const;
 }
 
 /**
@@ -218,10 +246,15 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
   usePanelKeys();
   const panels = usePanels();
   const bottom = panels.place === "bottom";
-  const { ref, columns, strip, move, save, collapse } = useColumns({ grid: panels.grid && !bottom, details: panels.details });
+  const [chromeRef, chrome] = useStripChrome(bottom && panels.grid, view);
+  const { ref, columns, strip, move, save, collapse } = useColumns(
+    { grid: panels.grid && !bottom, details: panels.details },
+    chrome,
+  );
 
   const photos = (
     <div
+      ref={chromeRef}
       className={bottom ? "ow-review__photos ow-review__photos--strip" : "ow-review__photos"}
       style={bottom ? { height: strip.height } : { width: columns.grid }}
       data-region="grid"
@@ -307,7 +340,7 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
               min={STRIP_MIN}
               max={strip.max}
               dir={-1}
-              reset={STRIP_DEFAULT}
+              reset={strip.one}
               onMove={(h) => move("panel.strip_height", h)}
               onSave={(h) => void save("panel.strip_height", h)}
               onCollapse={() => void collapse("panel.strip_height", toggleGrid)}

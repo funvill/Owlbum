@@ -40,4 +40,4 @@ export type {
   Selected,
 } from "./store";
 export { BLOCK, BLOCKS_KEPT, FETCHES } from "./blocks";
-export { THUMB_DEFAULT, THUMB_MAX, THUMB_MIN, clampThumbSize } from "./layout";
+export { GAP, PAD, STRIP_ROWS, THUMB_DEFAULT, THUMB_MAX, THUMB_MIN, clampThumbSize } from "./layout";

@@ -26,6 +26,14 @@ the window's title shows the version that is running.
 
 ### Fixed
 
+- With the thumbnails along the bottom, the strip is a filmstrip again:
+  one row of tiles (two when the strip is tall enough at the tile
+  size) that scrolls sideways, and it never grows past two rows or half
+  the window, so the preview keeps most of the room. A double-click on
+  its splitter sets it to one row. Timeline dates show as small
+  separators between the groups.
+- The map keeps its photo markers when the thumbnails move between the
+  left and the bottom (they used to vanish until the next search).
 - The update notice and the About box no longer send you to the Help menu, which is gone; the setting is in Settings.
 - Edit (the E key, the photo menu and the preview's Edit) is turned off
   for a photo while it is being saved, with "This photo is being saved".

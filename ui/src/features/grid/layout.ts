@@ -22,6 +22,11 @@ export const THUMB_MIN = 96;
 export const THUMB_MAX = 320;
 export const THUMB_DEFAULT = 160;
 export const THUMB_STEP = 8;
+/**
+ * The most tiles across the bottom strip's height (issue 216): a filmstrip
+ * of one row, or two when the strip is tall enough for two at the size.
+ */
+export const STRIP_ROWS = 2;
 /** The longest side of the small thumbnail. */
 const SMALL_THUMB = 512;
 
@@ -86,7 +91,8 @@ export function indexOfSlot(l: GridLayout, slot: number): number {
  * The layout of `count` tiles at a thumbnail size of `tile`. With `groups`
  * (the timeline), each group has a heading row of HEAD pixels, then its
  * tile rows, then GROUP_GAP pixels. Without, `meaningStart` is where the
- * photos found by meaning start, or null.
+ * photos found by meaning start, or null. `maxCols` caps the tiles in a
+ * row (the bottom strip's STRIP_ROWS); the tiles then grow to fill it.
  */
 export function gridLayout(
   clientWidth: number,
@@ -94,9 +100,10 @@ export function gridLayout(
   tile: number,
   groups: readonly GroupSpan[] | null = null,
   meaningStart: number | null = null,
+  maxCols = Infinity,
 ): GridLayout {
   const width = Math.max(0, clientWidth - 2 * PAD);
-  const cols = Math.max(1, Math.floor((width + GAP) / (tile + GAP)));
+  const cols = Math.max(1, Math.min(maxCols, Math.floor((width + GAP) / (tile + GAP))));
   const side = Math.max(1, (width - (cols - 1) * GAP) / cols);
   const stride = side + GAP;
   if (groups !== null) {

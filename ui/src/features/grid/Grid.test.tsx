@@ -12,7 +12,7 @@ import { gridText } from "../../text/grid";
 import { FilterBar } from "../organise/FilterBar";
 import { Grid } from "./Grid";
 import { BLOCK, FETCHES } from "./blocks";
-import { MAX_SCROLL, PAD, gridLayout, scrollRatio } from "./layout";
+import { MAX_SCROLL, PAD, STRIP_ROWS, gridLayout, scrollRatio } from "./layout";
 import { resetGrid, useGridStore } from "./store";
 import { ThumbSize } from "./ThumbSize";
 
@@ -440,6 +440,22 @@ describe("the grid", () => {
     render(<Grid onStar={() => {}} />);
     await waitFor(() => expect(tiles()[0]).toHaveAccessibleName(/IMG_1\.jpg/));
     expect(await seriousFindings()).toEqual([]);
+  });
+});
+
+describe("the bottom strip's layout (issue 216)", () => {
+  // Across, the layout's width is the strip's inner height and its rows are columns.
+  it("holds one row of tiles, or two when the height allows two at the size, never more", () => {
+    // 137 px inside: one 113 px tile fills the strip's height.
+    expect(gridLayout(137, 300, 160, null, null, STRIP_ROWS)).toMatchObject({ cols: 1, side: 113, rows: 300 });
+    // 224 px inside, 96 px tiles: two rows of 96.
+    expect(gridLayout(224, 300, 96, null, null, STRIP_ROWS)).toMatchObject({ cols: 2, side: 96, rows: 150 });
+    // Taller still: two rows of bigger tiles, not a third row.
+    const tall = gridLayout(600, 300, 96, null, null, STRIP_ROWS);
+    expect(tall.cols).toBe(2);
+    expect(tall.side).toBe((600 - 2 * PAD - 8) / 2);
+    // The column at the left is not capped.
+    expect(gridLayout(600, 300, 96).cols).toBe(5);
   });
 });
 

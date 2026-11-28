@@ -13,6 +13,7 @@ import { timelineText } from "../../text/timeline";
 import { useSettingsStore } from "../app";
 import {
   PAD,
+  STRIP_ROWS,
   anchorAfterResize,
   followScroll,
   gridLayout,
@@ -142,8 +143,9 @@ export function Grid(props: GridProps) {
   const layerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const layout = useMemo(
-    () => gridLayout(size.width, count, thumbSize, groups, meaningStart),
-    [size.width, count, thumbSize, groups, meaningStart],
+    () =>
+      gridLayout(size.width, count, thumbSize, groups, meaningStart, across ? STRIP_ROWS : Infinity),
+    [size.width, count, thumbSize, groups, meaningStart, across],
   );
   // The timeline's month rail: a column beside the box, which narrows it.
   const years = useMemo(

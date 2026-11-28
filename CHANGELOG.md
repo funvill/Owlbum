@@ -9,6 +9,8 @@ the window's title shows the version that is running.
 
 ## [Unreleased]
 
+## [0.1.4] - 2026-11-27
+
 ### Added
 
 - Show on map: beside Pick on map in the details panel, for a photo with a
@@ -215,7 +217,8 @@ The first test build: milestones 0 (foundation), 1 (browse) and 2
   text search, undo, and Tidy.
 - Timeline and map views, and reopening where you were.
 
-[Unreleased]: https://github.com/funvill/Owlbum/compare/6ffea27...HEAD
+[Unreleased]: https://github.com/funvill/Owlbum/compare/609a21a...HEAD
+[0.1.4]: https://github.com/funvill/Owlbum/tree/609a21a
 [0.1.3]: https://github.com/funvill/Owlbum/tree/6ffea27
 [0.1.2]: https://github.com/funvill/Owlbum/tree/308f9d2
 [0.1.1]: https://github.com/funvill/Owlbum/tree/485f1a7

@@ -27,6 +27,7 @@ import { SECTION_IDS, sectionShown, useSections } from "./sections";
 import { DateField, LocationField, NotesFields, PeopleField, useInfoSaver } from "./typed";
 import type { InfoSaver } from "./typed/save";
 import { useDetail, type DetailState } from "./useDetail";
+import { WhatsInIt } from "./WhatsInIt";
 import "./DetailsPanel.css";
 
 /** The current photo, as the panel is given it. */
@@ -202,8 +203,7 @@ function SectionBody({
     case "photo":
       return <PhotoFacts detail={detail} />;
     case "whatsinit":
-      // The section's content comes with #55.
-      return null;
+      return <WhatsInIt detail={detail} disabledReason={disabledReason} />;
     case "camera":
       return <CameraFacts detail={detail} />;
     case "histogram":

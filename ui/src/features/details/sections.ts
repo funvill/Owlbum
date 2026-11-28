@@ -22,8 +22,8 @@ export const SECTION_IDS: readonly SectionId[] = [
 
 /**
  * Whether a section is shown at all for this photo. The Histogram is not
- * shown for videos. "What's in it" waits for its data, which #55 adds to
- * `photo_detail`.
+ * shown for videos. "What's in it" needs the tags, which the shell fills
+ * in `photo_detail` whenever tagging is set up.
  */
 export function sectionShown(id: SectionId, d: PhotoDetail): boolean {
   switch (id) {

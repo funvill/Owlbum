@@ -100,3 +100,24 @@ export const detailsText = {
 };
 
 export type SectionId = keyof typeof detailsText.sections;
+
+/** "What's in it" (docs/07-tagging.md, "\"What's in it\" in the details panel"). */
+export const whatsInItText = {
+  off: "Tagging is off.",
+  settings: "Settings",
+  notWorking: "Not working: a chosen model is damaged or would not load. See Settings.",
+  notLookedAt: "Not looked at yet",
+  waitingFor: (label: string) => `Waiting for ${label}`,
+  couldNotLook: "Couldn't look at this photo",
+  tryAgain: "Try again",
+  writtenBy: (label: string) => `Written by ${label}`,
+  regenerate: "Regenerate",
+  regenerating: "Writing a new description…",
+  regenerateLabel: "Regenerate the description",
+  regenerateTooltip: (label: string) => `Ask ${label} to describe this photo again`,
+  keywords: "Keywords",
+  objects: "Objects",
+  filterOn: "Show only photos with this",
+  filterOff: "Stop filtering by this",
+  count: (label: string, count: number) => (count > 1 ? `${label} ×${count}` : label),
+};

@@ -1,0 +1,42 @@
+/* "What's in it" (docs/07-tagging.md, "\"What's in it\" in the details panel"). */
+
+.ow-whatsinit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.ow-whatsinit__description {
+  font: var(--text-md);
+}
+
+.ow-whatsinit__label {
+  font: var(--text-sm);
+  color: var(--muted);
+}
+
+.ow-whatsinit__chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+}
+
+.ow-whatsinit__error {
+  font: var(--text-sm);
+  color: var(--error);
+}
+
+.ow-whatsinit__link {
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: inherit;
+  text-decoration: underline;
+  cursor: pointer;
+}
+
+/* A filter chip here has no remove button, so it keeps its padding. */
+.ow-whatsinit__chips .ow-chip--active {
+  padding-right: var(--space-3);
+}

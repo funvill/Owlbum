@@ -9,6 +9,10 @@ the window's title shows the version that is running.
 
 ## [Unreleased]
 
+### Fixed
+
+- The update notice and the About box no longer send you to the Help menu, which is gone; the setting is in Settings.
+
 ## [0.1.6] - 2026-11-27
 
 ### Added

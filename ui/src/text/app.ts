@@ -63,7 +63,7 @@ export const aboutText = {
   description:
     "Look through folders of photos, star the best ones, find things by what is in them, and drag photos into other programs.",
   network:
-    "Everything stays on this computer. Owlbum uses the network only for OpenStreetMap map tiles, and only after you choose Load maps on the Map tab; to download photo-tagging models from Hugging Face when you ask for one in Settings; and to check GitHub for a new version once a day, unless you turn that off in Help.",
+    "Everything stays on this computer. Owlbum uses the network only for OpenStreetMap map tiles, and only after you choose Load maps on the Map tab; to download photo-tagging models from Hugging Face when you ask for one in Settings; and to check GitHub for a new version once a day, unless you turn that off in Settings.",
   dataFolder: "Its thumbnails, settings and models are kept in:",
   credits: "Built from the open-source project funvill/Owlbum on GitHub, under the MIT License.",
   includes: "It includes software from other projects, each under its own licence: see Third-party notices.",
@@ -112,7 +112,7 @@ export const taggingSettingsText = {
 export const updateText = {
   title: "Owlbum",
   notice:
-    "Owlbum checks GitHub for a new version once a day. Nothing about you or your photos is sent. You can turn this off in Help or Settings.",
+    "Owlbum checks GitHub for a new version once a day. Nothing about you or your photos is sent. You can turn this off in Settings.",
   turnOff: "Turn off",
   ok: "OK",
   found: (latest: string, current: string) => `Owlbum ${latest} is available (you have ${current}).`,

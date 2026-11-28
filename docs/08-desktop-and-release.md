@@ -412,7 +412,7 @@ One check, one offer, one download and one install question exist at a time. A s
 
 On the first start, the page shows a notice on the start screen. No update check runs before it is answered.
 
-> Owlbum checks GitHub for a new version once a day. Nothing about you or your photos is sent. You can turn this off in Help or Settings.
+> Owlbum checks GitHub for a new version once a day. Nothing about you or your photos is sent. You can turn this off in Settings.
 >
 > **Turn off** · **OK**
 
@@ -561,7 +561,7 @@ The paragraphs, in order:
 
 1. `Owlbum <version>` and `Version <version> (<platform> <architecture>)`. On Linux the package kind follows: `deb` or `AppImage`.
 2. The product description.
-3. The network statement, word for word: "Everything stays on this computer. Owlbum uses the network only for OpenStreetMap map tiles, and only after you choose Load maps on the Map tab; to download photo-tagging models from Hugging Face when you ask for one in Settings; and to check GitHub for a new version once a day, unless you turn that off in Help."
+3. The network statement, word for word: "Everything stays on this computer. Owlbum uses the network only for OpenStreetMap map tiles, and only after you choose Load maps on the Map tab; to download photo-tagging models from Hugging Face when you ask for one in Settings; and to check GitHub for a new version once a day, unless you turn that off in Settings."
 4. "Its thumbnails, settings and models are kept in:" and the app data folder.
 5. The credits: "Built from the open-source project funvill/Owlbum on GitHub, under the MIT License." then the copyright line from `LICENSE`, then "It includes software from other projects, each under its own licence: see "Third-party notices"."
 

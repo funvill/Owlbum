@@ -34,6 +34,7 @@
     "category": "Photography",
     "shortDescription": "Look through folders of photos, star the best ones, find things by what is in them, and drag photos into other programs.",
     "licenseFile": "../LICENSE",
+    "resources": { "../LICENSE": "LICENSE.txt" },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
@@ -42,5 +43,12 @@
       "icons/icon.ico"
     ],
     "createUpdaterArtifacts": false
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "",
+      "endpoints": ["https://github.com/funvill/Owlbum/releases/latest/download/latest.json"],
+      "windows": { "installMode": "quiet" }
+    }
   }
 }

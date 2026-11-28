@@ -39,3 +39,7 @@ pub const PICKING_FOLDER: &str = "showing the folder dialog";
 
 /// What failed when the browser could not be opened.
 pub const OPENING_ADDRESS: &str = "opening the address in your browser";
+
+/// Doing: opening a file or folder in the user's own program (the licence,
+/// the notices, the log folder).
+pub const OPENING_FILE: &str = "opening the file";

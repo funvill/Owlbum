@@ -29,4 +29,9 @@ copyright: string,
  * The project's address, shown as the link's text. The link itself is
  * followed by `app_open_repository`: the page never opens an address.
  */
-repository: string, };
+repository: string, 
+/**
+ * Whether `THIRD-PARTY-NOTICES.txt` is among the program's resources;
+ * the About box shows its button only then.
+ */
+has_notices: boolean, };

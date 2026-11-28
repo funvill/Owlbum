@@ -3,6 +3,7 @@
 
 import type { About } from "./About";
 import type { AppClosing } from "./AppClosing";
+import type { AppFatal } from "./AppFatal";
 import type { AppMenu } from "./AppMenu";
 import type { AppVersion } from "./AppVersion";
 import type { CacheCleared } from "./CacheCleared";
@@ -16,32 +17,53 @@ import type { OpenFolder } from "./OpenFolder";
 import type { Recent } from "./Recent";
 import type { Settings } from "./Settings";
 import type { Startup } from "./Startup";
+import type { UpdateMessage } from "./UpdateMessage";
+import type { UpdateState } from "./UpdateState";
+import type { WhatsNewEntry } from "./WhatsNewEntry";
 
 export type AppCommands = {
   app_about: { args: Record<string, never>; result: About };
   app_cache_clear: { args: Record<string, never>; result: CacheCleared };
   app_cache_usage: { args: Record<string, never>; result: CacheUsage };
   app_capabilities: { args: Record<string, never>; result: Capabilities };
+  app_check_updates: { args: Record<string, never>; result: null };
   app_close_ready: { args: Record<string, never>; result: null };
+  app_copy_details: { args: Record<string, never>; result: null };
   app_country_at: { args: { lat: number; lon: number }; result: string | null };
   app_formats: { args: Record<string, never>; result: Array<FormatInfo> };
+  app_log: { args: { level: string; message: string }; result: null };
   app_open_feedback: { args: Record<string, never>; result: null };
+  app_open_licence: { args: Record<string, never>; result: null };
+  app_open_log_folder: { args: Record<string, never>; result: null };
+  app_open_notices: { args: Record<string, never>; result: null };
+  app_open_release_notes: { args: Record<string, never>; result: null };
+  app_open_release_page: { args: Record<string, never>; result: null };
   app_open_repository: { args: Record<string, never>; result: null };
   app_pick_folder: { args: Record<string, never>; result: string | null };
   app_place_search: { args: { text: string }; result: Array<CountryMatch> };
   app_quit: { args: Record<string, never>; result: null };
   app_recent_list: { args: Record<string, never>; result: Array<Recent> };
   app_recent_remove: { args: { root: string }; result: Array<Recent> };
+  app_restart: { args: Record<string, never>; result: null };
   app_session_save: { args: { session: JsonValue }; result: null };
   app_settings_get: { args: Record<string, never>; result: Settings };
   app_settings_set: { args: { patch: { [key in string]: JsonValue } }; result: Settings };
   app_startup: { args: Record<string, never>; result: Startup };
+  app_update_download: { args: Record<string, never>; result: null };
+  app_update_install: { args: Record<string, never>; result: null };
+  app_update_notice_answer: { args: { keep_on: boolean }; result: Settings };
+  app_update_state: { args: Record<string, never>; result: UpdateState };
   app_version: { args: Record<string, never>; result: AppVersion };
+  app_whats_new: { args: Record<string, never>; result: Array<WhatsNewEntry> };
+  app_whats_new_seen: { args: Record<string, never>; result: null };
 };
 
 export type AppEvents = {
   app_closing: AppClosing;
+  app_fatal: AppFatal;
   app_menu: AppMenu;
   folder_drop: FolderDrop;
   open_folder: OpenFolder;
+  update_message: UpdateMessage;
+  update_state: UpdateState;
 };

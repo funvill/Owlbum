@@ -42,7 +42,6 @@ Owlbum/
     src/commands/         one module per command prefix, and the registry that collects them
     src/bindings.rs       writes the page's TypeScript types from the registry
     capabilities/         what the window is allowed to call
-    whats-new.json        release notes bundled with the program
   ui/                     the React page (Vite, TypeScript, Vitest)
     src/api/              the only module that calls Tauri; everything else imports from here
     src/api/bindings/     generated from Rust and committed: command, event and payload types
@@ -156,6 +155,8 @@ An event is pushed from Rust to the page. There is no polling anywhere.
 | `app_closing` | `{}` | The window is about to close; the page finishes what it is doing and answers with `app_close_ready`. |
 | `app_fatal` | `{ title, message, advice, details }` | Something failed that the page should show before the program stops. |
 | `update_state` | `{ state, version?, percent? }` | The updater's state changed. `state` is `unavailable`, `idle`, `checking`, `available`, `downloading`, `ready` or `installing`. |
+| `update_message` | `{ kind, … }` | What a check, download or install came to; the page shows it as a dialog ([Desktop and release](08-desktop-and-release.md#messages)). |
+| `app_fatal` | `{ title, message }` | A fatal error the page shows ([Desktop and release](08-desktop-and-release.md#the-fatal-error-dialog)). |
 
 `album_changed.reason` is one of:
 

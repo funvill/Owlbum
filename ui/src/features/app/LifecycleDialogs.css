@@ -1,0 +1,27 @@
+/* What's new (docs/08-desktop-and-release.md, "What's new"). */
+
+.ow-whats-new {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ow-whats-new ul {
+  margin: 0;
+  padding-left: var(--space-5);
+}
+
+.ow-whats-new li + li {
+  margin-top: var(--space-2);
+}
+
+.ow-whats-new__version {
+  font: var(--text-lg);
+  letter-spacing: var(--tracking-heading);
+}
+
+.ow-whats-new__heading {
+  margin-top: var(--space-2);
+  margin-bottom: var(--space-2);
+  color: var(--muted);
+}

@@ -7,6 +7,9 @@ use crate::handoff::Handoff;
 use crate::session::Session;
 use crate::{area, command};
 use owlbum_core::album::reopen;
+use owlbum_core::app::fatal::AppFatal;
+use owlbum_core::app::update::{self as update_rules, UpdateMessage, UpdateState};
+use owlbum_core::app::whats_new::{self, WhatsNewEntry};
 use owlbum_core::app::{
     self, About, AppClosing, AppMenu, AppVersion, FolderDrop, OpenFolder, Startup,
 };
@@ -26,23 +29,38 @@ area! {
         app_cache_clear,
         app_cache_usage,
         app_capabilities,
+        app_check_updates,
         app_close_ready,
+        app_copy_details,
         app_country_at,
         app_formats,
+        app_log,
         app_open_feedback,
+        app_open_licence,
+        app_open_log_folder,
+        app_open_notices,
+        app_open_release_notes,
+        app_open_release_page,
         app_open_repository,
         app_pick_folder,
         app_place_search,
         app_quit,
         app_recent_list,
         app_recent_remove,
+        app_restart,
         app_session_save,
         app_settings_get,
         app_settings_set,
         app_startup,
+        app_update_download,
+        app_update_install,
+        app_update_notice_answer,
+        app_update_state,
         app_version,
+        app_whats_new,
+        app_whats_new_seen,
     ],
-    events: [AppClosing, AppMenu, FolderDrop, OpenFolder],
+    events: [AppClosing, AppFatal, AppMenu, FolderDrop, OpenFolder, UpdateMessage, UpdateState],
 }
 
 command! {
@@ -50,7 +68,255 @@ command! {
     pub fn app_about<R: Runtime>(; app: AppHandle<R>, data: State<'_, AppData>) -> About {
         let dev = crate::is_dev_build(cfg!(debug_assertions), &app.config().identifier);
         let package = app::package_kind(dev, std::env::var_os("APPIMAGE").is_some());
-        Ok(app::about(data.dir(), package))
+        let has_notices = resource(&app, NOTICES_FILE).is_some_and(|p| p.is_file());
+        Ok(app::about(data.dir(), package, has_notices))
+    }
+}
+
+/// The licence, among the program's resources.
+pub const LICENCE_FILE: &str = "LICENSE.txt";
+/// The generated third-party notices, among the program's resources.
+pub const NOTICES_FILE: &str = "THIRD-PARTY-NOTICES.txt";
+
+/// A file among the program's resources.
+fn resource<R: Runtime>(app: &AppHandle<R>, name: &str) -> Option<PathBuf> {
+    app.path().resource_dir().ok().map(|d| d.join(name))
+}
+
+/// The error of a file or folder that could not be opened.
+fn cannot_open(e: &dyn std::fmt::Display) -> AppError {
+    AppError::internal(text::appdata::OPENING_FILE)
+        .with_details(serde_json::json!({ "cause": e.to_string() }))
+}
+
+/// Opens a text file in the user's own program; a file that cannot be
+/// opened is shown in its folder instead, and the failure is logged
+/// (docs/08-desktop-and-release.md, "About box").
+fn open_text(path: &std::path::Path) -> Result<(), AppError> {
+    if let Err(e) = tauri_plugin_opener::open_path(path, None::<&str>) {
+        tracing::warn!(target: "app", "{} could not be opened: {e}", path.display());
+        let folder = path.parent().unwrap_or(path);
+        tauri_plugin_opener::open_path(folder, None::<&str>).map_err(|e| cannot_open(&e))?;
+    }
+    Ok(())
+}
+
+command! {
+    /// The About box's Licence: `LICENSE.txt` from the program's resources.
+    /// When the resource is missing (a development build), the licence
+    /// compiled into the program is written to the app data folder and
+    /// opened from there.
+    pub fn app_open_licence<R: Runtime>(; app: AppHandle<R>, data: State<'_, AppData>) -> () {
+        let path = match resource(&app, LICENCE_FILE).filter(|p| p.is_file()) {
+            Some(p) => p,
+            None => {
+                let p = data.dir().join(LICENCE_FILE);
+                std::fs::write(&p, app::LICENCE).map_err(|e| cannot_open(&e))?;
+                p
+            }
+        };
+        open_text(&path)
+    }
+}
+
+command! {
+    /// The About box's Third-party notices: `THIRD-PARTY-NOTICES.txt` from
+    /// the program's resources. The button shows only when it exists.
+    pub fn app_open_notices<R: Runtime>(; app: AppHandle<R>) -> () {
+        let path = resource(&app, NOTICES_FILE)
+            .ok_or_else(|| AppError::internal(text::appdata::OPENING_FILE))?;
+        open_text(&path)
+    }
+}
+
+command! {
+    /// Help > Check for updates…, the About box or Settings: the manual
+    /// check. Its result arrives as `update_state` and `update_message`
+    /// (docs/08-desktop-and-release.md, "Updates").
+    pub fn app_check_updates<R: Runtime>(; app: AppHandle<R>) -> () {
+        crate::update::check(&app, true);
+        Ok(())
+    }
+}
+
+command! {
+    /// The updater's state now, for the page's first look.
+    pub fn app_update_state<R: Runtime>(; app: AppHandle<R>) -> UpdateState {
+        Ok(app
+            .try_state::<crate::update::Updates>()
+            .map_or(
+                UpdateState {
+                    state: update_rules::UpdateStateKind::Unavailable,
+                    version: None,
+                    percent: None,
+                },
+                |u| u.current(),
+            ))
+    }
+}
+
+command! {
+    /// Download: starts the download of the offered version.
+    pub fn app_update_download<R: Runtime>(; app: AppHandle<R>) -> () {
+        crate::update::download(&app);
+        Ok(())
+    }
+}
+
+command! {
+    /// Restart now: the install steps, through the closing steps.
+    pub fn app_update_install<R: Runtime>(; app: AppHandle<R>) -> () {
+        crate::update::install(&app);
+        Ok(())
+    }
+}
+
+command! {
+    /// The answer to the first-start notice (docs/08, "What the first start
+    /// says"): OK keeps the daily check on, Turn off turns it off. Either
+    /// way the notice is never shown again, and after OK the quiet check
+    /// may run in this session.
+    pub async fn app_update_notice_answer<R: Runtime>(
+        keep_on: bool;
+        app: AppHandle<R>,
+        data: State<'_, AppData>
+    ) -> Settings {
+        let data = data.inner().clone();
+        let settings = blocking(move || {
+            let patch = serde_json::json!({ "updates.notice_seen": true, "updates.auto": keep_on });
+            data.set_settings(patch.as_object().expect("an object"))
+        })
+        .await?;
+        crate::menu::updates_auto(&app, settings.updates_auto);
+        crate::update::start_quiet(&app);
+        Ok(settings)
+    }
+}
+
+command! {
+    /// The newest release's page, from the update messages.
+    pub fn app_open_release_page<R: Runtime>(; app: AppHandle<R>) -> () {
+        open_fixed(&app, update_rules::RELEASE_PAGE_URL)
+    }
+}
+
+command! {
+    /// Release notes of the offered version. The page passes no address
+    /// and no version: Rust holds the offered one.
+    pub fn app_open_release_notes<R: Runtime>(; app: AppHandle<R>) -> () {
+        let version = app
+            .try_state::<crate::update::Updates>()
+            .and_then(|u| u.current().version)
+            .ok_or_else(|| AppError::internal(text::appdata::OPENING_ADDRESS))?;
+        open_address(&app, &update_rules::release_notes_url(&version))
+    }
+}
+
+command! {
+    /// Help > What's new: the running version's notes, or none
+    /// (docs/08-desktop-and-release.md, "What's new"). Never changes
+    /// `whats_new.last_seen`.
+    pub fn app_whats_new() -> Vec<WhatsNewEntry> {
+        let entries = whats_new::parse(whats_new::CHANGELOG);
+        Ok(whats_new::for_version(&app::version().version, &entries))
+    }
+}
+
+command! {
+    /// The What's new dialog shown at start was closed: records the
+    /// running version as `whats_new.last_seen`.
+    pub async fn app_whats_new_seen(; data: State<'_, AppData>) -> () {
+        let data = data.inner().clone();
+        blocking(move || {
+            let patch = serde_json::json!({ "whats_new.last_seen": app::version().version });
+            data.set_settings(patch.as_object().expect("an object")).map(|_| ())
+        })
+        .await
+    }
+}
+
+command! {
+    /// The page reports an error or warning for the log (area `page`). At
+    /// most 2,000 characters a line and 100 lines a minute; more are
+    /// dropped. `level` is `error`, `warn` or anything else for `info`.
+    pub fn app_log(level: String, message: String) -> () {
+        if PAGE_LOG.allow(std::time::Instant::now()) {
+            let message: String = message.chars().take(PAGE_LOG_MAX_CHARS).collect();
+            match level.as_str() {
+                "error" => tracing::error!(target: "page", "{message}"),
+                "warn" => tracing::warn!(target: "page", "{message}"),
+                _ => tracing::info!(target: "page", "{message}"),
+            }
+        }
+        Ok(())
+    }
+}
+
+/// The longest line the page may log.
+pub const PAGE_LOG_MAX_CHARS: usize = 2_000;
+/// The most lines the page may log in a minute.
+pub const PAGE_LOG_PER_MINUTE: u32 = 100;
+
+static PAGE_LOG: PageLog = PageLog::new();
+
+/// Counts the page's log lines per minute.
+pub struct PageLog(std::sync::Mutex<Option<(std::time::Instant, u32)>>);
+
+impl PageLog {
+    pub const fn new() -> Self {
+        Self(std::sync::Mutex::new(None))
+    }
+
+    /// Whether one more line may be written at `now`.
+    pub fn allow(&self, now: std::time::Instant) -> bool {
+        let mut w = self
+            .0
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner);
+        match &mut *w {
+            Some((start, n)) if now.duration_since(*start) < std::time::Duration::from_secs(60) => {
+                *n += 1;
+                *n <= PAGE_LOG_PER_MINUTE
+            }
+            _ => {
+                *w = Some((now, 1));
+                true
+            }
+        }
+    }
+}
+
+impl Default for PageLog {
+    fn default() -> Self {
+        Self::new()
+    }
+}
+
+command! {
+    /// The fatal dialog's Copy details: the technical block on the
+    /// clipboard. The page is never sent the block itself.
+    pub fn app_copy_details() -> () {
+        crate::fatal::copy_details();
+        Ok(())
+    }
+}
+
+command! {
+    /// The fatal dialog's Open the log folder.
+    pub fn app_open_log_folder() -> () {
+        let folder = crate::fatal::log_folder()
+            .ok_or_else(|| AppError::internal(text::appdata::OPENING_FILE))?;
+        tauri_plugin_opener::open_path(&folder, None::<&str>).map_err(|e| cannot_open(&e))
+    }
+}
+
+command! {
+    /// The fatal dialog's Restart: starts Owlbum again and ends this copy.
+    /// The closing steps are not run: the part that failed cannot be
+    /// trusted to close.
+    pub fn app_restart<R: Runtime>(; app: AppHandle<R>) -> () {
+        crate::fatal::quitting();
+        app.restart()
     }
 }
 
@@ -66,6 +332,12 @@ pub type OpenAddress = dyn Fn(&str) -> Result<(), String> + Send + Sync;
 /// an address (docs/08-desktop-and-release.md, "Navigation and new
 /// windows").
 pub fn open_fixed<R: Runtime>(app: &AppHandle<R>, url: &'static str) -> Result<(), AppError> {
+    open_address(app, url)
+}
+
+/// Opens an address the program made itself: a fixed address, or the
+/// release notes of the version Rust holds.
+fn open_address<R: Runtime>(app: &AppHandle<R>, url: &str) -> Result<(), AppError> {
     let browser = app
         .try_state::<Browser>()
         .ok_or_else(|| AppError::internal(text::appdata::OPENING_ADDRESS))?;
@@ -272,8 +544,25 @@ command! {
             let launch_folder = app.try_state::<Handoff>().and_then(|h| h.start());
             let reopen = app::reopen(launch_folder.as_deref(), settings.reopen_last, &recent);
             let dev = crate::is_dev_build(cfg!(debug_assertions), &app.config().identifier);
+            // What's new (docs/08, "What's new"): shown now and recorded
+            // when its dialog closes, or recorded at once.
+            let version = app::version().version;
+            let off = dev || whats_new::env_off(std::env::var_os(whats_new::OFF_VAR).as_deref());
+            let entries = whats_new::parse(whats_new::CHANGELOG);
+            let news =
+                whats_new::at_start(&version, settings.whats_new_last_seen.as_deref(), off, &entries);
+            let settings = match &news.record {
+                Some(seen) => data.set_settings(
+                    serde_json::json!({ "whats_new.last_seen": seen })
+                        .as_object()
+                        .expect("an object"),
+                )?,
+                None => settings,
+            };
             // Startup step 10: the page has drawn.
+            crate::fatal::page_started();
             crate::show_window(&app);
+            crate::update::start_quiet(&app);
             Ok(Startup {
                 version: app::version().version,
                 platform: std::env::consts::OS.to_owned(),
@@ -281,6 +570,7 @@ command! {
                 package: app::package_kind(dev, std::env::var_os("APPIMAGE").is_some()).to_owned(),
                 dev,
                 show_update_notice: !settings.updates_notice_seen,
+                whats_new: news.show,
                 settings,
                 recent,
                 launch_folder,

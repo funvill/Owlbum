@@ -146,6 +146,7 @@ export const appHandlers: AreaHandlers<AppCommands> = {
     data_dir: "C:\\Users\\sam\\AppData\\Local\\OwlbumData",
     copyright: "Copyright (c) 2026 Owlbum contributors",
     repository: "https://github.com/funvill/Owlbum",
+    has_notices: true,
   }),
   // An empty cache at the default limit. A test that needs a size replaces these.
   app_cache_clear: () => ({ bytes_freed: 0 }),
@@ -169,6 +170,26 @@ export const appHandlers: AreaHandlers<AppCommands> = {
   // Opening the browser does nothing here; tests read the calls.
   app_open_feedback: () => null,
   app_open_repository: () => null,
+  app_open_licence: () => null,
+  app_open_notices: () => null,
+  app_open_log_folder: () => null,
+  app_open_release_page: () => null,
+  app_open_release_notes: () => null,
+  app_copy_details: () => null,
+  app_restart: () => null,
+  app_log: () => null,
+  // A development build: no updater (docs/08, "States").
+  app_check_updates: () => null,
+  app_update_state: () => ({ state: "unavailable", version: null, percent: null }),
+  app_update_download: () => null,
+  app_update_install: () => null,
+  app_update_notice_answer: ({ keep_on }) => ({
+    ...structuredClone(defaultSettings),
+    "updates.notice_seen": true,
+    "updates.auto": keep_on,
+  }),
+  app_whats_new: () => [],
+  app_whats_new_seen: () => null,
   app_place_search: ({ text }) => placeSearch(fakeCountries, text),
   app_quit: () => null,
   app_recent_list: () => [],
@@ -206,6 +227,7 @@ export const appHandlers: AreaHandlers<AppCommands> = {
     launch_folder: null,
     reopen: null,
     show_update_notice: false,
+    whats_new: [],
   }),
   app_version: () => ({ version: "0.0.0-fake" }),
 };

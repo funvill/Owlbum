@@ -37,11 +37,23 @@ enum Phase {
     Ready,
 }
 
+/// Why the program is closing. The shell keeps it to itself; the page is
+/// told only that it is closing.
+#[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
+pub enum Reason {
+    /// The window's close button, File > Quit or `app_quit`.
+    #[default]
+    Close,
+    /// An update install: the install follows the closing steps.
+    Update,
+}
+
 /// The close handshake's state, managed by `setup`.
 #[derive(Debug, Default)]
 pub struct Closing {
     phase: Mutex<Phase>,
     changed: Condvar,
+    reason: Mutex<Reason>,
 }
 
 impl Closing {
@@ -103,10 +115,20 @@ impl Closing {
 /// The window was asked to close: hold the close and run the handshake on
 /// a thread of its own. Answers true when the close must be held.
 pub fn requested<R: Runtime>(app: &AppHandle<R>) -> bool {
+    requested_for(app, Reason::Close)
+}
+
+/// Starts the closing steps for a reason. With [`Reason::Update`] the
+/// install runs after them instead of the exit.
+pub fn requested_for<R: Runtime>(app: &AppHandle<R>, reason: Reason) -> bool {
     let Some(closing) = app.try_state::<Closing>() else {
         return false;
     };
     if closing.begin() {
+        *closing
+            .reason
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = reason;
         let app = app.clone();
         std::thread::Builder::new()
             .name("owlbum-close".into())
@@ -121,6 +143,10 @@ pub fn requested<R: Runtime>(app: &AppHandle<R>) -> bool {
 /// The closing steps after the close was held.
 fn run<R: Runtime>(app: &AppHandle<R>) {
     let closing = app.state::<Closing>();
+    let reason = *closing
+        .reason
+        .lock()
+        .unwrap_or_else(PoisonError::into_inner);
     let saves_running = || {
         app.state::<Session>()
             .scanner()
@@ -154,11 +180,16 @@ fn run<R: Runtime>(app: &AppHandle<R>) {
             if !go_on {
                 scanner.album().saves().resume();
                 closing.cancel();
+                if reason == Reason::Update {
+                    crate::update::called_off(app);
+                }
                 return;
             }
         }
     }
     drop(scanner);
+    // Nothing fatal is reported from here on.
+    crate::fatal::quitting();
     // 3. The window geometry.
     crate::window::save(app);
     // 4. Tagging stops: the download is cancelled, the run in hand is told
@@ -166,7 +197,12 @@ fn run<R: Runtime>(app: &AppHandle<R>) {
     crate::commands::tagging::shutdown(app);
     // 5. Close the album: its writer finishes and its lock goes.
     app.state::<Session>().close();
-    // 6. Exit.
+    // 6. Exit, or install the update, which starts the new version.
+    if reason == Reason::Update {
+        tracing::info!(target: "app", "closing to install the update");
+        crate::update::after_close(app);
+        return;
+    }
     tracing::info!(target: "app", "closing");
     app.exit(0);
 }

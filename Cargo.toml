@@ -35,6 +35,14 @@ tauri-plugin-dialog = "2"
 # "Single instance and second launches"). Not registered when
 # OWLBUM_DATA_DIR is set.
 tauri-plugin-single-instance = "2"
+# Update check, download and install (docs/08-desktop-and-release.md,
+# "Updates"), driven only from Rust; nothing is granted to the page. It
+# verifies every download with the public key in tauri.conf.json.
+tauri-plugin-updater = "2"
+# The native fatal error box (docs/08, "The fatal error dialog"), shown
+# when Tauri cannot be trusted. The version and features the dialog
+# plugin already uses.
+rfd = { version = "0.17", default-features = false, features = ["common-controls-v6"] }
 # Only for the shell's test that every menu accelerator in the key table
 # parses the way Tauri's menu builder parses it. The version Tauri uses.
 muda = { version = "0.20", default-features = false }

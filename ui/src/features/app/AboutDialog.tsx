@@ -4,6 +4,7 @@ import type { About } from "../../api/bindings/About";
 import ownLogo from "../../assets/owlbum-icon.png";
 import { Button, Dialog, showToast } from "../../controls";
 import { aboutText as t } from "../../text/app";
+import { updateCommand, useLifecycle } from "./lifecycle";
 import "./AboutDialog.css";
 
 interface AboutDialogProps {
@@ -11,8 +12,10 @@ interface AboutDialogProps {
   onClose: () => void;
 }
 
-/** Opens one of Owlbum's fixed addresses in the browser; a failure is a toast. */
-function openFixed(command: "app_open_repository" | "app_open_feedback"): void {
+/** Opens one of Owlbum's fixed addresses or files; a failure is a toast. */
+function openFixed(
+  command: "app_open_repository" | "app_open_feedback" | "app_open_licence" | "app_open_notices",
+): void {
   api()
     .invoke(command)
     .catch((e: unknown) => showToast({ kind: "error", message: toAppError(e).message }));
@@ -25,6 +28,8 @@ function openFixed(command: "app_open_repository" | "app_open_feedback"): void {
  * never opens an address itself: the link asks Rust to.
  */
 export function AboutDialog({ open, onClose }: AboutDialogProps) {
+  const canUpdate = useLifecycle((s) => s.update.state !== "unavailable");
+  const [hasNotices, setHasNotices] = useState(false);
   return (
     <Dialog
       open={open}
@@ -32,6 +37,18 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
       onClose={onClose}
       actions={
         <>
+          {canUpdate && (
+            <Button
+              onClick={() => {
+                onClose();
+                updateCommand("app_check_updates");
+              }}
+            >
+              {t.checkForUpdates}
+            </Button>
+          )}
+          <Button onClick={() => openFixed("app_open_licence")}>{t.licence}</Button>
+          {hasNotices && <Button onClick={() => openFixed("app_open_notices")}>{t.notices}</Button>}
           <Button onClick={() => openFixed("app_open_feedback")}>{t.feedback}</Button>
           <Button kind="primary" data-autofocus onClick={onClose}>
             {t.ok}
@@ -39,12 +56,12 @@ export function AboutDialog({ open, onClose }: AboutDialogProps) {
         </>
       }
     >
-      <AboutBody />
+      <AboutBody onNotices={setHasNotices} />
     </Dialog>
   );
 }
 
-function AboutBody() {
+function AboutBody({ onNotices }: { onNotices: (has: boolean) => void }) {
   const [about, setAbout] = useState<About | null>(null);
   useEffect(() => {
     let live = true;
@@ -52,14 +69,16 @@ function AboutBody() {
       .invoke("app_about")
       .then(
         (a) => {
-          if (live) setAbout(a);
+          if (!live) return;
+          setAbout(a);
+          onNotices(a.has_notices);
         },
         (e: unknown) => showToast({ kind: "error", message: toAppError(e).message }),
       );
     return () => {
       live = false;
     };
-  }, []);
+  }, [onNotices]);
 
   return (
     <div className="ow-about">

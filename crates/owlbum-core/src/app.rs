@@ -11,6 +11,10 @@ use ts_rs::TS;
 use crate::Event;
 use crate::appdata::{Recent, Settings};
 
+pub mod fatal;
+pub mod update;
+pub mod whats_new;
+
 /// The program's version, for `app_version`.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct AppVersion {
@@ -50,6 +54,9 @@ pub struct Startup {
     pub reopen: Option<String>,
     /// True while `updates.notice_seen` is false.
     pub show_update_notice: bool,
+    /// The notes of the versions since `whats_new.last_seen`, newest
+    /// first, to show now; empty shows nothing (docs/08, "What's new").
+    pub whats_new: Vec<whats_new::WhatsNewEntry>,
 }
 
 /// The folder to reopen at start (docs/08-desktop-and-release.md, "Which
@@ -159,9 +166,13 @@ pub const REPOSITORY_URL: &str = "https://github.com/funvill/Owlbum";
 /// the computer is put in the address.
 pub const FEEDBACK_URL: &str = "https://github.com/funvill/Owlbum/issues";
 
+/// The `LICENSE` file, compiled in: the About box's Licence opens a copy
+/// when the program's resources lack one.
+pub const LICENCE: &str = include_str!("../../../LICENSE");
+
 /// The copyright line of the `LICENSE` file, compiled in.
 pub fn copyright() -> &'static str {
-    include_str!("../../../LICENSE")
+    LICENCE
         .lines()
         .find(|l| l.starts_with("Copyright"))
         .unwrap_or("")
@@ -185,10 +196,13 @@ pub struct About {
     /// The project's address, shown as the link's text. The link itself is
     /// followed by `app_open_repository`: the page never opens an address.
     pub repository: String,
+    /// Whether `THIRD-PARTY-NOTICES.txt` is among the program's resources;
+    /// the About box shows its button only then.
+    pub has_notices: bool,
 }
 
 /// The About box's facts for a data folder and package kind.
-pub fn about(data_dir: &Path, package: &str) -> About {
+pub fn about(data_dir: &Path, package: &str, has_notices: bool) -> About {
     About {
         version: version().version,
         platform: std::env::consts::OS.to_owned(),
@@ -197,6 +211,7 @@ pub fn about(data_dir: &Path, package: &str) -> About {
         data_dir: data_dir.display().to_string(),
         copyright: copyright().to_owned(),
         repository: REPOSITORY_URL.to_owned(),
+        has_notices,
     }
 }
 
@@ -250,7 +265,7 @@ mod tests {
 
     #[test]
     fn about_names_the_version_the_repository_and_the_licence() {
-        let a = about(Path::new("/data"), "dev");
+        let a = about(Path::new("/data"), "dev", false);
         assert_eq!(a.version, env!("CARGO_PKG_VERSION"));
         assert_eq!(a.repository, "https://github.com/funvill/Owlbum");
         assert!(a.copyright.starts_with("Copyright (c) "), "{}", a.copyright);

@@ -11,6 +11,18 @@ the window's title shows the version that is running.
 
 ### Added
 
+- After an update, Owlbum shows what changed since the version you last
+  ran. Help > What's new shows this version's notes at any time.
+- Updates: Help > Check for updates, Check now in Settings and the About
+  box look for a new version on GitHub. A new version can be downloaded
+  and installed from Owlbum, which closes and starts again. The daily check
+  starts only after you answer the notice on the first start, and can be
+  turned off. Until the project's release signing is set up, Owlbum says
+  it cannot update itself.
+- The About box has a Licence button.
+- If Owlbum fails badly it shows a message, with Copy details, Open the
+  log folder and Restart, instead of vanishing. Errors in the window are
+  written to Owlbum's log.
 - F6 and Shift+F6 move the keyboard focus between the top bar, the filter
   bar, the grid, the preview and the details panel, and back to where it
   was in each.

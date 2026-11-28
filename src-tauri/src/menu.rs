@@ -72,9 +72,9 @@ pub const RESCAN: &str = "file.rescan";
 pub const DATA_FOLDER: &str = "file.data_folder";
 pub const CHECK_AUTOMATICALLY: &str = "help.check_automatically";
 pub const WHATS_NEW: &str = "help.whats_new";
+pub const UPDATE: &str = "help.update";
 
-/// Every line of the menu bar, in order. The update item of Help comes with
-/// the updater (#62).
+/// Every line of the menu bar, in order.
 pub const ENTRIES: &[Entry] = &[
     item(Bar::File, "app.open_folder", text::OPEN_FOLDER),
     item(Bar::File, "app.close_folder", text::CLOSE_FOLDER),
@@ -94,6 +94,7 @@ pub const ENTRIES: &[Entry] = &[
     },
     item(Bar::Help, "app.shortcuts", text::SHORTCUTS),
     separator(Bar::Help),
+    item(Bar::Help, UPDATE, text::CHECK_FOR_UPDATES),
     Entry {
         kind: Kind::Check,
         ..item(Bar::Help, CHECK_AUTOMATICALLY, text::CHECK_AUTOMATICALLY)
@@ -128,6 +129,7 @@ pub struct MenuState<R: Runtime> {
     close_folder: MenuItem<R>,
     rescan: MenuItem<R>,
     auto: CheckMenuItem<R>,
+    update: MenuItem<R>,
 }
 
 /// The items [`MenuState`] keeps, found while building.
@@ -135,6 +137,7 @@ struct Found<R: Runtime> {
     close_folder: Option<MenuItem<R>>,
     rescan: Option<MenuItem<R>>,
     auto: Option<CheckMenuItem<R>>,
+    update: Option<MenuItem<R>>,
 }
 
 /// Builds the menu bar. Close folder and Rescan start disabled: no album is
@@ -144,6 +147,7 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, dev: bool, auto: bool) -> tauri::Re
         close_folder: None,
         rescan: None,
         auto: None,
+        update: None,
     };
     let file = submenu(app, Bar::File, text::FILE, dev, auto, &mut found)?;
     let view = submenu(app, Bar::View, text::VIEW, dev, auto, &mut found)?;
@@ -157,12 +161,14 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, dev: bool, auto: bool) -> tauri::Re
         close_folder: Some(close_folder),
         rescan: Some(rescan),
         auto: Some(auto),
+        update: Some(update),
     } = found
     {
         app.manage(MenuState {
             close_folder,
             rescan,
             auto,
+            update,
         });
     }
     Ok(menu)
@@ -199,6 +205,7 @@ fn submenu<R: Runtime>(
                 match entry.id {
                     "app.close_folder" => found.close_folder = Some(built),
                     RESCAN => found.rescan = Some(built),
+                    UPDATE => found.update = Some(built),
                     _ => {}
                 }
                 sub
@@ -223,6 +230,16 @@ pub fn updates_auto<R: Runtime>(app: &AppHandle<R>, auto: bool) {
     }
 }
 
+/// The update state changed: Help's update item follows
+/// (docs/08-desktop-and-release.md, "States").
+pub fn update_item<R: Runtime>(app: &AppHandle<R>, state: &owlbum_core::app::update::UpdateState) {
+    if let Some(menu) = app.try_state::<MenuState<R>>() {
+        let (label, enabled) = owlbum_core::app::update::menu_label(state);
+        let _ = menu.update.set_text(label);
+        let _ = menu.update.set_enabled(enabled);
+    }
+}
+
 /// What choosing an item does.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Action {
@@ -239,6 +256,8 @@ pub enum Action {
     Reload,
     DeveloperTools,
     ToggleUpdatesAuto,
+    /// Help's update item: check, download or install, by the state.
+    Update,
 }
 
 /// The action of the item with this id.
@@ -255,6 +274,7 @@ pub fn action(id: &str) -> Option<Action> {
         "app.shortcuts" => Action::Page(PageItem::Shortcuts),
         CHECK_AUTOMATICALLY => Action::ToggleUpdatesAuto,
         WHATS_NEW => Action::Page(PageItem::WhatsNew),
+        UPDATE => Action::Update,
         "app.feedback" => Action::OpenFeedback,
         "app.about" => Action::Page(PageItem::About),
         _ => return None,
@@ -323,6 +343,7 @@ pub fn chosen<R: Runtime>(app: &AppHandle<R>, id: &str) {
                 }
             }
         }
+        Action::Update => crate::update::menu_chosen(app),
         Action::ToggleUpdatesAuto => {
             if let Some(data) = app.try_state::<AppData>() {
                 let auto = data.settings().map(|s| s.updates_auto).unwrap_or(true);

@@ -168,7 +168,7 @@ Rules:
 - **The menu is rebuilt** when the update state changes, when `updates.auto` changes, and when an album opens or closes.
 - **Menu text** lives in the shell's text module, the Rust counterpart of `ui/src/text/`.
 
-As built (#58, `src-tauri/src/menu.rs`): the items are one table, `menu::ENTRIES`; a shell test fails if a `menu` row of the key table has no item or an item's accelerator has no row. Instead of rebuilding the menu, the shell enables Close folder and Rescan when an album opens or closes and ticks Check automatically when `updates.auto` changes (from the menu or from Settings). The update item is left out until the updater exists (#62). About and Give feedback (F1, F2) came with #61: About sends `app_menu about`; Give feedback is done in Rust, which opens the feedback address itself. What's new sends `app_menu`; the page does nothing with it until #63. The `?` beside Keyboard shortcuts is drawn as the item's key column on Windows (text after a tab); Linux shows the label alone. Open folder runs the native dialog on a thread of its own and hands a chosen folder over as `open_folder`. The single-instance plugin (`tauri-plugin-single-instance`) is registered first, and only when `OWLBUM_DATA_DIR` is not set.
+As built (#58, `src-tauri/src/menu.rs`): the items are one table, `menu::ENTRIES`; a shell test fails if a `menu` row of the key table has no item or an item's accelerator has no row. Instead of rebuilding the menu, the shell enables Close folder and Rescan when an album opens or closes and ticks Check automatically when `updates.auto` changes (from the menu or from Settings). The update item came with the updater (#62); its text and whether it can be chosen follow the update state, and it acts in Rust. About and Give feedback (F1, F2) came with #61: About sends `app_menu about`; Give feedback is done in Rust, which opens the feedback address itself. What's new sends `app_menu`; the page shows the running version's notes (#63). The `?` beside Keyboard shortcuts is drawn as the item's key column on Windows (text after a tab); Linux shows the label alone. Open folder runs the native dialog on a thread of its own and hands a chosen folder over as `open_folder`. The single-instance plugin (`tauri-plugin-single-instance`) is registered first, and only when `OWLBUM_DATA_DIR` is not set.
 
 ## Settings dialog
 
@@ -495,6 +495,19 @@ Updater artefacts are only built by the release workflow. `bundle.createUpdaterA
 
 `OWLBUM_UPDATE_FEED=<url>` replaces the feed address for that run. It is logged. The files it serves must be signed with the same key, because verification still applies. A release build accepts only `https://` addresses; a development build also accepts `http://127.0.0.1`.
 
+### As built (#62)
+
+- **Where it lives.** The rules (when the quiet check runs, the feed address, the menu text, `<reason>`) are plain functions in `owlbum_core::app::update`. The state machine is `src-tauri/src/update.rs`; the network work is behind its `UpdateSource` trait. `run` installs `PluginSource`, which drives `tauri-plugin-updater`; shell tests install a fake, and one test runs the real plugin against a feed served on `127.0.0.1` (`src-tauri/tests/lifecycle.rs`). No test reaches the network.
+- **The key.** `plugins.updater.pubkey` in `src-tauri/tauri.conf.json` is `""`, with the GitHub feed as its endpoint and `windows.installMode` `quiet`. While it is empty the state is `unavailable` and the manual check answers "cannot update itself". Putting the public key there is the only change needed. The plugin is registered in every build, but its commands are not granted to the page; the page calls only Owlbum's own `app_` commands.
+- **Development builds** never check, unless `OWLBUM_UPDATE_FEED` is set, so the test feed can be tried from a development build.
+- **Outcomes are events.** Each change is `update_state`; each message of the table above is an `update_message` event `{ kind, … }` (`found`, `up_to_date`, `check_failed`, `dev_build`, `not_set_up`, `download_failed`, `downloaded`, `cannot_install`, `install_failed`), and the page draws it. `app_update_state` answers the state for the page's first look.
+- **404 and other answers that are not a success.** The plugin reports them all the same way, so a 404 and a server error both read as "no release has been published yet" (up to date). A network failure is a failed check.
+- **Help's update item acts in Rust**: it checks, starts the download, or offers the install again, by state. It does not send `app_menu update`.
+- **The first-start notice** is a banner under the top bar, on the start screen and above an open album alike, until answered (`app_update_notice_answer`). After OK the quiet check's clock starts in the same session.
+- **The quiet clock** starts at `app_startup` (or at the notice's answer) only when the updater is set up: 10 seconds, then every 6 hours, testing the rule each time.
+- **Install.** Restart now runs the closing steps with reason `update` (`closing::requested_for`); "Go back" puts the state back to `ready`. After step 4 the plugin installs; on Windows the NSIS installer takes over and the process ends. If the install fails, the log says why and the current version starts again; the "Install failed" message is not shown after that restart.
+- **Not built yet:** the taskbar progress bar; the Linux install checks (AppImage folder writable, `.deb` through `pkexec` with its question). Linux was not run.
+
 ## About box
 
 F1 or Help > About Owlbum opens a page dialog titled `About Owlbum`. Its content comes from `app_about`. The owner's rule (#61): it shows the version and a link to the GitHub repository.
@@ -532,7 +545,7 @@ The paragraphs, in order:
 4. "Its thumbnails, settings and models are kept in:" and the app data folder.
 5. The credits: "Built from the open-source project funvill/Owlbum on GitHub, under the MIT License." then the copyright line from `LICENSE`, then "It includes software from other projects, each under its own licence: see "Third-party notices"."
 
-As built (#61, `ui/src/features/app/AboutDialog.tsx`): the logo is the owner's gold owl (see [Visual design](09-visual-design.md)), a 128 px copy at `ui/src/assets/owlbum-icon.png` drawn at 64 px and bundled with the page. Under the credits is the repository's address, `https://github.com/funvill/Owlbum`, drawn as a link; choosing it calls `app_open_repository`, and Rust opens the address in the user's browser. The buttons are **Give feedback** (as F2) and **OK** (focused; Esc also closes). `Check for updates`, `Licence` and `Third-party notices` are not built yet: the updater (#62) and the bundled licence files come later, and the rows below stay the plan for them. The package kind is not shown on Linux yet.
+As built (#61, `ui/src/features/app/AboutDialog.tsx`): the logo is the owner's gold owl (see [Visual design](09-visual-design.md)), a 128 px copy at `ui/src/assets/owlbum-icon.png` drawn at 64 px and bundled with the page. Under the credits is the repository's address, `https://github.com/funvill/Owlbum`, drawn as a link; choosing it calls `app_open_repository`, and Rust opens the address in the user's browser. The buttons are **Give feedback** (as F2) and **OK** (focused; Esc also closes). The other buttons came with #62 and the rest of #61: **Check for updates** shows while the updater's state is not `unavailable`; **Licence** opens `LICENSE.txt` from the resources (`bundle.resources` copies the repository's `LICENSE` there) or, when a development build has none, a copy of the licence compiled into the program, written to the app data folder; **Third-party notices** shows only when `THIRD-PARTY-NOTICES.txt` is among the resources (`app_about` answers `has_notices`). Generating that file (`scripts/notices.mjs`) is not built yet, so the button is hidden for now. The package kind is not shown on Linux yet.
 
 Buttons:
 
@@ -559,16 +572,9 @@ Nothing about the computer is put in the address. No folder, file name, user nam
 
 After an update, Owlbum says what changed.
 
-**The notes** are one file in the repository, `src-tauri/whats-new.json`, compiled into the program. Nothing is fetched.
+**The notes** are the released sections of the repository's `CHANGELOG.md` (Keep a Changelog), compiled into the program. Nothing is fetched. Each `## [x.y.z]` section is one entry, with its `### Added`, `### Changed`, `### Fixed` and `### Removed` groups and one item per bullet (wrapped lines joined). `Unreleased` is never shown, and a version with no items has no entry. A test checks that the file parses, is newest first, and has no version above the workspace version.
 
-```json
-[
-  { "version": "0.2.0", "items": ["Timeline view groups photos by day or month.", "…"] },
-  { "version": "0.1.0", "items": ["The first version of Owlbum."] }
-]
-```
-
-Entries are newest first. A version with nothing worth telling has no entry. A test checks that the file parses, is newest first, and has no version above the workspace version.
+As built (#63, `owlbum_core::app::whats_new`): this replaces the planned `src-tauri/whats-new.json`, so the notes are written once, in the changelog. `app_startup` carries `whats_new`, the entries to show; empty shows nothing.
 
 **When it shows.** `app_startup` compares the running version with `whats_new.last_seen`, part by part as numbers (so `0.1.10` is newer than `0.1.9`).
 
@@ -583,7 +589,7 @@ Entries are newest first. A version with nothing worth telling has no entry. A t
 
 Recording on close means a crash during start shows the notes again next time.
 
-**How it looks.** A page dialog titled `What's new in Owlbum <version>`, with one bullet per item and **OK**. When more than one entry is shown, each sits under its version number.
+**How it looks.** A page dialog titled `What's new in Owlbum <version>`, with one bullet per item under its group's heading, and **OK**. When more than one entry is shown, each sits under its version number.
 
 **Help > What's new** shows the running version's entry at any time, or "Nothing new to show for this version." It never changes `whats_new.last_seen`.
 
@@ -601,6 +607,8 @@ Recording on close means a crash during start shows the notes again next time.
 | Development builds | Lines also go to the console. |
 
 **What is logged:** the start line; an album opening and closing, with its folder and whether it is view-only; scan totals; each file that could not be read, with its path and the reason; trash, copy, reveal, drag and save-edit results as counts; model downloads starting, finishing and failing; update lines (the feed when overridden, each check and its outcome, download, install, call-off); refused navigations and new windows, with their addresses; errors and warnings the page reports through `app_log`; panics with their backtrace; fatal errors with their technical block.
+
+As built: the log file, its fallback and its rotation are `owlbum_core::appdata::log`. `app_log` (#61) writes the page's lines under area `page`; the page sends every uncaught error and unhandled promise rejection (`ui/src/features/app/pageLog.ts`). Lines over 2,000 characters are cut, and lines past 100 in a minute are dropped.
 
 **What is never logged:** pixels or thumbnails; descriptions, notes, people's names, keywords or tags; search text; GPS positions; anything read from a file other than its path and format.
 
@@ -658,6 +666,15 @@ The dialog is drawn in one of two ways:
 
 - **By the page**, when the page is alive (phase `run`). Rust emits `app_fatal` with `{ title, message }`, where `message` holds the message and, after a blank line, the advice. The page shows the dialog over everything, with a fourth button, `Close`. The page is not sent the technical block: `Copy details` calls `app_copy_details`, and Rust puts the block on the clipboard.
 - **By a native message box**, when the page cannot be trusted (phases `start` and `page`). It has the three buttons above. Closing the box by its title bar ends the program.
+
+As built (#61, `src-tauri/src/fatal.rs`, words in `owlbum_core::app::fatal`):
+
+- A panic hook logs every panic with its thread, place and backtrace. A panic on the main thread is shown in the **native** box at once, because it ends the event loop and the page can no longer be reached. A panic on an album's writer thread outside its jobs (a job's own panic is caught and rolled back) is sent to the page as `app_fatal`. Panics on other threads are only logged.
+- Phase `page` rests on the 30-second `app_startup` rule alone: whether Tauri reports the webview process ending is not checked (open question 2).
+- Phase `start`: a failure to find or open the app data folder, or Tauri failing to start, shows the native box. An error naming the webview reads as "no webview". "Files missing" is not told apart yet; it reads as "anything else".
+- The native box is `rfd`'s three-button message box. Copy details and Open the log folder show it again; Restart starts the program's own file again and exits with code 1.
+- The page's dialog has Copy details, Open the log folder, Close and Restart (the default). Restart is `app_restart` (Tauri's restart, which skips the closing steps); Close is `app_quit`, through the closing steps.
+- Nothing fatal is reported once the closing steps have begun, and only the first fatal error is shown.
 
 ## Network policy
 
@@ -962,7 +979,7 @@ An issue is done when all of these are true:
 4. Every new interface string is in the text module, and every new key is in the key table.
 5. Nothing new uses the network. If it must, [Architecture](01-architecture.md)'s network table and the About statement change with it.
 6. A feature that cannot be made reliable on Linux ships disabled there with an issue open, as the README allows.
-7. A change a user would notice has a line in `src-tauri/whats-new.json` under the next version.
+7. A change a user would notice has a line in the `Unreleased` section of `CHANGELOG.md`.
 
 ### Versions and releasing
 
@@ -970,7 +987,7 @@ Versions follow `major.minor.patch` and start at `0.1.0`. The version is not bum
 
 1. Run `scripts/check.sh` on Windows and in WSL. Run the smoke test on both.
 2. Set the new version in the root `Cargo.toml` and run `cargo check` so `Cargo.lock` follows.
-3. Add the version's entry to `src-tauri/whats-new.json`.
+3. Rename `CHANGELOG.md`'s `Unreleased` section to the version and its date; What's new shows it.
 4. Commit as `chore: version <version>`.
 5. Tag that commit `v<version>` and push the tag.
 6. `release.yml` builds the installers and creates the draft release.
@@ -1008,7 +1025,8 @@ The events `open_folder` and `update_state` are listed in [Architecture](01-arch
 | `app_update_notice_answer` | `keep_on` | Records the answer to the first-start notice. |
 | `app_update_download` | | Starts the download of the offered version. |
 | `app_update_install` | | Runs the install steps. |
-| `app_about` | → `{ version, platform, arch, package, data_dir, copyright, repository }` | The About box's facts; the page holds the words. `copyright` is the line from `LICENSE`; `repository` is the project's address, shown as the link's text. (Built in #61; `has_notices` and `can_update` come with the licence files and the updater.) |
+| `app_about` | → `{ version, platform, arch, package, data_dir, copyright, repository, has_notices }` | The About box's facts; the page holds the words. `copyright` is the line from `LICENSE`; `repository` is the project's address, shown as the link's text; `has_notices` says whether the notices file is among the resources. Whether the updater can run comes from `app_update_state`. |
+| `app_update_state` | → `{ state, version?, percent? }` | The updater's state now. |
 | `app_whats_new` | → entries | The running version's notes. |
 | `app_whats_new_seen` | | Records `whats_new.last_seen`. |
 | `app_cache_usage` | → `{ bytes, limit_bytes }` | For Settings. |
@@ -1025,6 +1043,7 @@ The events `open_folder` and `update_state` are listed in [Architecture](01-arch
 | `app_menu` | `{ item }` | A menu item that acts in the page was chosen. `item` is one of `close_folder`, `rescan`, `shortcuts`, `update`, `whats_new`, `about`. |
 | `app_closing` | `{}` | The window is about to close, for a close, a quit or an update install. The page answers with `app_close_ready`. |
 | `app_fatal` | `{ title, message }` | A fatal error of phase `run` that the page should show. `message` holds the message and the advice. |
+| `update_message` | `{ kind, … }` | What a check, download or install came to; the page shows the matching message of [Messages](#messages). |
 
 `update_state.state` is one of `unavailable`, `idle`, `checking`, `available`, `downloading`, `ready`, `installing`.
 

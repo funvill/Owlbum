@@ -10,12 +10,14 @@ pub mod closing;
 pub mod commands;
 pub mod desktop;
 pub mod events;
+pub mod fatal;
 pub mod handoff;
 pub mod keymap;
 pub mod menu;
 pub mod navigation;
 pub mod protocol;
 pub mod session;
+pub mod update;
 pub mod window;
 
 use std::sync::Arc;
@@ -34,6 +36,7 @@ pub fn setup<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
         .manage(handoff::Handoff::default())
         .manage(commands::file::DragPrep::default())
         .manage(closing::Closing::default())
+        .manage(update::Updates::default())
         .manage(window::Geometry::default())
         .manage(commands::tagging::TaggingState::default())
         .on_menu_event(|app, event| menu::chosen(app, event.id().as_ref()))
@@ -102,20 +105,28 @@ pub fn is_dev_build(debug_assertions: bool, identifier: &str) -> bool {
     debug_assertions || identifier == DEV_IDENTIFIER || identifier.ends_with(".dev")
 }
 
-/// Starts the program.
-///
-/// # Panics
-///
-/// When the app data folder cannot be found, created or opened, or Tauri
-/// cannot start. Failure handling replaces these with the fatal error
-/// dialog (roadmap issue 61).
+/// Starts the program. A failure while starting is shown in the native
+/// fatal error box (docs/08-desktop-and-release.md, "Failure handling"),
+/// which ends the program.
 pub fn run() {
+    use owlbum_core::app::fatal::Fatal;
     let context = tauri::generate_context!();
     let dev = is_dev_build(cfg!(debug_assertions), &context.config().identifier);
+    let package = owlbum_core::app::package_kind(dev, std::env::var_os("APPIMAGE").is_some());
+    fatal::install_panic_hook();
 
     // Startup sequence, docs/08-desktop-and-release.md, steps 1, 2, 4, 5.
-    let location = appdata::locate(appdata::Platform::CURRENT, dev, |k| std::env::var_os(k))
-        .expect("Owlbum could not find a folder for its settings");
+    let location = match appdata::locate(appdata::Platform::CURRENT, dev, |k| std::env::var_os(k)) {
+        Ok(location) => location,
+        Err(e) => {
+            fatal::set_facts(fatal::Facts {
+                package: package.to_owned(),
+                ..fatal::Facts::default()
+            });
+            fatal::show_native(Fatal::Start, &e.message);
+            return;
+        }
+    };
     let file = Arc::new(LogFile::open(
         &log::folders(&location.dir, &std::env::temp_dir()),
         dev,
@@ -125,7 +136,22 @@ pub fn run() {
         log::debug_requested(std::env::var_os(log::LEVEL_VAR).as_deref()),
     )
     .install();
-    let data = AppData::open(&location.dir).expect("Owlbum could not open its settings");
+    fatal::set_facts(fatal::Facts {
+        package: package.to_owned(),
+        data_dir: location.dir.display().to_string(),
+        log_file: file.path().map(std::path::Path::to_path_buf),
+    });
+    let data = match AppData::open(&location.dir) {
+        Ok(data) => data,
+        Err(e) => {
+            tracing::error!(target: "app", "the app data folder could not be opened: {}", e.message);
+            fatal::show_native(
+                Fatal::StartDataFolder,
+                &format!("{}: {:?}", e.message, e.details),
+            );
+            return;
+        }
+    };
     tracing::info!(
         target: "app",
         "start version={} platform={} arch={} dev={} identifier={} data={} data_overridden={}",
@@ -150,6 +176,7 @@ pub fn run() {
         .and_then(|cwd| owlbum_core::app::launch_folder(std::env::args_os(), &cwd));
 
     let auto = data.settings().map(|s| s.updates_auto).unwrap_or(true);
+    let pubkey = update::public_key(context.config());
     let saved_window = data.settings().map(|s| s.window).unwrap_or_default();
 
     let mut builder = tauri::Builder::default();
@@ -158,8 +185,9 @@ pub fn run() {
     if !location.overridden {
         builder = builder.plugin(tauri_plugin_single_instance::init(second_launch));
     }
-    with_app_data(setup(builder), data)
+    let started = with_app_data(setup(builder), data)
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
             // Step 6: the menu.
             let menu = menu::build(app.handle(), dev, auto)?;
@@ -179,6 +207,12 @@ pub fn run() {
             if let Some(folder) = &launch {
                 handoff::deliver(app.handle(), folder);
             }
+            configure_updates(app.handle(), dev, pubkey.as_deref());
+            let page = app.handle().clone();
+            fatal::set_page_report(Box::new(move |e| {
+                let _ = events::emit(&page, e);
+            }));
+            fatal::watch_page_start();
             // Step 10: shown when `app_startup` arrives, or after 3 s.
             let handle = app.handle().clone();
             let _ = std::thread::Builder::new()
@@ -189,8 +223,48 @@ pub fn run() {
                 });
             Ok(())
         })
-        .run(context)
-        .expect("Owlbum could not start");
+        .run(context);
+    if let Err(e) = started {
+        let error = e.to_string();
+        tracing::error!(target: "app", "Owlbum could not start: {error}");
+        fatal::show_native(fatal::start_phase(&error), &error);
+    }
+}
+
+/// Sets the updater up (docs/08-desktop-and-release.md, "The signing
+/// key"): a development build, or one with no public key, stays
+/// `unavailable` and never checks. `OWLBUM_UPDATE_FEED` replaces the feed
+/// and is logged.
+fn configure_updates<R: Runtime>(app: &AppHandle<R>, dev: bool, pubkey: Option<&str>) {
+    use owlbum_core::app::update as rules;
+    let updates = app.state::<update::Updates>();
+    let over = std::env::var(rules::FEED_VAR).ok();
+    if let Some(url) = over.as_deref().filter(|u| !u.trim().is_empty()) {
+        tracing::info!(target: "update", "the feed is replaced: {url}");
+    }
+    if pubkey.is_none() {
+        tracing::info!(target: "update", "no public key: the updater is not set up");
+        updates.configure(None, dev);
+        return;
+    }
+    // A development build may use a test feed (docs/08, "Test feed"),
+    // otherwise it never checks.
+    if dev && over.is_none() {
+        updates.configure(None, dev);
+        return;
+    }
+    let feed = rules::feed(over.as_deref(), dev)
+        .and_then(|f| f.parse::<tauri::Url>().map_err(|e| e.to_string()));
+    match feed {
+        Ok(feed) => {
+            let source = update::PluginSource::new(app.clone(), feed);
+            updates.configure(Some(Arc::new(source)), false);
+        }
+        Err(e) => {
+            tracing::warn!(target: "update", "{e}");
+            updates.configure(None, dev);
+        }
+    }
 }
 
 /// How long the hidden window waits for `app_startup` before it is shown

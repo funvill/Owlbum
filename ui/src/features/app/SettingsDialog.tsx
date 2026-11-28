@@ -3,9 +3,10 @@ import { api, toAppError } from "../../api";
 import type { CacheUsage } from "../../api/bindings/CacheUsage";
 import type { SettingsPatch } from "../../api";
 import { Button, Checkbox, Dialog, RadioGroup, TextField, showToast } from "../../controls";
-import { settingsText as t } from "../../text/app";
+import { settingsText as t, updateText } from "../../text/app";
 import { formatSize } from "../details/facts";
 import { refreshEditStatus } from "../edit/save";
+import { updateCommand } from "./lifecycle";
 import { useSettingsStore } from "./settings";
 import { useSettingsOpen } from "./settingsOpen";
 import { TaggingSettings } from "./TaggingSettings";
@@ -236,6 +237,11 @@ function SettingsBody() {
           onChange={(on) => void save({ "updates.auto": on })}
         />
         <p className="ow-settings__note">{t.versionLine(version ?? "", lastChecked(settings["updates.last_check"]))}</p>
+        <div>
+          <Button size="sm" onClick={() => updateCommand("app_check_updates")}>
+            {updateText.checkNow}
+          </Button>
+        </div>
       </Section>
     </div>
   );

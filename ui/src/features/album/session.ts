@@ -9,6 +9,7 @@ import { albumText } from "../../text/album";
 import { useSettingsStore } from "../app/settings";
 import { toggleShortcuts } from "../app/shortcuts";
 import { openAbout } from "../app/aboutOpen";
+import { listenLifecycle, openWhatsNew, startLifecycle } from "../app/lifecycle";
 import { restoreSession, type SavedSession } from "../grid";
 import { followEditStatus } from "../edit/save";
 import { flushSession, followSession, stopSession } from "./reopen";
@@ -277,12 +278,13 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         // before Rust closes the album.
         api().listen("app_closing", () => void closingWindow()),
         // Menu items that act in the page (docs/08-desktop-and-release.md,
-        // "Menus"). What's new and the update item come with issues 62 and 63.
+        // "Menus"). Help's update item acts in Rust.
         api().listen("app_menu", ({ item }) => {
           if (item === "close_folder") void get().close();
           else if (item === "rescan") void useScanStore.getState().rescan();
           else if (item === "shortcuts") toggleShortcuts();
           else if (item === "about") openAbout();
+          else if (item === "whats_new") void openWhatsNew();
         }),
         api().listen("folder_drop", (e) => {
           if (e.phase === "over") set({ dropOver: true });
@@ -293,6 +295,7 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
       ]);
       const stopStatus = await followEditStatus();
       listening.push(stopStatus);
+      listening.push(...(await listenLifecycle()));
       let startup;
       try {
         startup = await api().invoke("app_startup");
@@ -301,6 +304,7 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         return;
       }
       useSettingsStore.setState({ settings: startup.settings, error: null });
+      startLifecycle(startup);
       set({ recent: startup.recent });
       const first = startup.launch_folder ?? startup.reopen;
       if (first !== null) {

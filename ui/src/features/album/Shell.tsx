@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from "react";
 import { AboutDialog } from "../app/AboutDialog";
 import { closeAbout, useAboutOpen } from "../app/aboutOpen";
+import { FatalDialog, UpdateMessageDialog, UpdateNotice, WhatsNewDialog } from "../app/LifecycleDialogs";
 import { useRegionKeys } from "../app/regions";
 import { useShortcutKey, type Where } from "../app/shortcuts";
 import { SettingsDialog } from "../app/SettingsDialog";
@@ -51,6 +52,7 @@ export function Shell() {
   return (
     <div className="ow-shell">
       <TopBar />
+      <UpdateNotice />
       <AlbumBanners />
       <ReadingBar />
       <TaggingBar />
@@ -63,6 +65,9 @@ export function Shell() {
       <ShortcutOverlay here={here} view={view} />
       <SettingsDialog open={settingsOpen} onClose={closeSettings} />
       <AboutDialog open={aboutOpen} onClose={closeAbout} />
+      <WhatsNewDialog />
+      <UpdateMessageDialog />
+      <FatalDialog />
     </div>
   );
 }

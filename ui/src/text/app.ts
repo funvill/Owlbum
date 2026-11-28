@@ -56,6 +56,9 @@ export const aboutText = {
   credits: "Built from the open-source project funvill/Owlbum on GitHub, under the MIT License.",
   repository: "Owlbum on GitHub",
   feedback: "Give feedback",
+  checkForUpdates: "Check for updates",
+  licence: "Licence",
+  notices: "Third-party notices",
   ok: "OK",
   loading: "…",
 };
@@ -90,4 +93,47 @@ export const taggingSettingsText = {
   downloading: (label: string) => `Downloading ${label}`,
   percent: (n: number) => `${n}%`,
   confirm: (label: string, size: string) => `Download ${label}, ${size}, from Hugging Face?`,
+};
+
+/** Updates (docs/08-desktop-and-release.md, "Messages" and "What the first start says"). */
+export const updateText = {
+  title: "Owlbum",
+  notice:
+    "Owlbum checks GitHub for a new version once a day. Nothing about you or your photos is sent. You can turn this off in Help or Settings.",
+  turnOff: "Turn off",
+  ok: "OK",
+  found: (latest: string, current: string) => `Owlbum ${latest} is available (you have ${current}).`,
+  download: "Download",
+  releaseNotes: "Release notes",
+  later: "Later",
+  upToDate: (current: string) => `You have the newest version of Owlbum (${current}).`,
+  checkFailed: (reason: string) => `Could not check for updates: ${reason}`,
+  devBuild: "Updates only work in the installed Owlbum.",
+  notSetUp: "This copy of Owlbum cannot update itself. Download new versions from the release page.",
+  openReleasePage: "Open the release page",
+  close: "Close",
+  downloadFailed: (reason: string) => `The update did not download: ${reason}`,
+  tryAgain: "Try again",
+  downloaded: (version: string) => `Owlbum ${version} is ready to install. Owlbum will close and start again.`,
+  restartNow: "Restart now",
+  cannotInstall: (problem: string) =>
+    `Owlbum cannot install this update by itself: ${problem} Download it from the release page and install it from there.`,
+  installFailed: (reason: string) => `The update did not install: ${reason}`,
+  checkNow: "Check now",
+};
+
+/** What's new (docs/08-desktop-and-release.md, "What's new"). */
+export const whatsNewText = {
+  title: (version: string) => `What's new in Owlbum ${version}`,
+  nothing: "Nothing new to show for this version.",
+  ok: "OK",
+};
+
+/** The fatal error dialog drawn by the page (docs/08, "The fatal error dialog"). */
+export const fatalText = {
+  copyDetails: "Copy details",
+  copied: "The details are on the clipboard.",
+  openLogFolder: "Open the log folder",
+  restart: "Restart",
+  close: "Close",
 };

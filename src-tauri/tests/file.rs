@@ -155,14 +155,21 @@ fn trash_asks_first_and_moves_nothing_until_told() {
     let f = fixture();
     let root = f.open();
     let a = f.id_of("a.png");
-    let q: TrashQuestion = f.call("file_trash_ask", json!({ "photo_ids": [a] })).unwrap();
+    let q: TrashQuestion = f
+        .call("file_trash_ask", json!({ "photo_ids": [a] }))
+        .unwrap();
     assert_eq!(q.count, 1);
     assert!(q.message.starts_with("Move \"a.png\" to the "), "{q:?}");
-    assert!(q.detail.starts_with("You can restore it from the "), "{q:?}");
+    assert!(
+        q.detail.starts_with("You can restore it from the "),
+        "{q:?}"
+    );
     assert!(q.button.starts_with("Move to "), "{q:?}");
     assert!(root.join("a.png").exists(), "asking moves nothing");
     // A ticket that was never handed out does nothing.
-    let out: Trashed = f.call("file_trash", json!({ "ticket": q.ticket + 7 })).unwrap();
+    let out: Trashed = f
+        .call("file_trash", json!({ "ticket": q.ticket + 7 }))
+        .unwrap();
     assert!(out.cancelled && out.trashed.is_empty());
     assert!(root.join("a.png").exists());
 }
@@ -202,12 +209,20 @@ fn a_newer_question_replaces_the_older_ticket() {
     let f = fixture();
     let root = f.open();
     let (a, b) = (f.id_of("a.png"), f.id_of("b.png"));
-    let first: TrashQuestion = f.call("file_trash_ask", json!({ "photo_ids": [a] })).unwrap();
-    let second: TrashQuestion = f.call("file_trash_ask", json!({ "photo_ids": [b] })).unwrap();
-    let stale: Trashed = f.call("file_trash", json!({ "ticket": first.ticket })).unwrap();
+    let first: TrashQuestion = f
+        .call("file_trash_ask", json!({ "photo_ids": [a] }))
+        .unwrap();
+    let second: TrashQuestion = f
+        .call("file_trash_ask", json!({ "photo_ids": [b] }))
+        .unwrap();
+    let stale: Trashed = f
+        .call("file_trash", json!({ "ticket": first.ticket }))
+        .unwrap();
     assert!(stale.cancelled);
     assert!(root.join("a.png").exists());
-    let out: Trashed = f.call("file_trash", json!({ "ticket": second.ticket })).unwrap();
+    let out: Trashed = f
+        .call("file_trash", json!({ "ticket": second.ticket }))
+        .unwrap();
     assert_eq!(out.trashed, vec![b]);
 }
 

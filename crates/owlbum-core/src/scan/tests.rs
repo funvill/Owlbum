@@ -2211,11 +2211,15 @@ fn the_score_thresholds_hold_on_the_trip_fixture() {
     let index = fx.album().index().clone();
     index.rebuild();
     let id_of = |rel: &str| u32::try_from(fx.photo(rel).unwrap().id).unwrap();
-    let derived = |rel: &str| index.read(|v| v.get(id_of(rel)).unwrap().derived.clone());
+    let derived = |rel: &str| index.read(|v| v.get(id_of(rel)).unwrap().derived);
     let mut lines = Vec::new();
     for f in &fx.manifest.files {
-        let Some(p) = fx.photo(&f.rel_path) else { continue };
-        let Some(a) = p.analysis.as_deref() else { continue };
+        let Some(p) = fx.photo(&f.rel_path) else {
+            continue;
+        };
+        let Some(a) = p.analysis.as_deref() else {
+            continue;
+        };
         let d = derived(&f.rel_path);
         lines.push(format!(
             "{:<28} {:?} {} flags={:04b} quality={:.2} score={:?} burst={:?} keeper={}",
@@ -2225,18 +2229,35 @@ fn the_score_thresholds_hold_on_the_trip_fixture() {
     eprintln!("{}", lines.join("\n"));
 
     // The blurred frame is the one flagged blurry.
-    assert_ne!(derived("day2/blurred.jpg").quality_flags & quality::BLURRY, 0);
+    assert_ne!(
+        derived("day2/blurred.jpg").quality_flags & quality::BLURRY,
+        0
+    );
     // Ordinary photos carry no blurry, dark or bright flag.
     let plain = quality::BLURRY | quality::DARK | quality::BRIGHT;
     for f in fx.manifest.files.iter().filter(|f| {
-        matches!(f.kind, Kind::Landscape | Kind::Portrait | Kind::Square | Kind::Burst)
+        matches!(
+            f.kind,
+            Kind::Landscape | Kind::Portrait | Kind::Square | Kind::Burst
+        )
     }) {
         let d = derived(&f.rel_path);
-        assert_eq!(d.quality_flags & plain, 0, "{} {:04b}", f.rel_path, d.quality_flags);
+        assert_eq!(
+            d.quality_flags & plain,
+            0,
+            "{} {:04b}",
+            f.rel_path,
+            d.quality_flags
+        );
     }
     // The small picture is low_res (so is every fixture photo under 1.5 MP).
     for f in fx.manifest.of_kind(Kind::LowRes) {
-        assert_ne!(derived(&f.rel_path).quality_flags & quality::LOW_RES, 0, "{}", f.rel_path);
+        assert_ne!(
+            derived(&f.rel_path).quality_flags & quality::LOW_RES,
+            0,
+            "{}",
+            f.rel_path
+        );
     }
     // Blurry: the blurred frame, and the BMP sample, a smooth picture with
     // little detail (sharpness 52.5 against a median near 166; p10 is the
@@ -2251,7 +2272,11 @@ fn the_score_thresholds_hold_on_the_trip_fixture() {
         .collect();
     assert_eq!(blurry, ["day2/blurred.jpg", "formats/sample.bmp"]);
     // The burst of five pairs into one burst with one keeper.
-    let shots: Vec<_> = fx.manifest.of_kind(Kind::Burst).map(|f| derived(&f.rel_path)).collect();
+    let shots: Vec<_> = fx
+        .manifest
+        .of_kind(Kind::Burst)
+        .map(|f| derived(&f.rel_path))
+        .collect();
     assert_eq!(shots.len(), 5);
     let burst = shots[0].burst;
     assert!(burst.is_some());
@@ -2260,6 +2285,10 @@ fn the_score_thresholds_hold_on_the_trip_fixture() {
     // The blurred frame scores below every shot painted like it.
     let blurred = derived("day2/blurred.jpg").score.unwrap();
     for d in &shots {
-        assert!(blurred < d.score.unwrap(), "blurred {blurred} vs {:?}", d.score);
+        assert!(
+            blurred < d.score.unwrap(),
+            "blurred {blurred} vs {:?}",
+            d.score
+        );
     }
 }

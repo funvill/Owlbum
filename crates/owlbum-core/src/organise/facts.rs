@@ -222,7 +222,8 @@ mod tests {
     fn flags_at_their_thresholds() {
         use crate::index::record::quality::{BLURRY, BRIGHT, DARK, LOW_RES};
         let measured = |s: f64, luma: f64| {
-            analysis(luma, 0.0, 0.0, "").replace(r#""sharpness":10"#, &format!(r#""sharpness":{s}"#))
+            analysis(luma, 0.0, 0.0, "")
+                .replace(r#""sharpness":10"#, &format!(r#""sharpness":{s}"#))
         };
         let big = |s: f64, luma: f64| photo("image", 2000, 1000, Some(measured(s, luma)));
         let list = [10.0, 40.0, 50.0, 60.0, 70.0];
@@ -234,10 +235,26 @@ mod tests {
         assert_eq!(flags(&big(60.0, 0.15), &list), DARK);
         assert_eq!(flags(&big(60.0, 0.87), &list), BRIGHT);
         // 1,500,000 pixels is not low_res; one row fewer is.
-        assert_eq!(flags(&photo("image", 1500, 1000, Some(measured(60.0, 0.5))), &list), 0);
-        assert_eq!(flags(&photo("image", 1500, 999, Some(measured(60.0, 0.5))), &list), LOW_RES);
-        assert_eq!(flags(&photo("video", 100, 100, Some(measured(60.0, 0.5))), &list), 0);
-        assert_eq!(flags(&photo("image", 10, 10, None), &list), 0, "not analysed");
+        assert_eq!(
+            flags(
+                &photo("image", 1500, 1000, Some(measured(60.0, 0.5))),
+                &list
+            ),
+            0
+        );
+        assert_eq!(
+            flags(&photo("image", 1500, 999, Some(measured(60.0, 0.5))), &list),
+            LOW_RES
+        );
+        assert_eq!(
+            flags(&photo("video", 100, 100, Some(measured(60.0, 0.5))), &list),
+            0
+        );
+        assert_eq!(
+            flags(&photo("image", 10, 10, None), &list),
+            0,
+            "not analysed"
+        );
     }
 
     #[test]

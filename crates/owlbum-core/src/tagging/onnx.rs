@@ -873,7 +873,8 @@ mod tests {
 
     #[test]
     fn the_version_is_read_from_the_build_info() {
-        let info = "ORT Build Info: git-branch=rel-1.31.1, git-commit-id=26250ae, build type=Release";
+        let info =
+            "ORT Build Info: git-branch=rel-1.31.1, git-commit-id=26250ae, build type=Release";
         assert_eq!(version_of(info), "1.31.1");
         assert_eq!(version_of(" custom build "), "custom build");
     }

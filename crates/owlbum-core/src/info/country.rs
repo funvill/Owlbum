@@ -118,10 +118,7 @@ fn parse(data: &[u8]) -> Option<Outlines> {
         } else {
             0.0
         };
-        countries.push(Country {
-            name,
-            box_area,
-        });
+        countries.push(Country { name, box_area });
     }
     if r.at != data.len() {
         return None;

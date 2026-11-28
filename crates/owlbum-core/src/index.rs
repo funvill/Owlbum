@@ -414,7 +414,14 @@ impl AlbumIndex {
         let worked: Vec<(u32, f32, u8, Option<NonZeroU32>)> = photos
             .iter()
             .zip(found)
-            .map(|(p, b)| (p.id, bursts::quality(p, &sharpness), facts::flags(p, &sharpness), b))
+            .map(|(p, b)| {
+                (
+                    p.id,
+                    bursts::quality(p, &sharpness),
+                    facts::flags(p, &sharpness),
+                    b,
+                )
+            })
             .collect();
         drop(photos);
         let mut state = self.write();

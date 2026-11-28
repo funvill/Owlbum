@@ -97,7 +97,11 @@ impl TrashAsked {
 
     fn take(&self, ticket: u64) -> Option<Vec<i64>> {
         let mut held = self.0.lock().unwrap_or_else(|p| p.into_inner());
-        if held.0 == ticket { held.1.take() } else { None }
+        if held.0 == ticket {
+            held.1.take()
+        } else {
+            None
+        }
     }
 }
 

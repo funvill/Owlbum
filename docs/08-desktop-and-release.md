@@ -939,7 +939,7 @@ The "Pages is on" step asks the GitHub API for the repository's Pages settings a
 
 ## The marketing site
 
-One static page, `site/index.html`, with `site/style.css`, a `site/img/` folder (the approved icon at 128 px and the 32 px favicon, copied from `src-tauri/icons/`) and a `site/fonts/` folder (Inter's Latin variable file from `@fontsource-variable/inter`, with its licence as `OFL.txt`). It is hand-written HTML and CSS. There is no build step, no framework, no script, no web font from another host, no analytics and no cookie. It is published at `https://funvill.github.io/Owlbum/`.
+One static page, `site/index.html`, with `site/style.css`, a `site/img/` folder (the approved icon at 128 px and the 32 px favicon, copied from `src-tauri/icons/`) and a `site/fonts/` folder (Inter's Latin variable file from `@fontsource-variable/inter`, with its licence as `OFL.txt`). It is hand-written HTML and CSS. There is no build step, no framework, no script, no web font from another host, no analytics and no cookie. It is published by `.github/workflows/pages.yml` (run by hand) at `https://funvill.github.io/Owlbum/`, which GitHub redirects to the owner's custom domain, `https://blog.abluestar.com/Owlbum/`. Pages was switched on by the owner on 2026-11-28.
 
 `scripts/check-site.mjs` checks it, with no network: every local file and `#anchor` the page names exists, there is no script, inline handler or embedded page, nothing is loaded from another host, and links to other sites go only to `https://github.com/funvill/Owlbum`. It is a step of `scripts/check.sh` (quick and full) and of `pages.yml`.
 

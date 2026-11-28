@@ -4,6 +4,8 @@
 
 A free, open-source desktop program for looking through folders of photos: star the best ones, hide the bad ones, find things by what is in them, make simple edits, and drag photos into other programs. It runs on Windows and Linux.
 
+Website: <https://blog.abluestar.com/Owlbum/>
+
 Owlbum is being built. The specification and the roadmap are in [`docs/`](docs/README.md).
 
 ## Building

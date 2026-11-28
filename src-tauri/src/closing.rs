@@ -6,8 +6,12 @@
 //! The shell waits for that answer at most [`PAGE_WAIT`] while no save
 //! runs, waits for a running save's current photo, asks the close question
 //! in `file` mode when photos wait to be saved, closes the album and exits.
+//! Once the question is past, a watchdog gives the remaining steps
+//! [`CLOSE_WAIT`]: if closing the album stalls, the process exits anyway.
 
-use std::sync::{Condvar, Mutex, PoisonError};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc;
+use std::sync::{Arc, Condvar, Mutex, PoisonError};
 use std::time::{Duration, Instant};
 
 use owlbum_core::app::AppClosing;
@@ -25,6 +29,22 @@ pub const PAGE_WAIT: Duration = Duration::from_secs(3);
 
 /// The longest the close waits for a running save's current photo.
 pub const SAVE_WAIT: Duration = Duration::from_secs(120);
+
+/// How long the steps after the close question (geometry, tagging, closing
+/// the album) may take before the process exits without them.
+pub const CLOSE_WAIT: Duration = Duration::from_secs(5);
+
+/// How the process leaves, as passed to an exit hook.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Exit {
+    /// The closing steps finished.
+    Closed,
+    /// Closing the album took longer than [`CLOSE_WAIT`].
+    Stalled,
+}
+
+/// Stands in for the process exit (shell tests observe it instead).
+pub type ExitHook = Arc<dyn Fn(Exit) + Send + Sync>;
 
 #[derive(Debug, Default, Clone, Copy, PartialEq, Eq)]
 enum Phase {
@@ -49,14 +69,47 @@ pub enum Reason {
 }
 
 /// The close handshake's state, managed by `setup`.
-#[derive(Debug, Default)]
+#[derive(Default)]
 pub struct Closing {
     phase: Mutex<Phase>,
     changed: Condvar,
     reason: Mutex<Reason>,
+    /// Set by whichever leaves first: the finished steps or the watchdog.
+    left: AtomicBool,
+    exit_hook: Mutex<Option<ExitHook>>,
+}
+
+impl std::fmt::Debug for Closing {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Closing")
+            .field("phase", &*self.phase())
+            .field("left", &self.left.load(Ordering::SeqCst))
+            .finish_non_exhaustive()
+    }
 }
 
 impl Closing {
+    /// Replaces the process exit with `hook`. Without one, a finished close
+    /// exits through Tauri and a stalled one ends the process at once.
+    pub fn set_exit_hook(&self, hook: ExitHook) {
+        *self
+            .exit_hook
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner) = Some(hook);
+    }
+
+    fn exit_hook(&self) -> Option<ExitHook> {
+        self.exit_hook
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .clone()
+    }
+
+    /// Claims the way out; false when the other side already left.
+    fn leave(&self) -> bool {
+        !self.left.swap(true, Ordering::SeqCst)
+    }
+
     fn phase(&self) -> std::sync::MutexGuard<'_, Phase> {
         self.phase.lock().unwrap_or_else(PoisonError::into_inner)
     }
@@ -68,6 +121,7 @@ impl Closing {
             return false;
         }
         *p = Phase::Asked;
+        self.left.store(false, Ordering::SeqCst);
         true
     }
 
@@ -190,21 +244,72 @@ fn run<R: Runtime>(app: &AppHandle<R>) {
     drop(scanner);
     // Nothing fatal is reported from here on.
     crate::fatal::quitting();
+    // From here the steps get CLOSE_WAIT; the watchdog exits without them.
+    let finished = watchdog(app, reason);
     // 3. The window geometry.
     crate::window::save(app);
     // 4. Tagging stops: the download is cancelled, the run in hand is told
     //    to end and the models are unloaded.
     crate::commands::tagging::shutdown(app);
-    // 5. Close the album: its writer finishes and its lock goes.
-    app.state::<Session>().close();
+    // 5. Close the album: its writer finishes and its lock goes. Not while
+    //    an album is opening or closing.
+    {
+        let session = app.state::<Session>();
+        let _one = session.one_at_a_time();
+        session.close();
+    }
+    let _ = finished.send(());
+    if !closing.leave() {
+        // The watchdog has already ended the process.
+        return;
+    }
     // 6. Exit, or install the update, which starts the new version.
     if reason == Reason::Update {
         tracing::info!(target: "app", "closing to install the update");
-        crate::update::after_close(app);
+        match closing.exit_hook() {
+            Some(hook) => hook(Exit::Closed),
+            None => crate::update::after_close(app),
+        }
         return;
     }
     tracing::info!(target: "app", "closing");
-    app.exit(0);
+    match closing.exit_hook() {
+        Some(hook) => hook(Exit::Closed),
+        None => app.exit(0),
+    }
+}
+
+/// Starts the watchdog over the last closing steps. Sending on the answer
+/// (or dropping it) says they finished; if that does not come within
+/// [`CLOSE_WAIT`], the process exits without them and the log says so.
+fn watchdog<R: Runtime>(app: &AppHandle<R>, reason: Reason) -> mpsc::Sender<()> {
+    let (tx, rx) = mpsc::channel::<()>();
+    let app = app.clone();
+    let spawned = std::thread::Builder::new()
+        .name("owlbum-close-watchdog".into())
+        .spawn(move || {
+            // A dropped answer without a send means the steps panicked.
+            if rx.recv_timeout(CLOSE_WAIT).is_ok() {
+                return;
+            }
+            let closing = app.state::<Closing>();
+            if !closing.leave() {
+                return;
+            }
+            if reason == Reason::Update {
+                tracing::warn!(target: "app", "closing the album did not finish within 5 s; exiting without installing the update");
+            } else {
+                tracing::warn!(target: "app", "closing the album did not finish within 5 s; exiting anyway");
+            }
+            match closing.exit_hook() {
+                Some(hook) => hook(Exit::Stalled),
+                None => std::process::exit(0),
+            }
+        });
+    if let Err(e) = spawned {
+        tracing::warn!(target: "app", "the close watchdog could not start: {e}");
+    }
+    tx
 }
 
 #[cfg(test)]

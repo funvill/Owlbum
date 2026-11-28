@@ -19,6 +19,9 @@ the window's title shows the version that is running.
 
 ### Fixed
 
+- Quitting no longer leaves Owlbum running in the background when
+  closing the album gets stuck: it exits after 5 seconds, and the log
+  says so.
 - The window is the theme's dark colour while it loads, with no white
   flash before the page draws.
 - The same message is no longer shown twice at once: a repeat replaces

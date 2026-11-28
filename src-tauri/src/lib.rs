@@ -13,6 +13,7 @@ pub mod events;
 pub mod handoff;
 pub mod keymap;
 pub mod menu;
+pub mod navigation;
 pub mod protocol;
 pub mod session;
 pub mod window;
@@ -227,7 +228,8 @@ fn second_launch<R: Runtime>(app: &AppHandle<R>, args: Vec<String>, cwd: String)
 
 /// Builds the main window from its configuration (which has `create:
 /// false`), with Owlbum's user agent, so map tile servers can tell which
-/// program is asking (docs/08-desktop-and-release.md, "Map-tile consent").
+/// program is asking (docs/08-desktop-and-release.md, "Map-tile consent"),
+/// and with navigation away from the app's page and new windows refused.
 fn main_window<R: Runtime>(
     app: &tauri::App<R>,
     dev: bool,
@@ -241,9 +243,19 @@ fn main_window<R: Runtime>(
         .cloned()
         .unwrap_or_default();
     let version = owlbum_core::app::version().version;
+    // Under `tauri dev` the page comes from the Vite server; otherwise only
+    // the app's own page may be shown (docs/08, "Navigation and new windows").
+    let dev_url = tauri::is_dev()
+        .then(|| app.config().build.dev_url.clone())
+        .flatten();
     let window = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
         .title(window_title(&version))
         .user_agent(&user_agent(std::env::consts::OS, &version))
+        .on_navigation(move |url| navigation::check(url, dev_url.as_ref()))
+        .on_new_window(|url, _| {
+            navigation::refuse_new_window(&url);
+            tauri::webview::NewWindowResponse::Deny
+        })
         .visible(false)
         .devtools(dev)
         .build()?;

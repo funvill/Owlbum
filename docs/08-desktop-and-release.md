@@ -680,9 +680,11 @@ default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src
 | `style-src … 'unsafe-inline'` | Leaflet and the grid set styles on elements. Scripts get no such exception. |
 | `object-src`, `frame-src`, `form-action` | Nothing embeds, frames or posts. |
 
-`app.security.devCsp` is a second policy used only by `tauri dev`. It adds the Vite server's address and its websocket. It is never in a release build.
+`app.security.devCsp` is a second policy used only by `tauri dev`. It adds the Vite server's address and its websocket (`http://localhost:5173`, `ws://localhost:5173`) to `connect-src`, and `'unsafe-inline'` to `script-src` for the small inline script Vite's React plugin puts in the page for hot reloading. It is never in a release build.
 
-Three tests guard the policy: a shell test compares the configured string with the text above; a page test asserts the built page contains no remote address other than the tile host; a page test asserts the built page has no inline script.
+`app.security.dangerousDisableAssetCspModification` is `["style-src"]`. Tauri adds nonces and hashes to `script-src` and `style-src` for inline content it finds in the page; a nonce in `style-src` would make browsers ignore `'unsafe-inline'` there and break the styles Leaflet and the grid set on elements. `script-src` is still left to Tauri, which hashes nothing because the page has no inline script.
+
+Three tests guard the policy: a shell test (`src-tauri/tests/network.rs`) compares the configured string with the text above and checks that `devCsp` only adds the Vite server; a page test (`ui/src/test/builtPage.test.ts`) builds the page and asserts it contains no remote address other than the tile host; the same test asserts the built page has no inline script. Addresses in the bundle that are never requested are allowed by name in that test: XML namespace names (`http://www.w3.org/…`), React's error-page prefix in its minified errors, and Leaflet's attribution prefix, which the map turns off.
 
 ### Navigation and new windows
 
@@ -694,6 +696,8 @@ Three tests guard the policy: a shell test compares the configured string with t
 | A link the user should follow (release notes, feedback, the release page) | Never a link in the page. The page calls an `app_open_…` command, and Rust opens one of its own fixed addresses in the user's browser. |
 
 The page cannot pass an address to be opened. Each `app_open_…` command builds its address in Rust.
+
+The rules are the main window's navigation and new-window handlers (`src-tauri/src/navigation.rs`). The app's own page is `tauri://localhost` on Linux and `http://tauri.localhost` on Windows; under `tauri dev` the Vite server's origin (`build.devUrl`) is the app's page too.
 
 ### Map-tile consent
 
@@ -712,7 +716,7 @@ Tile requests are made by the webview, so they carry what the webview sends. To 
 
 ### Capabilities
 
-One capability file, `src-tauri/capabilities/main.json`, applies to the window `main` and to local content only. No remote address is given any capability.
+One capability file, `src-tauri/capabilities/main.json`, applies to the window `main` and to local content only. No remote address is given any capability. The file is generated from the command registry by `scripts/bindings.sh` (with the page's bindings), and `src-tauri/build.rs` reads the command names back from it into the app manifest. A command missing from the file therefore cannot be called, and the bindings test fails until the file is rewritten.
 
 | Granted | Why |
 |---|---|
@@ -725,7 +729,7 @@ One capability file, `src-tauri/capabilities/main.json`, applies to the window `
 | File system, shell, HTTP | Not installed at all. |
 | `core:window`, `core:webview`, `core:menu` | The shell does all of this itself. |
 
-A shell test reads the capability file and fails if it grants anything outside the first table.
+A shell test reads the capability file and fails if it grants anything outside the first table. Another builds the app with its real permission checks and asserts that a plugin command and any call from a remote page are refused.
 
 ## Packaging
 

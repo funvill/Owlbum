@@ -65,3 +65,23 @@ fn typescript_bindings_are_current() {
         stale.join("\n  ")
     );
 }
+
+/// The capability file grants the page exactly the registry's commands
+/// (docs/08-desktop-and-release.md, "Capabilities"). `scripts/bindings.sh`
+/// rewrites it with the bindings.
+#[test]
+fn the_capability_file_is_current() {
+    let want = owlbum_lib::bindings::capability(&owlbum_lib::commands::modules::<MockRuntime>());
+    let path = Path::new(env!("CARGO_MANIFEST_DIR")).join("capabilities/main.json");
+    if std::env::var_os("OWLBUM_WRITE_BINDINGS").is_some_and(|v| !v.is_empty()) {
+        fs::write(&path, &want).unwrap();
+        return;
+    }
+    let have = fs::read_to_string(&path)
+        .unwrap_or_default()
+        .replace("\r\n", "\n");
+    assert!(
+        have == want,
+        "src-tauri/capabilities/main.json is stale. Run scripts/bindings.sh and commit the result."
+    );
+}

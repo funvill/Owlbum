@@ -322,7 +322,7 @@ Edit mode edits one photo inside the preview pane. It opens with the E key, the 
 | What can be edited | Still images and RAW files. Not video, not an animated picture. A file that could not be read (a row with `scan_error`) is in no result, so it can never be chosen. See [Formats](#formats). |
 | Starting point | The stored edit, or identity, read from the detail record's `edit` (`photo_detail`) when edit mode opens. The aspect starts at Free, not swapped. |
 | One at a time | Opening edit mode on another photo first ends the current one as Done. |
-| While a save runs | Edit mode cannot open on a photo that is being saved to its file. (Not built yet: issue 200.) |
+| While a save runs | Edit mode cannot open on a photo that is being saved to its file: E does nothing and the menu's Edit and the caption's Edit are disabled with "This photo is being saved". The page counts a photo as being saved while a Save it started covers the photo's id, or, while Save all runs (or Rust counts a save this page did not start), when the photo has an edit. |
 | The viewer | The viewer cannot open over edit mode. |
 | Undo | Ctrl+Z does nothing while edit mode is open. Outside it, each stored change is one undo step in the list [Organising](05-organising.md#undo-ctrlz) keeps. |
 
@@ -689,7 +689,7 @@ The key hints come from the one shortcut table (see [Desktop, release and tests]
 
 | Item | Acts on | Disabled when (tooltip) |
 |---|---|---|
-| **Edit** | one | The photo cannot be edited (the reason from [Formats](#formats)); it is being saved ("This photo is being saved"; not built yet: issue 200); view-only. |
+| **Edit** | one | The photo cannot be edited (the reason from [Formats](#formats)); it is being saved ("This photo is being saved"); view-only. |
 | **Rotate left**, **Rotate right**, **Flip horizontally** | all | No target can be edited (the reason from Formats); view-only. |
 | **Save** | all targets that have an edit; the label is "Save (N)" when that is more than one | Every such target is copy-only ("<Label> photos can only be saved as a copy"); a save is running ("Saving…"); view-only. Tooltip when enabled: "Save the edit into the photo file (the original goes to the <bin>)". |
 | **Save as…** | one | A save is running. |

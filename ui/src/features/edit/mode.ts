@@ -22,6 +22,7 @@ import { BLOCK, gridBlocks, useGridStore } from "../grid";
 import { canChange } from "../organise";
 import { aspectRatio, canSwap, fitCropToAspect, turnsWithPhoto, type Aspect } from "./crop";
 import { releaseBefore } from "./before";
+import { beingSaved } from "./save";
 
 /** The edit that changes nothing. */
 export const IDENTITY: PhotoEdit = {
@@ -90,7 +91,7 @@ function close(): void {
  * Opens edit mode on photo `id`, which must be the current photo. Another
  * photo's edit mode ends as Done first. Does nothing in a view-only album,
  * for a photo that cannot be edited, or when the photo stops being current
- * before its stored edit arrives.
+ * before its stored edit arrives, or while a save covers it.
  */
 export async function openEdit(id: number): Promise<void> {
   if (!canChange()) return;
@@ -98,7 +99,7 @@ export async function openEdit(id: number): Promise<void> {
   if (open === id) return;
   if (open !== null && !(await finishEdit("done"))) return;
   const row = heldRow(id);
-  if (row === undefined || notEditable(row) !== null) return;
+  if (row === undefined || notEditable(row) !== null || beingSaved(row) !== null) return;
   if (useGridStore.getState().current?.id !== id) return;
   let stored: PhotoEdit | null;
   try {

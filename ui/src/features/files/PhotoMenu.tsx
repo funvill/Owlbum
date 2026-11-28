@@ -9,7 +9,7 @@ import { BLOCK, copyOnlyLabel, gridBlocks, useGridStore } from "../grid";
 import { turn } from "../edit/turn";
 import { isEditing, notEditable, openEdit } from "../edit/mode";
 import { askSaveAll } from "../edit/SaveAllButton";
-import { refreshEditStatus, revertToOriginal, saveAs, saveToFile, saving, useSaveStore } from "../edit/save";
+import { beingSaved, refreshEditStatus, revertToOriginal, saveAs, saveToFile, saving, useSaveStore } from "../edit/save";
 import { useSettingsStore } from "../app/settings";
 import { useViewerStore } from "../viewer/store";
 import { editText } from "../../text/edit";
@@ -76,6 +76,8 @@ export function PhotoMenu({ at, photoId, onClose }: PhotoMenuProps) {
   const savable = edited.filter((_, i) => copyOnly[i] === null);
   const ownEdit = rowOf(photoId)?.edit_plan != null;
   const busyReason = busy ? editText.saving : undefined;
+  const ownRow = rowOf(photoId);
+  const editSaving = useSaveStore((st) => (ownRow === undefined ? null : beingSaved(ownRow, st)));
   const saveBlocked =
     blocked ?? busyReason ?? (savable.length === 0 && copyOnly[0] != null ? editText.copyOnly(copyOnly[0]) : undefined);
   useEffect(() => {
@@ -184,7 +186,7 @@ export function PhotoMenu({ at, photoId, onClose }: PhotoMenuProps) {
       label: t.edit,
       icon: "crop",
       shortcut: primaryKey("browse.edit"),
-      disabledReason: blocked ?? why(photoId) ?? undefined,
+      disabledReason: blocked ?? why(photoId) ?? editSaving ?? undefined,
       onSelect: () => void openEdit(photoId),
     },
     {

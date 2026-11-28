@@ -18,6 +18,7 @@ import { useSettingsStore } from "../app";
 import { EditMode } from "../edit/EditMode";
 import { useBeforeStore } from "../edit/before";
 import { notEditable, openEdit, useEditStore } from "../edit/mode";
+import { beingSaved, useSaveStore } from "../edit/save";
 import { useGridStore } from "../grid";
 import { FlagMark, ScoreToast } from "../organise";
 import { Caption } from "./Caption";
@@ -48,6 +49,7 @@ export function Preview({ detail, onOpen, onMenu, onPress, zoom }: PreviewProps)
   const editing = useEditStore((s) => s.photoId);
   const before = useBeforeStore((s) => s.held);
   const viewOnly = useAlbumStore((s) => (s.status === null ? null : viewOnlyReason(s.status)));
+  const editSaving = useSaveStore((s) => (row === undefined ? null : beingSaved(row, s)));
   usePreload(pending?.index ?? current?.index ?? null);
 
   if (current === null && pending === null) {
@@ -78,7 +80,7 @@ export function Preview({ detail, onOpen, onMenu, onPress, zoom }: PreviewProps)
       </section>
     );
   }
-  const editBlocked = viewOnly ?? notEditable(row) ?? undefined;
+  const editBlocked = viewOnly ?? notEditable(row) ?? editSaving ?? undefined;
   return (
     <section className="ow-preview" aria-label={t.region}>
       <div className="ow-preview__stage">

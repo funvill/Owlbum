@@ -8,6 +8,7 @@ import {
   within,
 } from "@testing-library/react";
 import { setApi } from "../../api";
+import type { SavedEdits } from "../../api/bindings/SavedEdits";
 import { appError, createFakeApi, type FakeApi } from "../../api/fake";
 import { defaultSettings } from "../../api/fake/app";
 import { fakeStatus } from "../../api/fake/album";
@@ -23,7 +24,8 @@ import { resetGrid, useGridStore } from "../grid";
 import { resetImageCache, type Load } from "../preview";
 import { resetViewer } from "../viewer/store";
 import { SaveAllButton, resetSaveAllAsk } from "./SaveAllButton";
-import { resetSaves, savedToast, useSaveStore } from "./save";
+import { openEdit, useEditStore } from "./mode";
+import { beingSaved, resetSaves, savedToast, useSaveStore } from "./save";
 
 class FakeResizeObserver {
   observe() {}
@@ -184,6 +186,42 @@ describe("the save items of the photo menu", () => {
       expect(callsOf("edit_save_to_file")).toEqual([{ photo_ids: [1] }]),
     );
     await waitFor(() => expect(toasts()).toContain("Saved 1 photo"));
+  });
+
+  it("blocks Edit, and E, on a photo while it is being saved", async () => {
+    let finish: (v: SavedEdits) => void = () => {};
+    setup("file", {
+      edit_save_to_file: () => new Promise((resolve) => (finish = resolve)),
+    });
+    await show(1);
+    fireEvent.contextMenu(tile(0), { clientX: 10, clientY: 10 });
+    fireEvent.click(await screen.findByRole("menuitem", { name: /^Save$/ }));
+    await waitFor(() => expect(useSaveStore.getState().running).toBe(true));
+    fireEvent.contextMenu(tile(0), { clientX: 10, clientY: 10 });
+    const edit = await screen.findByRole("menuitem", { name: /^Edit/ });
+    expect(edit).toHaveAttribute("aria-disabled", "true");
+    fireEvent.keyDown(edit, { key: "Escape" });
+    await waitFor(() => expect(screen.queryByRole("menu")).toBeNull());
+    // Photo 2 is not in that save: its Edit stays open.
+    act(() =>
+      grid().setSelection({ current: { id: 2, index: 1 }, anchor: { id: 2, index: 1 }, selection: [2] }),
+    );
+    fireEvent.contextMenu(tile(1), { clientX: 10, clientY: 10 });
+    expect(await screen.findByRole("menuitem", { name: /^Edit/ })).not.toHaveAttribute("aria-disabled");
+    act(() => finish({ saved: [1], failed: [], skipped: 0, warnings: [], revision: 1 }));
+    await waitFor(() => expect(useSaveStore.getState().running).toBe(false));
+  });
+
+  it("refuses to open edit mode on a photo a running Save all covers", async () => {
+    setup("file");
+    await show(1);
+    useSaveStore.setState({ running: true, ids: null });
+    await openEdit(1);
+    expect(useEditStore.getState().photoId).toBeNull();
+    expect(beingSaved({ id: 2, edit_plan: null })).toBeNull();
+    expect(beingSaved({ id: 1, edit_plan: {} })).toBe("This photo is being saved");
+    useSaveStore.setState({ running: false });
+    expect(beingSaved({ id: 1, edit_plan: {} })).toBeNull();
   });
 
   it("disables Save for a photo that can only be saved as a copy", async () => {

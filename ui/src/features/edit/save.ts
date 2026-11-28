@@ -18,6 +18,8 @@ export interface SaveState {
   status: EditStatus | null;
   /** A save started from this page is running. */
   running: boolean;
+  /** The photos the running Save covers; null for Save all (every edited photo). */
+  ids: readonly number[] | null;
   /** The last `edit_save_progress` of a running save of several. */
   progress: SaveProgress | null;
   /** The window is closing (`app_closing`): a running save shows "Finishing saving…". */
@@ -27,6 +29,7 @@ export interface SaveState {
 const idle: SaveState = {
   status: null,
   running: false,
+  ids: null,
   progress: null,
   closing: false,
 };
@@ -42,6 +45,22 @@ export function resetSaves(): void {
 export function saving(): boolean {
   const s = useSaveStore.getState();
   return s.running || (s.status?.saving ?? 0) > 0;
+}
+
+/**
+ * "This photo is being saved" when a save covers photo `row`, else null
+ * (docs/06, "Edit mode": "While a save runs"). A Save started here covers
+ * its ids; Save all, or a save Rust counts that this page did not start,
+ * covers every photo with an edit.
+ */
+export function beingSaved(
+  row: { id: number; edit_plan: unknown },
+  s: SaveState = useSaveStore.getState(),
+): string | null {
+  const running = s.running || (s.status?.saving ?? 0) > 0;
+  if (!running) return null;
+  const covered = s.running && s.ids !== null ? s.ids.includes(row.id) : row.edit_plan !== null;
+  return covered ? t.beingSaved : null;
 }
 
 /** Asks Rust for the counts again. */
@@ -108,28 +127,28 @@ export function savedToast(out: SavedEdits): void {
     showToast({ kind: "info", message: warning });
 }
 
-async function run(job: () => Promise<SavedEdits>): Promise<void> {
+async function run(ids: readonly number[] | null, job: () => Promise<SavedEdits>): Promise<void> {
   if (saving()) return;
   // A close that went back ("Go back") is over once a new save starts.
-  useSaveStore.setState({ running: true, progress: null, closing: false });
+  useSaveStore.setState({ running: true, ids, progress: null, closing: false });
   try {
     savedToast(await job());
   } catch (e) {
     showToast({ kind: "error", message: toAppError(e).message });
   } finally {
-    useSaveStore.setState({ running: false, progress: null });
+    useSaveStore.setState({ running: false, ids: null, progress: null });
     void refreshEditStatus();
   }
 }
 
 /** Save: writes the edits of `ids` into their files. */
 export function saveToFile(ids: readonly number[]): Promise<void> {
-  return run(() => api().invoke("edit_save_to_file", { photo_ids: [...ids] }));
+  return run([...ids], () => api().invoke("edit_save_to_file", { photo_ids: [...ids] }));
 }
 
 /** Save all: every photo in the album with an edit. */
 export function saveAll(): Promise<void> {
-  return run(() => api().invoke("edit_save_all"));
+  return run(null, () => api().invoke("edit_save_all"));
 }
 
 /** Save as…: Rust opens the dialog and writes the copy. */

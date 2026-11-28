@@ -756,7 +756,7 @@ A watch dropped because its folder went away (the last row) is started again on 
 
 ### Manual Rescan
 
-**File > Rescan** calls `album_rescan`. It has no key in version 1; the menu and the key table are owned by [Desktop, release and tests](08-desktop-and-release.md#menus). It scans the whole scope, retries every `scan_error` row, and works the same whether or not a watch is set. If a scan is already running, the rescan is queued to start when it ends (see Cancellation).
+**More > Rescan** calls `album_rescan`. It has no key in version 1; the More menu and the key table are owned by [Desktop, release and tests](08-desktop-and-release.md#the-more-menu). It scans the whole scope, retries every `scan_error` row, and works the same whether or not a watch is set. If a scan is already running, the rescan is queued to start when it ends (see Cancellation).
 
 ## Commands, events and URLs
 

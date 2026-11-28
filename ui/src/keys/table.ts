@@ -2,8 +2,9 @@ import table from "./keymap.json";
 
 /**
  * The one table of keys (docs/08-desktop-and-release.md, "The key table").
- * The page's key handlers, the shortcut overlay and the shell's menu all
- * read `keymap.json`; nothing else defines a key.
+ * The page's key handlers, the shortcut overlay and the More menu all
+ * read `keymap.json`; nothing else defines a key. There is no native menu
+ * bar (owner's feedback, issue 197): the page handles every key.
  */
 
 /** Where a row applies. `browse` is the grid, timeline, map and preview. */
@@ -89,9 +90,7 @@ export interface KeyRow {
   readonly hold: boolean;
   /** Holding the key repeats the action. */
   readonly repeat: boolean;
-  /** A native menu accelerator: the shell binds it, never the page. */
-  readonly menu: boolean;
-  /** On the menu in development builds only. */
+  /** Only in development builds. */
   readonly dev: boolean;
   /** Also acts while typing in a text field (not in a dialog). */
   readonly typing: boolean;
@@ -103,7 +102,7 @@ export class KeymapError extends Error {
 }
 
 const PLACES: readonly Place[] = ["everywhere", "browse", "viewer", "edit"];
-const FLAGS = ["hold", "repeat", "menu", "dev", "typing"] as const;
+const FLAGS = ["hold", "repeat", "dev", "typing"] as const;
 const FIELDS = new Set<string>(["id", "place", "keys", ...FLAGS]);
 const MODIFIERS = ["Ctrl", "Shift", "Alt"] as const;
 
@@ -202,11 +201,8 @@ export function parseKeymap(raw: unknown): KeyRow[] {
       }
       flags[f] = r[f] === true;
     }
-    if (flags.menu && r.keys.length !== 1) {
-      throw new KeymapError(`${where}: a menu accelerator has exactly one key`);
-    }
-    if (flags.dev && !flags.menu) {
-      throw new KeymapError(`${where}: only a menu row can be for development builds`);
+    if (flags.dev && r.place !== "everywhere") {
+      throw new KeymapError(`${where}: a development row is for everywhere`);
     }
     if (flags.hold && flags.repeat) {
       throw new KeymapError(`${where}: a row cannot both hold and repeat`);
@@ -277,13 +273,13 @@ export function rowsFor(
 
 /**
  * Compares a set of key handlers with the rows they serve (by default every
- * row the page handles: all but the menu accelerators). `missing` are rows
+ * row). `missing` are rows
  * with no handler; `unknown` are handlers for ids that are not rows.
  * Page tests use it so a handler and the table never drift apart.
  */
 export function handlerGaps(
   handlers: Readonly<Record<string, unknown>>,
-  rows: readonly KeyRow[] = KEYMAP.filter((r) => !r.menu),
+  rows: readonly KeyRow[] = KEYMAP,
 ): { missing: KeyId[]; unknown: string[] } {
   const wanted = new Set<string>(rows.map((r) => r.id));
   return {

@@ -159,6 +159,16 @@ impl QueryEngine {
                 )
             });
         let (groups, unit) = grouped.map_or((None, None), |(g, u)| (Some(g), Some(u)));
+        // The panel's filters are counted on the Filters button; the search
+        // text's chip leads the row but is not one of them (owner's
+        // feedback, issue 196).
+        let panel_count = self::count(chips.len());
+        let mut chips = chips;
+        if let Some(search) = query.search.as_deref()
+            && support::is_search(Some(search))
+        {
+            chips.insert(0, filter::search_chip(&filter, search));
+        }
         // Every photo that passes, stacks unfolded.
         let photos = count(photos);
         let kept = keep.map(|k| {
@@ -190,7 +200,7 @@ impl QueryEngine {
             total: self::count(total),
             album_photos: self::count(album_photos),
             filtered: !query.filter.is_empty() || support::is_search(query.search.as_deref()),
-            panel_count: self::count(chips.len()),
+            panel_count,
             chips,
             groups,
             unit,

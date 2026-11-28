@@ -477,6 +477,20 @@ fn folder_label(folder: &str, top: &str) -> String {
     }
 }
 
+/// The search text's chip, "Photos with 'lake'". Removing it clears the
+/// search text and keeps every filter, so its `remove` is the filter as it
+/// is; the page knows it by its id, `search`.
+pub(super) fn search_chip(filter: &Filter, search: &str) -> Chip {
+    Chip {
+        id: SEARCH_CHIP.to_owned(),
+        text: text::query::chip::search(search.trim()),
+        remove: filter.clone(),
+    }
+}
+
+/// The id of the search text's chip.
+pub const SEARCH_CHIP: &str = "search";
+
 /// One chip per filter that is on, in the order of the list of filters.
 /// `filter` is normalised; `top` is the scope's folder.
 pub(super) fn chips(filter: &Filter, top: &str) -> Vec<Chip> {

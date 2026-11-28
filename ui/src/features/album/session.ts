@@ -7,15 +7,11 @@ import type { ScanProgress } from "../../api/bindings/ScanProgress";
 import { showToast } from "../../controls";
 import { albumText } from "../../text/album";
 import { useSettingsStore } from "../app/settings";
-import { toggleShortcuts } from "../app/shortcuts";
-import { openAbout } from "../app/aboutOpen";
-import { listenLifecycle, openWhatsNew, startLifecycle } from "../app/lifecycle";
+import { listenLifecycle, startLifecycle } from "../app/lifecycle";
 import { restoreSession, showPhoto, type SavedSession } from "../grid";
 import { followEditStatus } from "../edit/save";
-import { toggleDetails, toggleGrid, toggleGridPlace } from "./panels";
 import { flushSession, followSession, stopSession } from "./reopen";
 import type { ReadStart } from "./reading";
-import { useScanStore } from "./store";
 
 /** A question `album_open` asked, with what the dialog needs to answer it. */
 export type OpenQuestion =
@@ -326,18 +322,6 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         // quitting"): edit mode ends as Done and the session is saved
         // before Rust closes the album.
         api().listen("app_closing", () => void closingWindow()),
-        // Menu items that act in the page (docs/08-desktop-and-release.md,
-        // "Menus"). Help's update item acts in Rust.
-        api().listen("app_menu", ({ item }) => {
-          if (item === "close_folder") void get().close();
-          else if (item === "rescan") void useScanStore.getState().rescan();
-          else if (item === "shortcuts") toggleShortcuts();
-          else if (item === "about") openAbout();
-          else if (item === "whats_new") void openWhatsNew();
-          else if (item === "toggle_grid") void toggleGrid();
-          else if (item === "toggle_details") void toggleDetails();
-          else if (item === "grid_place") void toggleGridPlace();
-        }),
         api().listen("folder_drop", (e) => {
           if (e.phase === "over") set({ dropOver: true });
           else set({ dropOver: false });

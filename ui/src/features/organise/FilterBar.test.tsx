@@ -12,6 +12,7 @@ import { resetGrid, useGridStore } from "../grid";
 import { focusOf } from "../../keys/match";
 import { ViewBar } from "../timeline";
 import { FilterBar } from "./FilterBar";
+import { FiltersButton } from "./FiltersButton";
 import { QueryBox } from "./QueryBox";
 import { SortSelect } from "./SortSelect";
 
@@ -20,6 +21,7 @@ function Bars() {
   return (
     <>
       <QueryBox />
+      <FiltersButton />
       <FilterBar />
     </>
   );
@@ -46,12 +48,34 @@ beforeEach(() => {
 afterEach(() => resetGrid());
 
 describe("FilterBar", () => {
-  it("is a search landmark without Sort or the search box, which moved out", () => {
+  it("is a search landmark with the count; Sort, the search box and Filters are elsewhere (issue 196)", async () => {
+    await grid().start();
     render(<FilterBar />);
     const bar = screen.getByRole("search", { name: "Filter photos" });
+    expect(await within(bar).findByText("3 photos")).toBeInTheDocument();
     expect(within(bar).queryByRole("combobox", { name: "Sort" })).not.toBeInTheDocument();
     expect(within(bar).queryByRole("searchbox")).not.toBeInTheDocument();
-    expect(within(bar).getByRole("button", { name: "Filters" })).toBeInTheDocument();
+    expect(within(bar).queryByRole("button", { name: "Filters" })).not.toBeInTheDocument();
+    expect(within(bar).queryByRole("checkbox", { name: "Stack similar" })).not.toBeInTheDocument();
+  });
+
+  it("shows the search text as a chip that clears the search alone (issue 196)", async () => {
+    await grid().start();
+    render(<Bars />);
+    const box = screen.getByRole("searchbox", { name: "Search photos" });
+    await userEvent.type(box, "ann star:no ");
+    await vi.waitFor(() => expect(grid().query.search).toBe("ann"));
+    const row = await screen.findByRole("region", { name: "Active filters" });
+    await vi.waitFor(() => expect(within(row).getByText("Photos with 'ann'")).toBeInTheDocument());
+    // The search chip leads; the Filters button counts only the panel's filters.
+    expect(within(row).getAllByText(/./, { selector: ".ow-chip__label" }).map((c) => c.textContent)).toEqual([
+      "Photos with 'ann'",
+      "Not starred",
+    ]);
+    expect(screen.getByRole("button", { name: "Filters · 1" })).toBeInTheDocument();
+    await userEvent.click(within(row).getByRole("button", { name: "Remove filter Photos with 'ann'" }));
+    await vi.waitFor(() => expect(grid().query).toMatchObject({ filter: { star: "no" }, search: null }));
+    expect(box).toHaveValue("");
   });
 
   it("has the Sort control beside the view switch, with its five options", async () => {
@@ -101,14 +125,15 @@ describe("FilterBar", () => {
 
   it("opens the panel with its counts, focus on the first control", async () => {
     await grid().start();
-    const { container } = render(<FilterBar />);
+    const { container } = render(<Bars />);
     expect(await screen.findByText("3 photos")).toBeInTheDocument();
     const button = screen.getByRole("button", { name: "Filters" });
     expect(button).toHaveAttribute("aria-expanded", "false");
     await userEvent.click(button);
     const panel = screen.getByRole("group", { name: "Filters" });
+    // Stack similar is the panel's first control (issue 196).
+    expect(within(panel).getByRole("checkbox", { name: "Stack similar" })).toHaveFocus();
     const stars = within(panel).getByRole("combobox", { name: "Stars" });
-    expect(stars).toHaveFocus();
     expect(fake.calls.some((c) => c.command === "query_facets")).toBe(true);
     await vi.waitFor(() =>
       expect(within(stars).getAllByRole("option").map((o) => o.textContent)).toEqual([
@@ -143,7 +168,7 @@ describe("FilterBar", () => {
     );
     setApi(fake);
     await grid().start();
-    const { container } = render(<FilterBar />);
+    const { container } = render(<Bars />);
     await userEvent.click(screen.getByRole("button", { name: "Filters" }));
     const kinds = screen.getByRole("group", { name: "Kinds shown" });
     const videos = await within(kinds).findByRole("checkbox", { name: "Videos (1)" });
@@ -174,7 +199,7 @@ describe("FilterBar", () => {
 
   it("runs a chosen filter and shows its chip, the count and Clear filter", async () => {
     await grid().start();
-    render(<FilterBar />);
+    render(<Bars />);
     await userEvent.click(screen.getByRole("button", { name: "Filters" }));
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Stars" }), "yes");
     await vi.waitFor(() => expect(runs().at(-1)!.args).toMatchObject({ query: { filter: { star: "yes" }, want_facets: true } }));
@@ -200,7 +225,7 @@ describe("FilterBar", () => {
     await grid().start();
     render(
       <>
-        <FilterBar />
+        <FiltersButton />
         <p>outside</p>
       </>,
     );
@@ -266,7 +291,7 @@ describe("FilterBar", () => {
 
   it("never sets From after To", async () => {
     await grid().start();
-    render(<FilterBar />);
+    render(<Bars />);
     await userEvent.click(screen.getByRole("button", { name: "Filters" }));
     fireEvent.change(screen.getByLabelText("To"), { target: { value: "2024-01-02" } });
     await vi.waitFor(() => expect(grid().query.filter).toEqual({ to: "2024-01-02" }));

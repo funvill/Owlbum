@@ -11,7 +11,8 @@ import { fakeStatus } from "../../api/fake/album";
 import { defaultSettings } from "../../api/fake/app";
 import { Toasts, useToasts } from "../../controls";
 import { albumText } from "../../text/album";
-import { aboutText, settingsText } from "../../text/app";
+import { aboutText, moreText, settingsText } from "../../text/app";
+import { useSettingsStore } from "../app/settings";
 import { shortcutsText } from "../../text/keys";
 import { seriousFindings } from "../../test/axe";
 import { createQueryFake } from "../../api/fake/query";
@@ -263,6 +264,45 @@ describe("the grid in the window", () => {
 
     await userEvent.click(screen.getByRole("button", { name: albumText.closeFolder }));
     await waitFor(() => expect(useGridStore.getState().result).toBeNull());
+  });
+});
+
+describe("the review screen's keys and bars in the window", () => {
+  async function review() {
+    const album = createQueryFake([
+      { id: 1, rel_path: "a.jpg", date: "2024-01-01T00:00:01" },
+      { id: 2, rel_path: "b.jpg", date: "2024-01-01T00:00:02" },
+    ]);
+    const fake = await shell({
+      ...album.handlers,
+      album_open: () => ({ status: { ...fakeStatus("D:\\Trip"), photos: 2 }, session: null }),
+    });
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
+    await waitFor(() => expect(useGridStore.getState().result?.count).toBe(2));
+    return fake;
+  }
+
+  it("toggles the thumbnails once for one press of T (issue 207)", async () => {
+    const fake = await review();
+    await userEvent.keyboard("t");
+    await waitFor(() => expect(useSettingsStore.getState().settings?.["panel.grid_shown"]).toBe(false));
+    await act(async () => {});
+    const sets = fake.calls.filter(
+      (c) => c.command === "app_settings_set" && "panel.grid_shown" in (c.args as { patch: object }).patch,
+    );
+    expect(sets).toHaveLength(1);
+  });
+
+  it("has the search box and Filters at the top bar's left with no wordmark, and the count under them (issue 196)", async () => {
+    await review();
+    const top = document.querySelector<HTMLElement>(".ow-topbar")!;
+    expect(within(top).queryByText("Owlbum")).toBeNull();
+    const left = top.querySelector<HTMLElement>(".ow-topbar__left")!;
+    expect(within(left).getByRole("searchbox", { name: "Search photos" })).toBeInTheDocument();
+    expect(within(left).getByRole("button", { name: "Filters" })).toBeInTheDocument();
+    const bar = screen.getByRole("search", { name: "Filter photos" });
+    expect(within(bar).getByText("2 photos")).toBeInTheDocument();
+    expect(within(bar).queryByRole("checkbox", { name: "Stack similar" })).toBeNull();
   });
 });
 
@@ -610,24 +650,85 @@ describe("reading bar", () => {
   });
 });
 
-describe("the menu bar and the top bar's gear (docs/08-desktop-and-release.md)", () => {
-  it("acts on the menu items that act in the page", async () => {
+describe("the More menu, the keys and the top bar's gear (docs/08-desktop-and-release.md)", () => {
+  const more = () => screen.getByRole("button", { name: moreText.open });
+  const choose = async (name: string, role: "menuitem" | "menuitemcheckbox" = "menuitem") => {
+    await userEvent.click(more());
+    await userEvent.click(within(screen.getByRole("menu", { name: moreText.open })).getByRole(role, { name }));
+  };
+
+  it("holds the old menu bar's commands and Tidy, with no Tidy button (issue 197)", async () => {
     const fake = await shell();
+    expect(screen.queryByRole("button", { name: albumText.tidy })).toBeNull();
+    await userEvent.click(more());
+    const menu = screen.getByRole("menu", { name: moreText.open });
+    // With no album, the album's own commands are off.
+    expect(within(menu).getByRole("menuitem", { name: moreText.closeFolder })).toHaveAttribute("aria-disabled", "true");
+    expect(within(menu).getByRole("menuitem", { name: moreText.tidy })).toHaveAttribute("aria-disabled", "true");
+    for (const name of [moreText.fullScreen, moreText.dataFolder, moreText.whatsNew, moreText.update.check, moreText.feedback, moreText.about, moreText.quit])
+      expect(within(menu).getByRole("menuitem", { name })).toBeInTheDocument();
+    for (const name of [moreText.thumbnails, moreText.details, moreText.thumbnailsBottom])
+      expect(within(menu).getByRole("menuitemcheckbox", { name })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+
     act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
     await waitFor(() => expect(useAlbumStore.getState().status).not.toBeNull());
-    act(() => fake.emit("app_menu", { item: "rescan" }));
+    await choose(moreText.rescan);
     await waitFor(() => expect(fake.calls.some((c) => c.command === "album_rescan")).toBe(true));
-    act(() => fake.emit("app_menu", { item: "shortcuts" }));
+    await choose(moreText.shortcuts);
     expect(await screen.findByRole("dialog", { name: shortcutsText.title })).toBeInTheDocument();
-    act(() => fake.emit("app_menu", { item: "shortcuts" }));
+    await userEvent.keyboard("{Escape}");
     await waitFor(() => expect(screen.queryByRole("dialog", { name: shortcutsText.title })).not.toBeInTheDocument());
-    act(() => fake.emit("app_menu", { item: "close_folder" }));
+    await choose(moreText.tidy);
+    expect(await screen.findByRole("dialog", { name: albumText.tidyTitle })).toBeInTheDocument();
+    await userEvent.keyboard("{Escape}");
+    await choose(moreText.fullScreen);
+    await choose(moreText.dataFolder);
+    await choose(moreText.update.check);
+    await choose(moreText.quit);
+    for (const command of ["app_full_screen", "app_open_data_folder", "app_update_choose", "app_quit"])
+      expect(fake.calls.some((c) => c.command === command), command).toBe(true);
+    await choose(moreText.thumbnails, "menuitemcheckbox");
+    await waitFor(() => expect(useSettingsStore.getState().settings?.["panel.grid_shown"]).toBe(false));
+    await userEvent.click(more());
+    expect(screen.getByRole("menuitemcheckbox", { name: moreText.thumbnails })).toHaveAttribute("aria-checked", "false");
+    await userEvent.keyboard("{Escape}");
+    await choose(moreText.closeFolder);
     await waitFor(() => expect(fake.calls.some((c) => c.command === "album_close")).toBe(true));
-    act(() => fake.emit("app_menu", { item: "about" }));
+    await choose(moreText.about);
     const about = await screen.findByRole("dialog", { name: aboutText.title });
     expect(await within(about).findByText(aboutText.name("0.0.0-fake"))).toBeInTheDocument();
     await userEvent.click(within(about).getByRole("button", { name: aboutText.ok }));
     await waitFor(() => expect(screen.queryByRole("dialog", { name: aboutText.title })).not.toBeInTheDocument());
+  });
+
+  it("handles every key the menu bar's accelerators did, also while typing (issue 197)", async () => {
+    const fake = await shell({ app_pick_folder: () => null });
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
+    await waitFor(() => expect(useAlbumStore.getState().status).not.toBeNull());
+    const called = (command: string) => fake.calls.some((c) => c.command === command);
+    await userEvent.keyboard("{F11}");
+    expect(called("app_full_screen")).toBe(true);
+    await userEvent.keyboard("{F2}");
+    expect(called("app_open_feedback")).toBe(true);
+    await userEvent.keyboard("{Control>}o{/Control}");
+    await waitFor(() => expect(called("app_pick_folder")).toBe(true));
+    await userEvent.keyboard("{Control>}q{/Control}");
+    expect(called("app_quit")).toBe(true);
+    await userEvent.keyboard("{F1}");
+    const about = await screen.findByRole("dialog", { name: aboutText.title });
+    await userEvent.click(within(about).getByRole("button", { name: aboutText.ok }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: aboutText.title })).toBeNull());
+    // Ctrl+W from inside a text field closes the album.
+    const box = document.createElement("input");
+    document.body.append(box);
+    try {
+      box.focus();
+      await userEvent.keyboard("{Control>}w{/Control}");
+      await waitFor(() => expect(called("album_close")).toBe(true));
+    } finally {
+      box.remove();
+    }
   });
 
   it("opens Settings from the gear, with or without an album", async () => {

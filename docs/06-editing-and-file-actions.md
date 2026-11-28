@@ -598,7 +598,7 @@ Closing loses nothing, because every edit is already in the album. So there is n
 | Edit mode is open | It ends as Done first. |
 | A save is running | The close waits for the current photo's sequence to finish, at most 120 seconds. Save all stops after that photo. The window shows "Finishing saving…" meanwhile (as built, #160: in the place of the Save all button, from `app_closing` until the save ends). |
 | `album` mode | The window closes. |
-| `file` mode with photos waiting | One native question, below. It is asked for closing the window, File > Quit, and before installing an update. |
+| `file` mode with photos waiting | One native question, below. It is asked for closing the window, More > Quit, and before installing an update. |
 
 The question is a native warning box:
 

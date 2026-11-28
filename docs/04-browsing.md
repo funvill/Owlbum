@@ -49,8 +49,8 @@ The window is one column. Parts appear top to bottom in this order:
 ```text
 +--------------------------------------------------------------------------------------------+
 | TOP BAR (48px)        window title: Owlbum 0.1.3 - D:\Photos\2024\Trip                     |
-| Owlbum [Search photos…      ] Show whole album [View only]  [grid ===o===] [Tidy…]         |
-|  Try star:yes …                                   [Close folder] [folder Open folder] [gear] |
+| [Search photos…      ] [Filters v] Show whole album [View only]  [grid ===o===]            |
+|  Try star:yes …                          [Close folder] [folder Open folder] [More] [gear] |
 +--------------------------------------------------------------------------------------------+
 | BANNER (only when needed)  View only: this album is open on STUDIO-PC. Stars, notes, …     |
 +--------------------------------------------------------------------------------------------+
@@ -60,9 +60,8 @@ The window is one column. Parts appear top to bottom in this order:
 +--------------------------------------------------------------------------------------------+
 | NOTICES (only when needed)  3 files not supported yet (HEIC, AVIF) · 2 files could not … [x]|
 +--------------------------------------------------------------------------------------------+
-| FILTER BAR (see 05)                               [x] Stack similar [Filters v] 2,140 photos |
-+--------------------------------------------------------------------------------------------+
-| FILTERED ROW (see 05) [Starred x] [lake x]            Showing 312 of 2,140 · [Clear filter] |
+| FILTER BAR (see 05)  2,140 photos                                                          |
+|   or, while filtered: Showing 312 of 2,140 [Clear filter] (Photos with 'lake' x) (Starred x)|
 +--------------------------------------------------------------------------------------------+
 | BODY (fills the rest): start screen | message | review screen                              |
 |                                                                                            |
@@ -119,7 +118,7 @@ Shown while no album is open.
 
 ```text
 +--------------------------------------------------------------------------------------------+
-| Owlbum                                                                            [gear]   |  48px top bar: name and Settings only
+|                                                                          [More] [gear]   |  48px top bar: More and Settings only
 +--------------------------------------------------------------------------------------------+
 |        (padding 48px top; content column 720px wide, centred; gap `--space-5`; scrolls)           |
 |        Open a folder of photos                                       (h1)                  |
@@ -150,7 +149,7 @@ Every route ends in the same call, `album_open(path)`.
 | Route | How it reaches the page |
 |---|---|
 | **Open folder** button (start screen and top bar) | The page calls `app_pick_folder`. Rust shows the native dialog titled "Open a folder of photos" and answers with the chosen path, or null if it was cancelled. |
-| File > Open folder… (Ctrl+O) | Rust shows the same dialog and emits `open_folder`. |
+| More > Open folder… (Ctrl+O) | The same dialog, through `app_pick_folder`. |
 | A recent folder | The page calls `album_open` with the entry's `root`. |
 | A folder on the command line | `app_startup` answers with `launch_folder`. |
 | A second launch with a folder | The running window comes to the front and Rust emits `open_folder`. A second launch with no folder only brings the window forward. |
@@ -174,7 +173,7 @@ Rules:
 | `not_a_folder`, `folder_unreadable` | Toast: "Couldn't open <folder name>: <message>" | None. The start screen stays. |
 | Any other code | Toast: "Couldn't open <folder name>: <message>" | None. |
 
-**Close folder** (top bar, and File > Close folder, Ctrl+W) calls `album_close` and shows the start screen.
+**Close folder** (top bar, and More > Close folder, Ctrl+W) calls `album_close` and shows the start screen.
 
 ### Opening a picture
 
@@ -191,8 +190,8 @@ The bar is 48px high. It has a left group that takes the free space and a right 
 
 **Left group**
 
-- **Owlbum**, in bold.
-- **The search box** with its hint line, while an album with photos is open (the same condition as the filter bar). It sits at the left, in line with Open folder and Close folder at the right, and is a `search` landmark labelled "Photo search". Defined in [Organising](05-organising.md#the-search-box). The album's folder is not shown in the bar: it is in the window title (owner's feedback, #182; see [Desktop](08-desktop-and-release.md#the-window)).
+- **The search box** with its hint line, while an album with photos is open (the same condition as the filter bar). It sits at the left, in line with Open folder and Close folder at the right, and is a `search` landmark labelled "Photo search". The "Owlbum" wordmark that stood before it is gone (owner's feedback on 0.1.4, #196): the window title names the program.
+- **Filters**, the button that drops the filter panel (Stack similar is in that panel), beside the search box under the same condition (#196). Defined in [Organising](05-organising.md#the-filter-panel). Defined in [Organising](05-organising.md#the-search-box). The album's folder is not shown in the bar: it is in the window title (owner's feedback, #182; see [Desktop](08-desktop-and-release.md#the-window)).
 - **Show whole album**, a small link shown only in a scoped open. It opens the album root.
 - **View only**, a badge shown while the album is view-only. Its tooltip is the banner's sentence.
 
@@ -200,9 +199,9 @@ The bar is 48px high. It has a left group that takes the free space and a right 
 
 - **Save all (N)** (album open, `edit_target` is `file` and a photo has an edit): defined in [Editing and file actions](06-editing-and-file-actions.md).
 - **Thumbnail size** (album open): a grid icon and a slider, 120px wide, minimum 96, maximum 320, step 8. Label and tooltip "Thumbnail size". See [Thumbnail size](#thumbnail-size).
-- **Tidy…** (album open): defined in [Organising](05-organising.md). Disabled in a view-only album.
 - **Close folder** (album open).
 - **Open folder** (album open; on the start screen the button is in the body instead).
+- **More** (always): a `⋯` icon button that opens the menu holding what the menu bar and the Tidy button did (owner's feedback on 0.1.4, #197). Defined in [Desktop](08-desktop-and-release.md#the-more-menu).
 - **Settings** (always): a gear icon button, label and tooltip "Settings". Defined in [Desktop](08-desktop-and-release.md).
 
 The bar never wraps. The window cannot be narrower than 960px, and below 1280px the bar gives up room in the order [Visual design](09-visual-design.md#the-bars) sets: the search box shrinks, then below 1100px the buttons become icon buttons, the slider moves into a popover and the search box's hint row is hidden. (The slider's popover is not built yet: the slider stays in the bar; issue 201.)
@@ -330,9 +329,9 @@ Owner's feedback on 0.1.3 (#185). The thumbnails and the details panel can each 
 |---|---|---|
 | Buttons | **Thumbnails**, a toggle button at the preview's top right (`panel-left` or `panel-bottom` icon), pressed while they show | **Details panel**, the toggle beside it (`details` icon) |
 | Keys (browse) | `T` (`browse.toggle_grid`) | `I` (`browse.toggle_details`), as in the viewer |
-| View menu | `&Thumbnails` (checkbox) | `&Details panel` (checkbox) |
+| More menu (#197) | Thumbnails (checkbox) | Details panel (checkbox) |
 
-- **Where the thumbnails sit.** View > `Thumbnails at the &bottom` (a checkbox), or Settings > View > Thumbnails (**At the left** or **Along the bottom, under the preview**), sets `panel.grid_place`. Moving them also shows them.
+- **Where the thumbnails sit.** More > Thumbnails at the bottom (a checkbox), or Settings > View > Thumbnails (**At the left** or **Along the bottom, under the preview**), sets `panel.grid_place`. Moving them also shows them.
 - **The bottom strip.** As wide as the window, under the preview and the details column, with the view switch on top. It is the same grid turned on its side: its rows run down the strip (one or two tiles, as its height allows) and it scrolls sideways; the mouse wheel scrolls it sideways too. Its height is `panel.strip_height` (default 200, at least 120, and at most what leaves the preview 200 px above it), set by a row splitter over it ("Resize thumbnail strip": drag, Up and Down by 16 px, Home and End, double-click for 200), saved like the column splitters. In the timeline each heading reads upwards in its own narrow column; the month rail is not shown in the strip. The map, when it is the view, fills the strip.
 - **Hidden thumbnails** stay in the page, out of sight, so the review keys, the current photo, the selection, the rows the preview needs and the store keep working: Left and Right still step through the result. When they show again the current photo is brought into view. A hidden column has no splitter, and the preview takes its room (the column widths below count only the columns in the row).
 - **A hidden details panel** is not drawn; the preview still reads the photo's details it needs.

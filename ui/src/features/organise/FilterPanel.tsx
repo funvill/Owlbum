@@ -13,6 +13,9 @@ interface FilterPanelProps {
   /** The counts beside the options; null until `query_facets` answers. */
   facets: Facets | null;
   onChange: (filter: Filter) => void;
+  /** Stack similar: on or off. It shapes the result rather than filtering it. */
+  stack: boolean;
+  onStack: (on: boolean) => void;
 }
 
 /** A select option with its facet; muted, still enabled, when the count is 0. */
@@ -51,13 +54,14 @@ function Group({ legend, children }: { legend: string; children: ReactNode }) {
 }
 
 /**
- * The filter panel (docs/05-organising.md, "The filter panel"): a labelled
- * group of the filters with a panel control, each option with its facet.
+ * The filter panel (docs/05-organising.md, "The filter panel"): Stack
+ * similar, then a labelled group of the filters with a panel control, each
+ * option with its facet.
  * It is marked `data-keys="dialog"`, so the grid's keys do nothing while
  * focus is inside. Focus moves to its first control when it opens; the bar
  * owns opening and closing.
  */
-export function FilterPanel({ filter, facets, onChange }: FilterPanelProps) {
+export function FilterPanel({ filter, facets, onChange, stack, onStack }: FilterPanelProps) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
     ref.current?.querySelector<HTMLElement>("select, input, button")?.focus();
@@ -79,6 +83,15 @@ export function FilterPanel({ filter, facets, onChange }: FilterPanelProps) {
   const tags = filter.tags ?? [];
   return (
     <div ref={ref} className="ow-filter-panel" role="group" aria-label={t.label} data-keys="dialog">
+      {/* Stack similar sits at the panel's top (owner's feedback, issue 196). */}
+      <div className="ow-filter-panel__stack">
+        <Checkbox
+          label={organiseText.bar.stack}
+          description={organiseText.bar.stackTip}
+          checked={stack}
+          onChange={onStack}
+        />
+      </div>
       <Group legend={t.groups.photo}>
         <SelectField
           label={t.stars}

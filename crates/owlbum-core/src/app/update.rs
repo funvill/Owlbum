@@ -143,25 +143,6 @@ pub fn reason(error: &str) -> String {
     line.chars().take(300).collect()
 }
 
-/// Help's update item for a state (docs/08, "States"): its label and
-/// whether it can be chosen.
-pub fn menu_label(state: &UpdateState) -> (String, bool) {
-    let version = state.version.as_deref().unwrap_or("");
-    match state.state {
-        UpdateStateKind::Unavailable | UpdateStateKind::Idle => {
-            ("Check for &updates…".to_owned(), true)
-        }
-        UpdateStateKind::Checking => ("Checking for updates…".to_owned(), false),
-        UpdateStateKind::Available => (format!("Download &update {version}…"), true),
-        UpdateStateKind::Downloading => (
-            format!("Downloading update… {} %", state.percent.unwrap_or(0)),
-            false,
-        ),
-        UpdateStateKind::Ready => (format!("Install &update {version}…"), true),
-        UpdateStateKind::Installing => ("Installing update…".to_owned(), false),
-    }
-}
-
 /// Whether `latest` is newer than `current`: an older or equal version is
 /// never offered.
 pub fn is_newer(latest: &str, current: &str) -> bool {
@@ -228,33 +209,6 @@ mod tests {
         assert_eq!(reason("\n  first line  \nsecond"), "first line");
         assert_eq!(reason(&"x".repeat(400)).chars().count(), 300);
         assert_eq!(reason(""), "unknown error");
-    }
-
-    #[test]
-    fn the_menu_item_follows_the_state() {
-        let s = |state, version: Option<&str>, percent| UpdateState {
-            state,
-            version: version.map(str::to_owned),
-            percent,
-        };
-        assert_eq!(
-            menu_label(&s(UpdateStateKind::Idle, None, None)),
-            ("Check for &updates…".into(), true)
-        );
-        assert_eq!(
-            menu_label(&s(UpdateStateKind::Available, Some("0.2.0"), None)),
-            ("Download &update 0.2.0…".into(), true)
-        );
-        assert_eq!(
-            menu_label(&s(UpdateStateKind::Downloading, Some("0.2.0"), Some(42))),
-            ("Downloading update… 42 %".into(), false)
-        );
-        assert_eq!(
-            menu_label(&s(UpdateStateKind::Ready, Some("0.2.0"), None)),
-            ("Install &update 0.2.0…".into(), true)
-        );
-        assert!(!menu_label(&s(UpdateStateKind::Checking, None, None)).1);
-        assert!(!menu_label(&s(UpdateStateKind::Installing, None, None)).1);
     }
 
     #[test]

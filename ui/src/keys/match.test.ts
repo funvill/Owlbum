@@ -58,13 +58,15 @@ describe("places", () => {
   });
 });
 
-describe("menu rows", () => {
-  it("are never matched by the page, which must not bind them", () => {
-    expect(id(key("F1"))).toBeNull();
-    expect(id(key("F11"))).toBeNull();
-    expect(id(key("o", { ctrlKey: true }))).toBeNull();
-    expect(id(key("q", { ctrlKey: true }), viewer)).toBeNull();
-    expect(id(key("r", { ctrlKey: true }))).toBeNull();
+describe("the old menu bar's keys", () => {
+  it("are the page's now, everywhere and while typing (issue 197)", () => {
+    expect(id(key("F1"))).toBe("app.about");
+    expect(id(key("F11"))).toBe("app.full_screen");
+    expect(id(key("o", { ctrlKey: true }))).toBe("app.open_folder");
+    expect(id(key("q", { ctrlKey: true }), viewer)).toBe("app.quit");
+    expect(id(key("w", { ctrlKey: true }), { place: "browse", focus: "typing" })).toBe("app.close_folder");
+    // A test run is a development build.
+    expect(id(key("r", { ctrlKey: true }))).toBe("app.reload");
   });
 
   it("can still be tested directly", () => {
@@ -91,7 +93,9 @@ describe("letters", () => {
   it("use the letter typed when it is a Latin letter, not the physical key", () => {
     // AZERTY: the key where QWERTY has A types q.
     expect(id(key("h", { code: "KeyJ" }))).toBe("browse.hide");
-    expect(id(key("q", { code: "KeyA", ctrlKey: true }))).toBeNull();
+    // The typed q makes Ctrl+Q (Quit), wherever the key sits.
+    expect(id(key("q", { code: "KeyA", ctrlKey: true }))).toBe("app.quit");
+    expect(id(key("a", { code: "KeyQ", ctrlKey: true }))).toBe("browse.select_all");
   });
 
   it("never fall back for punctuation or symbols", () => {

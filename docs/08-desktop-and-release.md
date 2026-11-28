@@ -70,7 +70,7 @@ There is one window and one running copy per app data folder.
 
 - A second launch sends its arguments and working directory to the first copy and exits with code 0.
 - The first copy restores its window from minimised, shows it and gives it focus.
-- If the second launch named a folder, the first copy opens it, exactly as File > Open folder would. Opening another album asks no question, because every edit is already in the album (see [Editing and file actions](06-editing-and-file-actions.md)). If it named a picture, its folder opens with the picture shown; if that folder is already open, only the current photo changes.
+- If the second launch named a folder, the first copy opens it, exactly as More > Open folder would. Opening another album asks no question, because every edit is already in the album (see [Editing and file actions](06-editing-and-file-actions.md)). If it named a picture, its folder opens with the picture shown; if that folder is already open, only the current photo changes.
 - The single-instance plugin is not registered when `OWLBUM_DATA_DIR` is set, so tests can run several copies at once, each with its own data folder.
 
 ### Handing a folder to the page
@@ -129,51 +129,45 @@ Closing the window quits Owlbum. Quit, the window's close button, and an update 
 4. The open album is closed: its writer thread finishes, the `lock` file is removed, and tagging and scanning stop.
 5. The process exits with code 0.
 
-As built (#47, `src-tauri/src/closing.rs`): the window's close request is held and the steps run on a thread of their own; a second close while they run is ignored. Before step 2 the shell asks a running save to stop after its current photo and waits for it (at most 2 minutes). The native question uses the dialog plugin's two custom buttons, which cannot choose the default button, so "Close anyway" is the default on Windows (Esc is "Go back"), the same limit as the trash confirm (#148). "Go back" lets saves run again and allows the next close. While it waits the page shows "Finishing saving…" in the place of Save all (#160). File > Quit and `app_quit` start these steps with `closing::requested` (#58); the update install starts them with reason `update` (`closing::requested_for`, #62). Step 3 writes the bounds the window last had (`src-tauri/src/window.rs`). Before the album closes in step 4, tagging stops: the model download is cancelled, the run in hand is told to end and the models are unloaded.
+As built (#47, `src-tauri/src/closing.rs`): the window's close request is held and the steps run on a thread of their own; a second close while they run is ignored. Before step 2 the shell asks a running save to stop after its current photo and waits for it (at most 2 minutes). The native question uses the dialog plugin's two custom buttons, which cannot choose the default button, so "Close anyway" is the default on Windows (Esc is "Go back"), the same limit as the trash confirm (#148). "Go back" lets saves run again and allows the next close. While it waits the page shows "Finishing saving…" in the place of Save all (#160). More > Quit (`Ctrl+Q`) and `app_quit` start these steps with `closing::requested` (#58); the update install starts them with reason `update` (`closing::requested_for`, #62). Step 3 writes the bounds the window last had (`src-tauri/src/window.rs`). Before the album closes in step 4, tagging stops: the model download is cancelled, the run in hand is told to end and the models are unloaded.
 
 If step 4 takes longer than 5 seconds the process exits anyway and the log says so. Every typed change was already committed when its command returned, so nothing typed is lost. As built (#199): once the close question is past, a watchdog thread gives steps 3 and 4 (geometry, tagging, closing the album) 5 seconds (`closing::CLOSE_WAIT`); if they have not finished it logs "closing the album did not finish within 5 s; exiting anyway" and ends the process. Quit, the close button and an update install share it; a stalled close before an update install exits without installing (the log says so), and the next check offers the update again. Step 4 waits for an album open or close already under way (`Session::one_at_a_time`). Shell tests replace the exit with a hook (`Closing::set_exit_hook`).
 
-## Menus
+## The More menu
 
-The menu bar has three menus. `&` marks the mnemonic.
+There is no menu bar (owner's feedback on 0.1.4, #197). A **More** button (`⋯`, named "More") sits in the top bar beside the Settings gear, with or without an album, and opens a menu that holds what the menu bar and the Tidy button did. Each row shows its key from the [key table](#the-key-table), where it has one.
 
-| Menu | Item | Accelerator | Action |
-|---|---|---|---|
-| File | `&Open folder…` | `Ctrl+O` | A native folder dialog titled "Open a folder of photos". A chosen folder is handed to the page as `open_folder`. |
-| File | `&Close folder` | `Ctrl+W` | Closes the album and shows the start screen (see [Browsing](04-browsing.md)). Disabled when no album is open. |
-| File | `&Rescan` | none | Rescans the open album (see [Media and scanning](03-media-and-scanning.md)). Disabled when no album is open. |
-| File | separator | | |
-| File | `Open the &data folder` | none | Opens the app data folder in the file manager. |
-| File | separator | | |
-| File | `&Quit` | `Ctrl+Q` | Quits, through the steps in [Closing and quitting](#closing-and-quitting). |
-| View | `&Thumbnails` (checkbox) | shown as `T` | Shows or hides the thumbnails (`panel.grid_shown`; owner's feedback, #185, see [Browsing](04-browsing.md#hiding-and-moving-the-panels)). |
-| View | `&Details panel` (checkbox) | shown as `I` | Shows or hides the details panel (`panel.details_shown`). |
-| View | `Thumbnails at the &bottom` (checkbox) | none | Moves the thumbnails between the left column and the bottom strip (`panel.grid_place`). |
-| View | separator | | |
-| View | `Toggle &full screen` | `F11` | Makes the window full screen, or returns it. This is the window, not the full-screen viewer. |
-| View | `&Reload` (development builds only) | `Ctrl+R` | Reloads the page. |
-| View | `Toggle &developer tools` (development builds only) | `Ctrl+Shift+I` | |
-| Help | `&Keyboard shortcuts` | shown as `?` | Opens the shortcut overlay. |
-| Help | separator | | |
-| Help | The update item (see [Updates](#updates)) | none | Depends on the update state. |
-| Help | `Check &automatically` (checkbox) | none | Toggles `updates.auto`. |
-| Help | `What's &new` | none | Shows the notes for this version. |
-| Help | separator | | |
-| Help | `&Give feedback on GitHub…` | `F2` | Opens the feedback address in the user's browser. |
-| Help | separator | | |
-| Help | `&About Owlbum` | `F1` | Opens the About box. |
+| Item | Key | Action |
+|---|---|---|
+| Open folder… | `Ctrl+O` | A native folder dialog titled "Open a folder of photos" (`app_pick_folder`); a chosen folder opens. |
+| Close folder | `Ctrl+W` | Closes the album and shows the start screen (see [Browsing](04-browsing.md)). Disabled when no album is open. |
+| Rescan | none | Rescans the open album (see [Media and scanning](03-media-and-scanning.md)). Disabled when no album is open. |
+| Tidy… | none | Opens the Tidy dialog (see [Organising](05-organising.md)). Disabled when no album is open, and in a view-only album, with the reason. |
+| separator | | |
+| Thumbnails (checkbox) | `T` | Shows or hides the thumbnails (`panel.grid_shown`; #185, see [Browsing](04-browsing.md#hiding-and-moving-the-panels)). |
+| Details panel (checkbox) | `I` | Shows or hides the details panel (`panel.details_shown`). |
+| Thumbnails at the bottom (checkbox) | none | Moves the thumbnails between the left column and the bottom strip (`panel.grid_place`). Settings > View has the same choice. |
+| Full screen | `F11` | Makes the window full screen, or returns it (`app_full_screen`). This is the window, not the full-screen viewer. |
+| Reload (development builds only) | `Ctrl+R` | Reloads the page. |
+| Developer tools (development builds only) | `Ctrl+Shift+I` | Opens or closes the developer tools (`app_developer_tools`). |
+| separator | | |
+| Open the data folder | none | Opens the app data folder in the file manager (`app_open_data_folder`). |
+| separator | | |
+| Keyboard shortcuts | `?` | Opens the shortcut overlay. |
+| What's new | none | Shows the notes for this version. |
+| The update item (see [Updates](#states)) | none | Its text follows the update state; `app_update_choose` checks, downloads or installs. Disabled while a check, download or install runs. |
+| Give feedback | `F2` | Opens the feedback address in the user's browser (`app_open_feedback`). |
+| About Owlbum | `F1` | Opens the About box. |
+| separator | | |
+| Quit | `Ctrl+Q` | Quits, through the steps in [Closing and quitting](#closing-and-quitting) (`app_quit`). |
 
 Rules:
 
-- **Every accelerator is set explicitly.** None is left to a platform default. Each comes from its `menu` row in the [key table](#the-key-table); Reload and Toggle developer tools have rows marked `dev`.
-- **`?` is not a native accelerator.** It must not fire while the user is typing, so the page handles it. The menu only shows the key beside the item.
-- **F1, F2, F11, `Ctrl+O`, `Ctrl+W` and `Ctrl+Q` are native accelerators.** They work whenever the window has focus, including while typing and while a dialog is open. The page must not bind them.
-- **Items that act in the page** (Close folder, Rescan, Keyboard shortcuts, What's new, About, the three panel items, and the update item) emit `app_menu` with `{ item }`, the item's id (`toggle_grid`, `toggle_details`, `grid_place` for the panel items). The page does the rest.
-- **The panel items' keys** (`T`, `I`) are the page's, like `?`: they must not fire while typing. The menu shows them beside the items. Their checkboxes follow the settings whenever `app_settings_set` saves (from the menu, a key, a button or Settings).
-- **The menu is rebuilt** when the update state changes, when `updates.auto` changes, and when an album opens or closes.
-- **Menu text** lives in the shell's text module, the Rust counterpart of `ui/src/text/`.
+- **The page handles every key.** With no native menu there are no accelerators: F1, F2, F11, `Ctrl+O`, `Ctrl+W`, `Ctrl+Q` (and `Ctrl+R`, `Ctrl+Shift+I` in development builds) are ordinary `everywhere` rows marked `typing`, so they also act while focus is in a text field. Like every row they do nothing while a dialog is open.
+- **Check automatically** (`updates.auto`) is in Settings only; it was a Help menu checkbox.
+- **Menu text** is the page's (`ui/src/text/app.ts`, `moreText`).
 
-As built (#58, `src-tauri/src/menu.rs`): the items are one table, `menu::ENTRIES`; a shell test fails if a `menu` row of the key table has no item or an item's accelerator has no row. Instead of rebuilding the menu, the shell enables Close folder and Rescan when an album opens or closes and ticks Check automatically when `updates.auto` changes (from the menu or from Settings). The update item came with the updater (#62); its text and whether it can be chosen follow the update state, and it acts in Rust. About and Give feedback (F1, F2) came with #61: About sends `app_menu about`; Give feedback is done in Rust, which opens the feedback address itself. What's new sends `app_menu`; the page shows the running version's notes (#63). The `?` beside Keyboard shortcuts is drawn as the item's key column on Windows (text after a tab); Linux shows the label alone. Open folder runs the native dialog on a thread of its own and hands a chosen folder over as `open_folder`. The single-instance plugin (`tauri-plugin-single-instance`) is registered first, and only when `OWLBUM_DATA_DIR` is not set.
+As built (#197): the menu is `ui/src/features/album/MoreMenu.tsx`, and `useAppKeys` there handles the keys. The Rust menu (`src-tauri/src/menu.rs`), its copy of the key table (`keymap.rs`), the `app_menu` event and the menu text are gone. With them went T and I acting twice (once as the View menu's accelerators, once in the page). The checkboxes are drawn from the settings when the menu opens, so there is nothing to keep in step. Whether WebView2 lets the page take F11, `Ctrl+R` and `Ctrl+W` before its own browser keys is not checked in the running app (open question).
 
 ## Settings dialog
 
@@ -213,14 +207,14 @@ The gear button in the top bar opens Settings. It is a modal dialog. Esc, the cl
 |---|---|---|---|
 | General | Reopen the last album at start (checkbox) | `reopen_last` | |
 | General | Open pictures with Owlbum (checkbox) | none: the registry | Windows only, see [Opening pictures](#opening-pictures). Read with `app_associate_status` when the dialog opens; changed with `app_associate`. Turning it on says "Choose Owlbum in Default apps to finish." |
-| View | Thumbnails (two radio buttons) | `panel.grid_place` | **At the left** or **Along the bottom, under the preview**. Choosing also shows the thumbnails. The same setting as View > Thumbnails at the bottom. |
+| View | Thumbnails (two radio buttons) | `panel.grid_place` | **At the left** or **Along the bottom, under the preview**. Choosing also shows the thumbnails. The same setting as More > Thumbnails at the bottom. |
 | General | Cache limit (whole number of GB) | `cache.limit_gb` | 1 to 1000. Saved when the field loses focus or Enter is pressed. A value outside the range is put back and the field says why. Lowering the limit prunes at once. |
 | General | Cache use (text) | none | From `app_cache_usage`: the bytes held by `thumbs/` and `full/`. Read when the dialog opens and after a clear. |
 | General | Clear cache (button) | none | Opens a confirm strip: "Clear 12.4 GB of thumbnails? They are made again as you browse." with **Cancel** and **Clear**. Clear calls `app_cache_clear`, which deletes `thumbs/`, `full/` and their `cache_entries` rows. Models, settings and albums are not touched. |
 | General | When I edit a photo (two radio buttons) | `edit_target` | `album` ("Keep the edit in the album": Done is the save and the file is never touched) or `file` ("Save edits into the photo file": an edit is "Edited · not saved" until Save writes it into the file). The option text and what each does are owned by [Editing and file actions](06-editing-and-file-actions.md#what-save-means). |
 | Maps | Load maps from the internet (checkbox) | `maps_online` | Ticked is true, cleared is false. Unset shows as cleared. This is the same answer the Map tab's question records (see [Browsing](04-browsing.md)). |
 | Photo tagging | The model choices, downloads and removal | `tagging.describe`, `tagging.keywords` | Owned entirely by [Tagging](07-tagging.md). This part only gives it a place in the dialog. |
-| Updates | Check for a new version once a day (checkbox) | `updates.auto` | The same setting as Help > Check automatically. Changing either updates the other. |
+| Updates | Check for a new version once a day (checkbox) | `updates.auto` | The only place to change it: the Help menu's Check automatically went with the menu bar (#197). |
 | Updates | Version and last check (text) | `updates.last_check` | "never" when null. |
 | Updates | Check now (button) | none | The manual check, the same as the Help item. |
 
@@ -253,9 +247,9 @@ There is one table of keys, `ui/src/keys/keymap.json`. Three things read it and 
 
 - the page's key handlers, which look up the pressed key in the table and run the action with that id;
 - the shortcut overlay, which lists the table;
-- the shell, which compiles the file in and takes its menu accelerators from the rows marked `menu`.
+- the More menu, which shows a row's key beside its item.
 
-A key that changes in the table changes in all three. A page test fails if a handler exists for an id that is not in the table, or a row has no handler. A shell test fails if a `menu` row has no menu item, or a menu accelerator has no row.
+A key that changes in the table changes in all three. A page test fails if a handler exists for an id that is not in the table, or a row has no handler. There is no native menu, so the shell reads no key (#197).
 
 Each row has these fields:
 
@@ -266,18 +260,16 @@ Each row has these fields:
 | `keys` | One or more keys. Each is a `KeyboardEvent.key` value, with `Ctrl+`, `Shift+` and `Alt+` in front when needed, in that order. Letters are written in upper case and match in either case. The space bar is written `Space` (its `key` is a single space). The first key is the one hints show, such as the photo menu's "F" for Star. |
 | `hold` | True when the action lasts only while the key is down. |
 | `repeat` | True when holding the key repeats the action. |
-| `menu` | True when the key is a native menu accelerator. A `menu` row has exactly one key. |
-| `dev` | True for a menu accelerator that exists only in development builds. The overlay leaves these rows out. |
+| `dev` | True for an `everywhere` row that exists only in development builds. The page matches it only in a development build, and the overlay leaves it out. |
 | `typing` | True when the row also acts while typing in a text field (never in a dialog). |
 
-A flag that is false is left out of the file. The page checks the file when it loads (`ui/src/keys/table.ts`) and matches keys with `ui/src/keys/match.ts`; the shell reads it through `src-tauri/src/keymap.rs`.
+A flag that is false is left out of the file. The page checks the file when it loads (`ui/src/keys/table.ts`) and matches keys with `ui/src/keys/match.ts`. The `menu` flag, for the native menu bar's accelerators, went with the menu bar (#197).
 
 Matching rules, the same for every row:
 
 | Rule | Detail |
 |---|---|
-| Menu rows | The page never binds a `menu` row; the native accelerator does the work. |
-| Typing | A row that is not `menu` is ignored while focus is in a text field, a select, an editable element, a dialog or the Filters panel, unless it is marked `typing` (F6 and Shift+F6, so focus can leave the search box). Rows marked `typing` are still ignored in a dialog and the Filters panel. Edit mode's sliders do not count as typing. The Filters panel is marked `data-keys="dialog"`; a full-page layer that has its own rows, such as the viewer, is marked `data-keys="surface"` so it is not taken for a dialog. While a dialog is open the page ignores the rows wherever focus is. |
+| Typing | A row is ignored while focus is in a text field, a select, an editable element, a dialog or the Filters panel, unless it is marked `typing` (F6 and Shift+F6, so focus can leave the search box). Rows marked `typing` are still ignored in a dialog and the Filters panel. Edit mode's sliders do not count as typing. The Filters panel is marked `data-keys="dialog"`; a full-page layer that has its own rows, such as the viewer, is marked `data-keys="surface"` so it is not taken for a dialog. While a dialog is open the page ignores the rows wherever focus is. |
 | Controls | While a button, link, checkbox, radio button, switch or tab has focus, Enter and Space are left to it. Other rows still act. A grid tile is not such a control. |
 | Menus | While focus is in a menu, its own keys (arrows, Home, End, Enter, Space, Esc, Tab) are left to it. Any other row closes the menu and then acts. |
 | Handled keys | A key that a control already handled (a slider's or a splitter's arrows) or that is part of composing text is ignored. |
@@ -295,14 +287,14 @@ What each action does is owned by the part named in the last column. This table 
 | Id | Place | Keys | Action | Flags | Owner |
 |---|---|---|---|---|---|
 | `app.shortcuts` | everywhere | `?` | Open or close the shortcut overlay | | this part |
-| `app.about` | everywhere | `F1` | About Owlbum | menu | this part |
-| `app.feedback` | everywhere | `F2` | Give feedback on GitHub | menu | this part |
-| `app.open_folder` | everywhere | `Ctrl+O` | Open folder | menu | this part |
-| `app.full_screen` | everywhere | `F11` | Toggle full screen | menu | this part |
-| `app.quit` | everywhere | `Ctrl+Q` | Quit | menu | this part |
-| `app.close_folder` | everywhere | `Ctrl+W` | Close folder | menu | 04 |
-| `app.reload` | everywhere | `Ctrl+R` | Reload the page (development builds only) | menu, dev | this part |
-| `app.developer_tools` | everywhere | `Ctrl+Shift+I` | Toggle developer tools (development builds only) | menu, dev | this part |
+| `app.about` | everywhere | `F1` | About Owlbum | typing | this part |
+| `app.feedback` | everywhere | `F2` | Give feedback on GitHub | typing | this part |
+| `app.open_folder` | everywhere | `Ctrl+O` | Open folder | typing | this part |
+| `app.full_screen` | everywhere | `F11` | Toggle full screen | typing | this part |
+| `app.quit` | everywhere | `Ctrl+Q` | Quit | typing | this part |
+| `app.close_folder` | everywhere | `Ctrl+W` | Close folder | typing | 04 |
+| `app.reload` | everywhere | `Ctrl+R` | Reload the page (development builds only) | dev, typing | this part |
+| `app.developer_tools` | everywhere | `Ctrl+Shift+I` | Toggle developer tools (development builds only) | dev, typing | this part |
 | `app.next_region`, `app.previous_region` | everywhere | `F6`, `Shift+F6` | Move focus to the next or previous region: top bar, filter bar, grid, preview, details panel | typing | [09](09-visual-design.md#accessibility-baseline) |
 | `browse.previous`, `browse.next` | browse | `ArrowLeft`, `ArrowRight` | Previous or next photo | repeat | [04](04-browsing.md) |
 | `browse.extend_previous`, `browse.extend_next` | browse | `Shift+ArrowLeft`, `Shift+ArrowRight` | Extend the selection one photo | repeat | 04 |
@@ -320,8 +312,8 @@ What each action does is owned by the part named in the last column. This table 
 | `browse.before` | browse | `\` | Show the original | hold | 06 |
 | `browse.copy` | browse | `Ctrl+C` | Copy the photo, or the files when several are selected | | 06 |
 | `browse.trash` | browse | `Delete` | Move to the Recycle Bin or Trash | | 06 |
-| `browse.toggle_grid` | browse | `T` | Show or hide the thumbnails (also View > Thumbnails) | | 04 |
-| `browse.toggle_details` | browse | `I` | Show or hide the details panel (also View > Details panel) | | 04 |
+| `browse.toggle_grid` | browse | `T` | Show or hide the thumbnails (also More > Thumbnails) | | 04 |
+| `browse.toggle_details` | browse | `I` | Show or hide the details panel (also More > Details panel) | | 04 |
 | `viewer.previous`, `viewer.next` | viewer | `ArrowLeft`, `ArrowRight` | Previous or next photo | repeat | 04 |
 | `viewer.first`, `viewer.last` | viewer | `Home`, `End` | First or last photo | | 04 |
 | `viewer.close` | viewer | `Enter` | Close the viewer | | 04 |
@@ -350,7 +342,7 @@ A cell that names two ids stands for two rows of the file, one per key. If this 
 
 ### The overlay
 
-`?` or Help > Keyboard shortcuts opens the overlay. `?` again, Esc or a click outside closes it. It opens over the grid, the viewer and edit mode. It does not open while typing.
+`?` or More > Keyboard shortcuts opens the overlay. `?` again, Esc or a click outside closes it. It opens over the grid, the viewer and edit mode. It does not open while typing.
 
 ```text
 +------------------------------------------------------------------+
@@ -399,7 +391,7 @@ The plugin never checks by itself. Owlbum calls it at the moments below and nowh
 | Check | When | Shows a result |
 |---|---|---|
 | Quiet | 10 seconds after `app_startup`, then every 6 hours while Owlbum stays open, the rule below is tested. | Only when a newer version exists. A failure is logged and never shown. |
-| Manual | Help > Check for updates…, the About box, or Settings > Check now. | Always. |
+| Manual | More > Check for updates…, the About box, or Settings > Check now. | Always. |
 
 The quiet check runs only when all of these hold:
 
@@ -429,7 +421,7 @@ OK leaves `updates.auto` true. Turn off sets it false. Either answer sets the se
 
 | Way | Effect |
 |---|---|
-| Help > Check automatically, or Settings > Updates | Sets `updates.auto` to false. Stops the quiet check. |
+| Settings > Updates | Sets `updates.auto` to false. Stops the quiet check. |
 | `OWLBUM_NO_UPDATE_CHECK` set to any non-empty value | Stops the quiet check for that run. Does not change the setting. |
 
 The manual check always works.
@@ -438,14 +430,14 @@ The manual check always works.
 
 The updater is a small state machine in the shell. Each change is sent to the page as `update_state` with `{ state, version?, percent? }`.
 
-| State | Meaning | Help menu item |
+| State | Meaning | More menu's update item |
 |---|---|---|
-| `unavailable` | A development build, or the updater is not set up. | `Check for &updates…` (answers with the message below) |
-| `idle` | Nothing in progress. | `Check for &updates…` |
+| `unavailable` | A development build, or the updater is not set up. | `Check for updates…` (answers with the message below) |
+| `idle` | Nothing in progress. | `Check for updates…` |
 | `checking` | A check is running. | `Checking for updates…` (disabled) |
-| `available` | A newer version was found and offered. | `Download &update <version>…` |
+| `available` | A newer version was found and offered. | `Download update <version>…` |
 | `downloading` | The installer is downloading. | `Downloading update… N %` (disabled) |
-| `ready` | The installer is downloaded and verified. | `Install &update <version>…` |
+| `ready` | The installer is downloaded and verified. | `Install update <version>…` |
 | `installing` | Owlbum is closing to install. | `Installing update…` (disabled) |
 
 A failed check or download returns to `idle`, or to `available` when a version is already known.
@@ -528,7 +520,7 @@ Updater artefacts are only built by the release workflow. `bundle.createUpdaterA
 - **Development builds** never check, unless `OWLBUM_UPDATE_FEED` is set, so the test feed can be tried from a development build.
 - **Outcomes are events.** Each change is `update_state`; each message of the table above is an `update_message` event `{ kind, … }` (`found`, `up_to_date`, `check_failed`, `dev_build`, `not_set_up`, `download_failed`, `downloaded`, `cannot_install`, `install_failed`), and the page draws it. `app_update_state` answers the state for the page's first look.
 - **404 and other answers that are not a success.** The plugin reports them all the same way, so a 404 and a server error both read as "no release has been published yet" (up to date). A network failure is a failed check.
-- **Help's update item acts in Rust**: it checks, starts the download, or offers the install again, by state. It does not send `app_menu update`.
+- **The More menu's update item acts in Rust** (`app_update_choose`): it checks, starts the download, or offers the install again, by state. The page draws its text from `update_state`.
 - **The first-start notice** is a banner under the top bar, on the start screen and above an open album alike, until answered (`app_update_notice_answer`). After OK the quiet check's clock starts in the same session.
 - **The quiet clock** starts at `app_startup` (or at the notice's answer) only when the updater is set up: 10 seconds, then every 6 hours, testing the rule each time.
 - **Install.** Restart now runs the closing steps with reason `update` (`closing::requested_for`); "Go back" puts the state back to `ready`. After step 4 the plugin installs; on Windows the NSIS installer takes over and the process ends. If the install fails, the log says why and the current version starts again; the "Install failed" message is not shown after that restart. (Not built yet: issue 178.)
@@ -537,7 +529,7 @@ Updater artefacts are only built by the release workflow. `bundle.createUpdaterA
 
 ## About box
 
-F1 or Help > About Owlbum opens a page dialog titled `About Owlbum`. Its content comes from `app_about`. The owner's rule (#61): it shows the version and a link to the GitHub repository.
+F1 or More > About Owlbum opens a page dialog titled `About Owlbum`. Its content comes from `app_about`. The owner's rule (#61): it shows the version and a link to the GitHub repository.
 
 ```text
 +--------------------------------------------------------------+
@@ -587,7 +579,7 @@ A file that cannot be opened is shown in its folder instead, and the failure is 
 
 ## Feedback
 
-F2, Help > Give feedback on GitHub… or the About box's **Give feedback** opens the project's issues page in the user's own browser. This is the owner's decision on #61; it replaces a prefilled new-issue address.
+F2, More > Give feedback or the About box's **Give feedback** opens the project's issues page in the user's own browser. This is the owner's decision on #61; it replaces a prefilled new-issue address.
 
 ```text
 https://github.com/funvill/Owlbum/issues
@@ -618,7 +610,7 @@ Recording on close means a crash during start shows the notes again next time.
 
 **How it looks.** A page dialog titled `What's new in Owlbum <version>`, with one bullet per item under its group's heading, and **OK**. When more than one entry is shown, each sits under its version number.
 
-**Help > What's new** shows the running version's entry at any time, or "Nothing new to show for this version." It never changes `whats_new.last_seen`.
+**More > What's new** shows the running version's entry at any time, or "Nothing new to show for this version." It never changes `whats_new.last_seen`.
 
 ## Logs
 
@@ -1079,16 +1071,19 @@ The events `open_folder` and `update_state` are listed in [Architecture](01-arch
 | `app_whats_new_seen` | | Records `whats_new.last_seen`. |
 | `app_cache_usage` | → `{ bytes, limit_bytes }` | For Settings. |
 | `app_cache_clear` | → `{ bytes_freed }` | Empties the thumbnail cache. |
-| `app_open_log_folder` | | Opens the log's folder in the file manager. (File > Open the data folder acts in Rust; there is no `app_open_data_folder` command.) |
+| `app_open_log_folder` | | Opens the log's folder in the file manager. |
+| `app_open_data_folder` | | More > Open the data folder: the app data folder in the file manager (#197). |
 | `app_open_licence`, `app_open_notices` | | Open a resource text file. |
 | `app_open_feedback`, `app_open_repository`, `app_open_release_page`, `app_open_release_notes` | the last takes no address, only the offered version held by Rust | Open one fixed address in the user's browser. `app_open_feedback` and `app_open_repository` are built (#61); the opener is the shell's `Browser` state, which shell tests replace. |
 | `app_copy_details` | | Copies the fatal error's technical block. |
-| `app_restart`, `app_quit` | | Used by the fatal dialog and File > Quit. |
+| `app_restart`, `app_quit` | | Used by the fatal dialog and More > Quit (`Ctrl+Q`). |
+| `app_full_screen` | | More > Full screen (F11): the window enters or leaves full screen. |
+| `app_developer_tools` | | More > Developer tools (`Ctrl+Shift+I`), development builds only; a release build does nothing. |
+| `app_update_choose` | | More's update item: check, download or install, by the state. |
 | `app_log` | `level`, `message` | The page reports an error or warning for the log. Limited to 2,000 characters a line and 100 lines a minute. |
 
 | Event | Payload | When |
 |---|---|---|
-| `app_menu` | `{ item }` | A menu item that acts in the page was chosen. `item` is one of `close_folder`, `rescan`, `shortcuts`, `whats_new`, `about`, `toggle_grid`, `toggle_details`, `grid_place`. The type also allows `update`, but Help's update item acts in Rust and never sends it. |
 | `app_closing` | `{}` | The window is about to close, for a close, a quit or an update install. The page answers with `app_close_ready`. |
 | `app_fatal` | `{ title, message }` | A fatal error of phase `run` that the page should show. `message` holds the message and the advice. |
 | `update_message` | `{ kind, … }` | What a check, download or install came to; the page shows the matching message of [Messages](#messages). |
@@ -1099,7 +1094,7 @@ Error codes this part adds to `AppError`: `setting_out_of_range`. As built (#62)
 
 ## Open questions
 
-1. **Native accelerators while the webview has focus.** F1, F2, F11, `Ctrl+O`, `Ctrl+W` and `Ctrl+Q` are specified as native menu accelerators. Whether they fire reliably on both platforms while focus is inside the webview needs a prototype. If they do not, the page handles them from the same key table and the menu only displays them.
+1. **The browser's own keys.** Settled in part by #197: there is no native menu, and the page handles F1, F2, F11, `Ctrl+O`, `Ctrl+W` and `Ctrl+Q` from the key table. Whether WebView2 lets the page take F11, `Ctrl+R` and `Ctrl+W` before its own browser keys is not checked in the running app.
 2. **The native fatal message box.** Tauri's dialog plugin offers at most three custom buttons. Whether that form behaves the same on Windows and Linux, and what closing it by the title bar returns, needs checking. So does whether Tauri reports the webview process ending; if not, phase `page` rests on the 30-second `app_startup` rule alone. Answered in part (#61): the native box is `rfd`'s three-button message box, not the dialog plugin's, and closing it by its title bar ends the program; whether Tauri reports the webview process ending is not checked, so phase `page` rests on the 30-second rule. Linux is paused.
 3. **OpenStreetMap's tile rules.** The old program sent a bare `User-Agent` and almost no other headers. Owlbum cannot rewrite the webview's request headers, so it adds its name to the user agent and sends no referrer. Whether that satisfies the tile usage policy for a desktop program, and whether the webview's own tile cache is enough to meet its caching rule, should be confirmed before release.
 4. **Installer sizes.** Unknown until the first build. Proposed targets: Windows installer under 40 MB, `.deb` under 40 MB, AppImage under 120 MB with the media framework bundled. ONNX Runtime is the largest single part. Answered in part (#52, #171): it is shipped as a library, `onnxruntime.dll` of 17,253,728 bytes, beside the program; the installer's size is recorded at the first release.

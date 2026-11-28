@@ -4,7 +4,6 @@
 import type { About } from "./About";
 import type { AppClosing } from "./AppClosing";
 import type { AppFatal } from "./AppFatal";
-import type { AppMenu } from "./AppMenu";
 import type { AppVersion } from "./AppVersion";
 import type { Association } from "./Association";
 import type { CacheCleared } from "./CacheCleared";
@@ -33,8 +32,11 @@ export type AppCommands = {
   app_close_ready: { args: Record<string, never>; result: null };
   app_copy_details: { args: Record<string, never>; result: null };
   app_country_at: { args: { lat: number; lon: number }; result: string | null };
+  app_developer_tools: { args: Record<string, never>; result: null };
   app_formats: { args: Record<string, never>; result: Array<FormatInfo> };
+  app_full_screen: { args: Record<string, never>; result: null };
   app_log: { args: { level: string; message: string }; result: null };
+  app_open_data_folder: { args: Record<string, never>; result: null };
   app_open_feedback: { args: Record<string, never>; result: null };
   app_open_licence: { args: Record<string, never>; result: null };
   app_open_log_folder: { args: Record<string, never>; result: null };
@@ -52,6 +54,7 @@ export type AppCommands = {
   app_settings_get: { args: Record<string, never>; result: Settings };
   app_settings_set: { args: { patch: { [key in string]: JsonValue } }; result: Settings };
   app_startup: { args: Record<string, never>; result: Startup };
+  app_update_choose: { args: Record<string, never>; result: null };
   app_update_download: { args: Record<string, never>; result: null };
   app_update_install: { args: Record<string, never>; result: null };
   app_update_notice_answer: { args: { keep_on: boolean }; result: Settings };
@@ -64,7 +67,6 @@ export type AppCommands = {
 export type AppEvents = {
   app_closing: AppClosing;
   app_fatal: AppFatal;
-  app_menu: AppMenu;
   folder_drop: FolderDrop;
   open_folder: OpenFolder;
   update_message: UpdateMessage;

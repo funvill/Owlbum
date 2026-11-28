@@ -13,6 +13,7 @@ export {
   type MarkPlace,
 } from "./flags";
 export { FilterBar } from "./FilterBar";
+export { FiltersButton, setFilter } from "./FiltersButton";
 export { FlagMark } from "./FlagMark";
 export { FLAG_KEY_IDS, flagKeyHandlers, isFlagKey, useFlagKeys, type FlagKeyId } from "./keys";
 export { nudge, resetNudges, toastText, useScoreToastStore, type NudgeDelta } from "./nudge";

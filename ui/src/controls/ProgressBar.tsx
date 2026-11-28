@@ -12,10 +12,12 @@ interface ProgressBarProps {
   failed?: boolean;
   /** The bar's accessible name, when it is not the label. */
   name?: string;
+  /** Says more about the bar to assistive technology (`aria-description`). */
+  description?: string;
 }
 
 /** A 6 px bar with a label. docs/09-visual-design.md, "Progress bars". */
-export function ProgressBar({ label, value, max, failed = false, name }: ProgressBarProps) {
+export function ProgressBar({ label, value, max, failed = false, name, description }: ProgressBarProps) {
   const labelId = useId();
   const known = value !== undefined && max !== undefined && max > 0;
   const classes = ["ow-progress", !known && "ow-progress--unknown", failed && "ow-progress--failed"]
@@ -27,6 +29,7 @@ export function ProgressBar({ label, value, max, failed = false, name }: Progres
         role="progressbar"
         aria-labelledby={name === undefined ? labelId : undefined}
         aria-label={name}
+        aria-description={description}
         aria-valuemin={known ? 0 : undefined}
         aria-valuenow={known ? value : undefined}
         aria-valuemax={known ? max : undefined}

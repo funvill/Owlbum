@@ -11,9 +11,7 @@ use owlbum_core::app::assoc::{self, Association};
 use owlbum_core::app::fatal::AppFatal;
 use owlbum_core::app::update::{self as update_rules, UpdateMessage, UpdateState};
 use owlbum_core::app::whats_new::{self, WhatsNewEntry};
-use owlbum_core::app::{
-    self, About, AppClosing, AppMenu, AppVersion, FolderDrop, OpenFolder, Startup,
-};
+use owlbum_core::app::{self, About, AppClosing, AppVersion, FolderDrop, OpenFolder, Startup};
 use owlbum_core::appdata::{AppData, Recent, Settings};
 use owlbum_core::files::Capabilities;
 use owlbum_core::info::country::{self, CountryMatch};
@@ -36,9 +34,12 @@ area! {
         app_close_ready,
         app_copy_details,
         app_country_at,
+        app_developer_tools,
         app_formats,
+        app_full_screen,
         app_log,
         app_open_feedback,
+        app_open_data_folder,
         app_open_licence,
         app_open_log_folder,
         app_open_notices,
@@ -55,6 +56,7 @@ area! {
         app_settings_get,
         app_settings_set,
         app_startup,
+        app_update_choose,
         app_update_download,
         app_update_install,
         app_update_notice_answer,
@@ -63,7 +65,7 @@ area! {
         app_whats_new,
         app_whats_new_seen,
     ],
-    events: [AppClosing, AppFatal, AppMenu, FolderDrop, OpenFolder, UpdateMessage, UpdateState],
+    events: [AppClosing, AppFatal, FolderDrop, OpenFolder, UpdateMessage, UpdateState],
 }
 
 command! {
@@ -190,7 +192,6 @@ command! {
             data.set_settings(patch.as_object().expect("an object"))
         })
         .await?;
-        crate::menu::updates_auto(&app, settings.updates_auto);
         crate::update::start_quiet(&app);
         Ok(settings)
     }
@@ -356,6 +357,58 @@ command! {
     /// browser (docs/08-desktop-and-release.md, "Feedback").
     pub fn app_open_feedback<R: Runtime>(; app: AppHandle<R>) -> () {
         open_fixed(&app, app::FEEDBACK_URL)
+    }
+}
+
+command! {
+    /// More > Open the data folder: the program's own folder in the file
+    /// manager (docs/08-desktop-and-release.md, "The More menu").
+    pub fn app_open_data_folder(; data: State<'_, AppData>) -> () {
+        tauri_plugin_opener::open_path(data.dir(), None::<&str>).map_err(|e| {
+            tracing::warn!(target: "app", "the data folder could not be opened: {e}");
+            cannot_open(&e)
+        })
+    }
+}
+
+command! {
+    /// More > Full screen (F11): the window fills the screen, or leaves
+    /// full screen.
+    pub fn app_full_screen<R: Runtime>(; app: AppHandle<R>) -> () {
+        if let Some(w) = app.get_webview_window("main") {
+            let full = w.is_fullscreen().unwrap_or(false);
+            w.set_fullscreen(!full)
+                .map_err(|e| AppError::internal(text::appdata::FULL_SCREEN).with_details(serde_json::json!({ "cause": e.to_string() })))?;
+        }
+        Ok(())
+    }
+}
+
+command! {
+    /// More > Developer tools (Ctrl+Shift+I), development builds only:
+    /// opens or closes the webview's developer tools. A release build does
+    /// nothing.
+    pub fn app_developer_tools<R: Runtime>(; app: AppHandle<R>) -> () {
+        #[cfg(debug_assertions)]
+        if let Some(w) = app.get_webview_window("main") {
+            if w.is_devtools_open() {
+                w.close_devtools();
+            } else {
+                w.open_devtools();
+            }
+        }
+        #[cfg(not(debug_assertions))]
+        let _ = app;
+        Ok(())
+    }
+}
+
+command! {
+    /// More > the update item: check, download or install, by the state
+    /// (docs/08-desktop-and-release.md, "States").
+    pub fn app_update_choose<R: Runtime>(; app: AppHandle<R>) -> () {
+        crate::update::menu_chosen(&app);
+        Ok(())
     }
 }
 
@@ -558,9 +611,8 @@ command! {
     /// Saves some settings and answers every setting. Unknown keys are kept.
     /// A value outside its setting's range answers `setting_out_of_range`
     /// and changes nothing.
-    pub async fn app_settings_set<R: Runtime>(
+    pub async fn app_settings_set(
         patch: Map<String, Value>;
-        app: AppHandle<R>,
         data: State<'_, AppData>,
         thumbs: State<'_, Thumbs>
     ) -> Settings {
@@ -573,9 +625,6 @@ command! {
             Ok(settings)
         })
         .await?;
-        // Help > Check automatically and the View menu's panel items are
-        // the same settings.
-        crate::menu::follow_settings(&app, &settings);
         Ok(settings)
     }
 }

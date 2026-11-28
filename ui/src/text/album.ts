@@ -134,4 +134,32 @@ export const taggingBarText = {
   couldNotTag: (failed: number) => `${count(failed)} ${plural(failed, "photo", "photos")} could not be tagged.`,
   retryFailed: "Try failed photos again",
   hide: "Hide",
+  /**
+   * The bar's tooltip and accessible description (owner's feedback,
+   * issue 198): what it is and what it is doing now.
+   */
+  about: {
+    describing: (model: string | null) => (model === null ? "describing photos" : `describing photos with ${model}`),
+    keywords: (model: string | null) => (model === null ? "finding keywords" : `finding keywords with ${model}`),
+    running: (doing: string, seen: number, total: number) =>
+      `Photo tagging: ${doing}, ${count(seen)} of ${count(total)} done`,
+    tagging: "tagging photos on this computer",
+    failed: (failed: number) => `, ${count(failed)} failed`,
+    left: (seconds: number) => `, ${timeLeft(seconds)} left`,
+    paused: (seen: number, total: number) =>
+      `Photo tagging is paused: ${count(seen)} of ${count(total)} done. Resume to go on.`,
+    stopped: (problem: string) => `Photo tagging stopped by itself: ${problem}`,
+    notWorking: "Photo tagging is not working: a chosen model is damaged or would not load. Settings has the models.",
+    finished: (failed: number) =>
+      `Photo tagging has finished. ${count(failed)} ${plural(failed, "photo", "photos")} could not be tagged.`,
+  },
 };
+
+/** "about 15 minutes", "about 2 hours", "less than a minute". */
+function timeLeft(seconds: number): string {
+  const minutes = Math.round(seconds / 60);
+  if (minutes < 1) return "less than a minute";
+  if (minutes < 90) return `about ${minutes} ${plural(minutes, "minute", "minutes")}`;
+  const hours = Math.round(minutes / 60);
+  return `about ${hours} ${plural(hours, "hour", "hours")}`;
+}

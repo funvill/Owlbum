@@ -17,6 +17,7 @@ import { createQueryFake, type FakePhoto } from "../../api/fake/query";
 import { useSettingsStore } from "../app";
 import { BrowseGrid, resetGrid, selectById, useGridStore } from "../grid";
 import { FilterBar } from "./FilterBar";
+import { FiltersButton } from "./FiltersButton";
 import { dragTargets, selectedTargets } from "../files";
 import { toggleFlag } from "./flags";
 import { nudge } from "./nudge";
@@ -86,6 +87,7 @@ afterEach(() => resetGrid());
 function page() {
   render(
     <>
+      <FiltersButton />
       <FilterBar />
       <BrowseGrid onStack={toggleStack} />
     </>,
@@ -222,6 +224,8 @@ describe("stacks", () => {
   it("turns stacking off and on with Stack similar, remembered as the setting", async () => {
     page();
     await waitFor(() => expect(tiles()).toHaveLength(2));
+    // Stack similar is in the Filters panel (issue 196).
+    await userEvent.click(screen.getByRole("button", { name: "Filters" }));
     const box = screen.getByRole("checkbox", { name: "Stack similar" });
     expect(box).toBeChecked();
     await userEvent.click(box);
@@ -237,6 +241,7 @@ describe("stacks", () => {
     });
     page();
     await waitFor(() => expect(tiles()).toHaveLength(4));
+    await userEvent.click(screen.getByRole("button", { name: "Filters" }));
     expect(
       screen.getByRole("checkbox", { name: "Stack similar" }),
     ).not.toBeChecked();

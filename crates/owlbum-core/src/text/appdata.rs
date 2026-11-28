@@ -44,6 +44,9 @@ pub const OPENING_ADDRESS: &str = "opening the address in your browser";
 /// the notices, the log folder).
 pub const OPENING_FILE: &str = "opening the file";
 
+/// The window could not enter or leave full screen.
+pub const FULL_SCREEN: &str = "changing to or from full screen";
+
 /// The name Windows shows for a picture Owlbum opens (docs/08, "Opening
 /// pictures").
 pub const PICTURE_TYPE: &str = "Picture";

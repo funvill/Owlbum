@@ -148,3 +148,39 @@ export const fatalText = {
   restart: "Restart",
   close: "Close",
 };
+
+/**
+ * The More menu beside the Settings gear (docs/08-desktop-and-release.md,
+ * "The More menu"; owner's feedback, issue 197). It holds what the menu bar
+ * and the Tidy button did.
+ */
+export const moreText = {
+  open: "More",
+  openFolder: "Open folder…",
+  closeFolder: "Close folder",
+  rescan: "Rescan",
+  tidy: "Tidy…",
+  thumbnails: "Thumbnails",
+  details: "Details panel",
+  thumbnailsBottom: "Thumbnails at the bottom",
+  fullScreen: "Full screen",
+  dataFolder: "Open the data folder",
+  shortcuts: "Keyboard shortcuts",
+  whatsNew: "What's new",
+  feedback: "Give feedback",
+  about: "About Owlbum",
+  reload: "Reload",
+  developerTools: "Developer tools",
+  quit: "Quit",
+  noAlbum: "Open a folder first",
+  /** The update item follows the updater's state (docs/08, "States"). */
+  update: {
+    check: "Check for updates…",
+    checking: "Checking for updates…",
+    download: (version: string) => `Download update ${version}…`,
+    downloading: (percent: number) => `Downloading update… ${percent} %`,
+    install: (version: string) => `Install update ${version}…`,
+    installing: "Installing update…",
+    busy: "Wait for the updater to finish",
+  },
+};

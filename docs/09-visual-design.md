@@ -238,7 +238,7 @@ The sizes above are tokens as well, so that no component writes a pixel size of 
 
 | Token | Value | Use |
 |---|---|---|
-| `--size-bar` | 48 px | Filter bar; the smallest height of a banner. |
+| `--size-bar` | 48 px | The smallest height of a banner. The filter bar is 38 px (`--size-control` plus `--space-3`; #196). |
 | `--size-bar-tall` | 64 px | Top bar, with the search box's hint row. |
 | `--size-control` | 30 px | Buttons, text inputs, selects, menu rows. |
 | `--size-control-sm` | 26 px | Small buttons, segments. |
@@ -412,9 +412,9 @@ Bars never wrap onto a second line and never scroll sideways. As the window narr
 |---|---|---|
 | 1280 px and wider | Everything shows with its label, and the search box with the query-word hint row. | Everything shows. |
 | 1100 to 1279 px | The search box shrinks towards 200 px. | Everything shows. |
-| 960 to 1099 px | Buttons other than the primary one become icon buttons with tooltips. The thumbnail-size slider moves into a popover behind the `grid` icon (not built yet: issue 201; the slider stays in the bar). The search box's hint row is hidden (a bad query word's error still shows there); the same examples are in the box's tooltip and in Help. | The photo count shows the number alone. |
+| 960 to 1099 px | Buttons other than the primary one become icon buttons with tooltips. The thumbnail-size slider moves into a popover behind the `grid` icon (not built yet: issue 201; the slider stays in the bar). The search box's hint row is hidden (a bad query word's error still shows there); the same examples are in the box's tooltip and in the shortcut overlay. | The photo count shows the number alone. |
 
-The search box is in the top bar and Sort beside the view switch (owner's feedback, #182). The view switch's bar, at the top of the thumbnail column, is the one bar that may wrap: in a narrow column Sort (or Day / Month) moves onto a second line.
+The search box, with the Filters button beside it, is in the top bar and Sort beside the view switch (owner's feedback, #182, #196). The filter bar is one 38 px row starting under the search box: the count, or "Showing X of Y", Clear filter and the chips; the chips row is cut at the window's edge rather than wrapping. The top bar has no wordmark; the More menu (`⋯`) and the gear sit at its right end (#197). The view switch's bar, at the top of the thumbnail column, is the one bar that may wrap: in a narrow column Sort (or Day / Month) moves onto a second line.
 
 The Filters panel is `min(620px, window width − 24px)` wide. The "Load maps" card is `min(360px, map width − 24px)` wide.
 

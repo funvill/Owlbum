@@ -13,9 +13,57 @@ export interface TaggingState {
   progress: TaggingProgress | null;
   /** The finished-with-failures line was closed while the counts were these. */
   hiddenAt: string | null;
+  /** The chosen models' names by part, read with `tagging_models` when a run starts; for the bar's tooltip. */
+  models: { describe: string | null; keywords: string | null } | null;
+  /** When this run was first seen running, and how many photos were seen then: the time left is worked out from it. */
+  since: { at: number; seen: number } | null;
 }
 
-export const useTaggingStore = create<TaggingState>(() => ({ progress: null, hiddenAt: null }));
+export const useTaggingStore = create<TaggingState>(() => ({ progress: null, hiddenAt: null, models: null, since: null }));
+
+/** The clock the time left is measured with; tests replace it. */
+let now = () => Date.now();
+
+/** For tests: the clock the time left is measured with. */
+export function setTaggingClock(clock: () => number): void {
+  now = clock;
+}
+
+/** Reads the chosen models' names for the bar's tooltip (issue 198). A failure leaves them unknown. */
+async function readModels(): Promise<void> {
+  try {
+    const state = await api().invoke("tagging_models");
+    const label = (id: string | null) => (id === null ? null : (state.models.find((m) => m.id === id)?.label ?? null));
+    useTaggingStore.setState({ models: { describe: label(state.settings.describe), keywords: label(state.settings.keywords) } });
+  } catch {
+    // The tooltip says what tagging does without the models' names.
+  }
+}
+
+/** A new status: a run that starts is timed from here, and its models are read. */
+function arrived(p: TaggingProgress): void {
+  const before = useTaggingStore.getState();
+  const seen = p.done + p.failed;
+  const starts = p.running && (before.since === null || !(before.progress?.running ?? false));
+  useTaggingStore.setState({
+    progress: p,
+    since: !p.running ? null : starts ? { at: now(), seen } : before.since,
+  });
+  if (starts) void readModels();
+}
+
+/**
+ * The seconds tagging still needs, from the pace since the run started:
+ * none until 3 photos and 10 seconds have gone by.
+ */
+export function secondsLeft(p: TaggingProgress, since: TaggingState["since"], at = now()): number | null {
+  if (since === null || !p.running) return null;
+  const seen = p.done + p.failed;
+  const did = seen - since.seen;
+  const took = (at - since.at) / 1000;
+  if (did < 3 || took < 10) return null;
+  return Math.max(0, ((p.total - seen) * took) / did);
+}
 
 /** The counts as one string: closing the line hides it until this changes. */
 export function countsKey(p: TaggingProgress): string {
@@ -33,10 +81,10 @@ export async function startTagging(): Promise<void> {
   listening = null;
   listenedTo = api();
   try {
-    listening = await api().listen("tagging_progress", (p) => useTaggingStore.setState({ progress: p }));
-    const now = await api().invoke("tagging_status");
+    listening = await api().listen("tagging_progress", arrived);
+    const status = await api().invoke("tagging_status");
     // An event that arrived meanwhile is newer.
-    if (useTaggingStore.getState().progress === null) useTaggingStore.setState({ progress: now });
+    if (useTaggingStore.getState().progress === null) arrived(status);
   } catch {
     // No status: the bar stays hidden until the first event.
   }
@@ -47,7 +95,8 @@ export function resetTagging(): void {
   listening?.();
   listening = null;
   listenedTo = null;
-  useTaggingStore.setState({ progress: null, hiddenAt: null });
+  useTaggingStore.setState({ progress: null, hiddenAt: null, models: null, since: null });
+  now = () => Date.now();
 }
 
 /** Closes the "could not be tagged" line until the counts next change. */

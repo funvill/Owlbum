@@ -323,7 +323,7 @@ A stack folds the shots of a burst into one tile with a count.
 
 | Rule | Detail |
 |---|---|
-| Turning it on | The **Stack similar** checkbox, titled "Show the near-identical shots of a burst as one photo". It is the `stack_similar` setting, on by default, and remembered. |
+| Turning it on | The **Stack similar** checkbox in the filter panel (#196), described "Show the near-identical shots of a burst as one photo". It is the `stack_similar` setting, on by default, and remembered. |
 | Order of work | Filter first, then sort, then fold. A stack only ever holds photos that pass the filter. |
 | Which bursts fold | A burst with two or more members in the filtered list. A burst with one member passing is a plain tile with no badge. |
 | The face | The first member in sort order that is starred; else the burst's keeper, if it passes the filter; else the first member in sort order. |
@@ -371,23 +371,25 @@ The sort is saved in the album's session and restored on reopening. Changing it 
 
 ## The filter bar
 
-The bar is shown while an album is open and has at least one photo. It is a search landmark labelled "Filter photos". The search box is in the top bar and the Sort control beside the view switch (owner's feedback, #182), so the bar holds what is left, at its right.
+The bar is shown while an album is open and has at least one photo. It is a search landmark labelled "Filter photos", one row starting at the left, just below the search box (owner's feedback on 0.1.4, #196). The search box and the **Filters** button are in the top bar, Stack similar is in the filter panel, and Sort is beside the view switch (#182).
 
 ```text
+top bar:  [Search photos…            ] [Filters · 1 v]
+          Try star:yes …
 +----------------------------------------------------------------------------------------------------------+
-|                                                          [x] Stack similar  [Filters · 2 v]  2,140 photos |
+| 2,140 photos                                                                                             |
 +----------------------------------------------------------------------------------------------------------+
-| (Starred ×) (2024-06-01 → 2024-06-30 ×) (lake ×) (Has people ×)        Showing 312 of 2,140 · [Clear filter]  |
+  or, while a filter or search is on (the filtered row):
+| Showing 312 of 2,140 [Clear filter] (Photos with 'lake' ×) (Starred ×) (2024-06-01 → 2024-06-30 ×)       |
 +----------------------------------------------------------------------------------------------------------+
 ```
 
 | Control | Behaviour |
 |---|---|
-| **Stack similar** | A checkbox. |
-| **Filters** | A button that opens the panel. It reads "Filters", or "Filters · N" when N panel filters are on, and takes the `--accent` border and text while N > 0. Its chevron turns over while the panel is open. |
+| **Filters** (top bar) | A button beside the search box that opens the panel. It reads "Filters", or "Filters · N" when N panel filters are on, and takes the `--accent` border and text while N > 0. Its chevron turns over while the panel is open. The panel drops from it, its left edge on the button's. |
 | Count | "2,140 photos" or "1 photo", with digit grouping. Shown only while no filter is on. It is the `total` from `query_run`. |
 
-The bar never wraps. In a narrow window (under 1100 px) the count shows the number alone, keeping its word for screen readers and in its tooltip ("2,140 photos"). The map is sealed in its own layer, so the bar and the panel always sit above the map's controls.
+The bar is 38 px high (`--size-control` plus `--space-3`) and never wraps. In a narrow window (under 1100 px) the count shows the number alone, keeping its word for screen readers and in its tooltip ("2,140 photos"). The map is sealed in its own layer, so the bar and the panel always sit above the map's controls.
 
 ### The search box
 
@@ -402,11 +404,11 @@ In a narrow window it gives up room in the order [Visual design](09-visual-desig
 
 ### The filtered row
 
-The second row is shown only while a filter is on. It is a region labelled "Active filters" on `--panel-2`.
+While a filter or search text is on, the bar's row is the filtered row instead: a region labelled "Active filters" on `--panel-2`, in this order from the left (owner's feedback on 0.1.4, #196):
 
-- **Chips.** One chip per filter that is on, in the order of [the list of filters](#the-list-of-filters). Each has a × button named "Remove filter {chip text}" with the tooltip "Remove this filter". Rust supplies the chips; the page draws them and never builds chip text itself.
 - **Count.** "Showing X of Y", with digit grouping, announced politely.
 - **Clear filter.** A small button. It empties the search box and its error, and clears every filter.
+- **Chips.** The search text's chip first, "Photos with 'lake'" (id `search`; #196), then one chip per filter that is on, in the order of [the list of filters](#the-list-of-filters). Each has a × button named "Remove filter {chip text}" with the tooltip "Remove this filter". Removing the search chip empties the search box and clears the search text, keeping every filter; its `remove` is the filter as it is. Rust supplies the chips; the page draws them and never builds chip text itself. The search chip is not a panel filter: `panel_count` leaves it out.
 
 **What X and Y count:**
 
@@ -419,7 +421,7 @@ The old program counted hidden photos in Y and in "N photos" even though the gri
 
 ### The filter panel
 
-The panel is a popover that drops from the Filters button, its right edge on the button's. It is a labelled group, not a modal dialog (see [Visual design](09-visual-design.md#accessibility-baseline)). It is `min(620px, window width − 24px)` wide and lays its groups out in columns at least 180 px wide.
+The panel is a popover that drops from the Filters button, its left edge on the button's. Its first line, across every column, is the **Stack similar** checkbox with its description (owner's feedback on 0.1.4, #196); focus starts there. It is a labelled group, not a modal dialog (see [Visual design](09-visual-design.md#accessibility-baseline)). It is `min(620px, window width − 24px)` wide and lays its groups out in columns at least 180 px wide.
 
 ```text
                                 +--------------------------------------------------------------+
@@ -494,7 +496,7 @@ One table in `owlbum-core` drives the panel's contents, the chips, the "Filters 
 | `near_duplicates` | Quality | checkbox **Near-duplicates** | "Near-duplicates" | The photo is in a burst. |
 | `kinds` | Type | a checkbox per kind, all ticked by default: **Stills**, **Animated**, **RAW**, **Videos** | One chip: "No videos" ("No stills", "No animated", "No RAW") when one kind is left out, else the kinds shown, "Stills, RAW" | The photo's kind is in the list. A photo's kind is `raw` or `video` from `photos.kind`; a picture of kind `image` is `animated` when it has a length (`duration_ms`), else `still`. Every kind ticked is no filter; the last ticked kind cannot be unticked. |
 | `formats` | Type | a checkbox per file format that a photo in the scope has, none ticked by default, under "Only these formats" | One chip per format: the registry's label ("PNG") | The photo's format (`photos.format`, a media format registry id) is in the list. The formats and their labels come from the registry through the facets, never from a list in the page. An id the registry does not know is dropped. |
-| search text | (none) | the search box | no chip | See [Text search](#text-search). |
+| search text | (none) | the search box | "Photos with 'lake'", first (#196) | See [Text search](#text-search). Not counted in "Filters · N". |
 
 - A photo passes when it passes every filter that is on.
 - **"Is anything filtered"** is true when any filter is on, including search text of the minimum length.
@@ -649,7 +651,7 @@ The old program searched only descriptions, notes, keywords and objects, and loo
 ### How it combines
 
 - Text search is one more filter. A photo must match the text **and** pass every other filter. It does not reveal hidden photos.
-- It counts as "filtered": the filtered row and Clear filter appear. It has no chip, because the box already shows it.
+- It counts as "filtered": the filtered row and Clear filter appear. It has a chip, "Photos with '{text}'", first in the row; its × clears the search text alone (owner's feedback on 0.1.4, #196; it had none before).
 - **Search by meaning** ([Tagging](07-tagging.md#search-by-meaning)) adds to it. After `query_run` has answered, the page calls `search_meaning(token)`. Rust finds photos close in meaning to the same search text, keeps those that are not already word matches and that pass every other filter (the text filter is left out for this check), and appends them to the end of the list held under that token: the **meaning segment**. They are in score order, best first, and are never stacked. The reply gives `meaning_start`, the index of the first of them, and the new `count` and `photos`; the page never holds a list of ids. The grid starts the segment on a fresh row under the note "Also matching by meaning". The photos count in X, and the viewer and the keys step through them. A new `query_run` makes a new token with no meaning segment until `search_meaning` is called for it.
 - **Rows held only in memory** (a view-only album whose database does not know some files) are not in the `search` table. They are matched on file name only, by the same prefix rule; their folding is lower case plus the accents of Latin letters (the country search's folding), not the tokeniser's full rule.
 
@@ -915,7 +917,7 @@ A row becomes `missing = 1` when a scan cannot find its file and no new file has
 
 ### The dialog
 
-The top bar has a button **Tidy…** with the tooltip "Remove what Owlbum remembers about photos that are no longer in the album". It opens a wide dialog titled "Tidy album".
+**More > Tidy…** opens a wide dialog titled "Tidy album". The top bar's Tidy button is gone (owner's feedback on 0.1.4, #197); the item is in the [More menu](08-desktop-and-release.md#the-more-menu).
 
 ```text
 +------------------------------------------------------------------------+
@@ -955,7 +957,7 @@ The top bar has a button **Tidy…** with the tooltip "Remove what Owlbum rememb
 
 | Rule | Detail |
 |---|---|
-| View-only | The Tidy button is disabled, with a tooltip that says why. |
+| View-only | More > Tidy… is disabled, with the reason (the Tidy button went with owner's feedback, #197). |
 | During a scan | `album_tidy_list` and `album_tidy_remove` answer `scan_running`. "Missing" is only trustworthy once a scan has finished. |
 | The album root cannot be reached | Both commands answer `album_unreachable`, and the dialog says "The album folder can't be reached. Nothing was removed." A whole drive that was unplugged must not look like 100,000 deleted photos. |
 | Scope | In a scoped open only rows under the scope are listed and can be removed. |

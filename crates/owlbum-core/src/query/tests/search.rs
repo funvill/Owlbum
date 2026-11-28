@@ -122,8 +122,27 @@ fn search_text_is_one_more_filter() {
     assert_eq!(
         (r.photos, r.total, r.panel_count),
         (1, 3, 0),
-        "no chip, not counted"
+        "not counted as a panel filter"
     );
+    // Shown as the first chip, which keeps the filter when removed (issue 196).
+    assert_eq!(r.chips.len(), 1);
+    assert_eq!(r.chips[0].id, "search");
+    assert_eq!(r.chips[0].text, "Photos with 'nice'");
+    assert_eq!(r.chips[0].remove, Filter::default());
+    let starred = Query {
+        search: Some(" lake ".to_owned()),
+        filter: Filter {
+            star: Some(StarFilter::Yes),
+            ..Filter::default()
+        },
+        ..default_query()
+    };
+    let both = run(&engine, &album, &starred);
+    let ids: Vec<&str> = both.chips.iter().map(|c| c.id.as_str()).collect();
+    assert_eq!(ids, ["search", "star"]);
+    assert_eq!(both.chips[0].text, "Photos with 'lake'");
+    assert_eq!(both.chips[0].remove.star, Some(StarFilter::Yes));
+    assert_eq!(both.panel_count, 1);
     let facets = r.facets.unwrap();
     assert_eq!(facets.star.yes, 0, "the starred photo fails the text");
     assert_eq!(facets.star.no, 1);

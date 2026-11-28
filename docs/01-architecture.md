@@ -152,9 +152,8 @@ An event is pushed from Rust to the page. There is no polling anywhere.
 | `tagging_progress` | `{ total, done, failed, paused, running, not_working, problem }` | While tagging runs, and on any state change. |
 | `download_progress` | `{ model, received, total, error, finished }` | While a model downloads. |
 | `edit_save_progress` | `{ done, total, current }` | While Save all runs. `current` is the file name being saved, null at the end. |
-| `open_folder` | `{ path, photo }` | A second launch, the File menu, or a folder dropped on the window asked for a folder. `photo` is the picture a second launch named, to show once the folder is open (#184), else null. A folder given on the command line at start, or one that arrived before the page called `app_startup`, is returned by `app_startup` instead, so it cannot arrive before the page listens. |
+| `open_folder` | `{ path, photo }` | A second launch, the folder dialog, or a folder dropped on the window asked for a folder. `photo` is the picture a second launch named, to show once the folder is open (#184), else null. A folder given on the command line at start, or one that arrived before the page called `app_startup`, is returned by `app_startup` instead, so it cannot arrive before the page listens. |
 | `folder_drop` | `{ phase }` | Something is dragged over the window (`over`), the drag left or was dropped (`left`), or a drop held nothing that could be opened (`refused`). The page draws the drop outline from it; a drop that opens a folder sends `left`, then `open_folder`. |
-| `app_menu` | `{ item }` | A menu item that the page carries out was chosen. |
 | `app_closing` | `{}` | The window is about to close; the page finishes what it is doing and answers with `app_close_ready`. |
 | `update_state` | `{ state, version?, percent? }` | The updater's state changed. `state` is `unavailable`, `idle`, `checking`, `available`, `downloading`, `ready` or `installing`. |
 | `update_message` | `{ kind, … }` | What a check, download or install came to; the page shows it as a dialog ([Desktop and release](08-desktop-and-release.md#messages)). |
@@ -214,8 +213,8 @@ Owlbum makes four kinds of network request. Map tiles and model downloads are of
 |---|---|---|---|
 | Map tiles | The webview | `tile.openstreetmap.org` | Choosing "Load maps" on the Map tab. |
 | Model downloads | Rust | `huggingface.co`, `*.huggingface.co`, `*.hf.co`; HTTPS only, default port, no credentials | Choosing Download in Settings. |
-| Update check | Rust (the updater) | `github.com` and its release-asset hosts | On by default, once a day; can be turned off in Help (Check automatically) or in Settings. The first start says so. |
-| Feedback | The user's own browser | `github.com` | Choosing Help > Send feedback. |
+| Update check | Rust (the updater) | `github.com` and its release-asset hosts | On by default, once a day; can be turned off in Settings (Updates). The first start says so. |
+| Feedback | The user's own browser | `github.com` | Choosing More > Give feedback (F2). |
 
 The webview is restricted by policy:
 

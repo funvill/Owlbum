@@ -136,41 +136,6 @@ impl Event for AppClosing {
     const NAME: &'static str = "app_closing";
 }
 
-/// A menu item that acts in the page (docs/08-desktop-and-release.md,
-/// "Menus"). The page does the rest.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-#[serde(rename_all = "snake_case")]
-pub enum MenuItem {
-    /// File > Close folder.
-    CloseFolder,
-    /// File > Rescan.
-    Rescan,
-    /// Help > Keyboard shortcuts.
-    Shortcuts,
-    /// Help's update item.
-    Update,
-    /// Help > What's new.
-    WhatsNew,
-    /// Help > About Owlbum.
-    About,
-    /// View > Thumbnails: show or hide them.
-    ToggleGrid,
-    /// View > Details panel: show or hide it.
-    ToggleDetails,
-    /// View > Thumbnails at the bottom: move them between left and bottom.
-    GridPlace,
-}
-
-/// The `app_menu` event: a menu item that acts in the page was chosen.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
-pub struct AppMenu {
-    pub item: MenuItem,
-}
-
-impl Event for AppMenu {
-    const NAME: &'static str = "app_menu";
-}
-
 /// The project's page on GitHub. The About box links to it
 /// (docs/08-desktop-and-release.md, "About box").
 pub const REPOSITORY_URL: &str = "https://github.com/funvill/Owlbum";

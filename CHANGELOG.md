@@ -16,6 +16,23 @@ the window's title shows the version that is running.
   of doing nothing silently. It says so at most once every 4 seconds.
 - The About box says that Owlbum includes software from other projects,
   each under its own licence, and points to Third-party notices.
+- A More menu (the ⋯ button beside the Settings gear) holds what the menu
+  bar did: Open folder, Close folder, Rescan, Tidy, the panel choices, Full
+  screen, Open the data folder, Keyboard shortcuts, What's new, Check for
+  updates, Give feedback, About and Quit. Every key still works.
+- An active search shows as a chip, "Photos with 'lake'", beside the
+  filter chips. Its × clears the search and keeps the filters.
+- Pointing at the tagging bar says what it is doing, which models it uses,
+  how far it has got and about how long is left, or why it is paused or
+  stopped. Screen readers read the same words.
+
+### Changed
+
+- The Filters button sits beside the search box, and Stack similar is now
+  in the Filters panel. The photo count, "Showing X of Y" and Clear filter
+  sit just below the search box. The Owlbum name by the search box is gone.
+- There is no menu bar and no Tidy button any more: both moved into the
+  More menu. Check automatically for updates is in Settings.
 
 ### Fixed
 
@@ -26,6 +43,8 @@ the window's title shows the version that is running.
   flash before the page draws.
 - The same message is no longer shown twice at once: a repeat replaces
   the one on screen and starts its time again.
+- T and I hide and show the thumbnails and the details panel again; one
+  press used to act twice and change nothing.
 - Clear filter after a search or filter that matched nothing brings the
   thumbnails back at once; before, the grid stayed empty until the window
   was resized.

@@ -30,14 +30,15 @@ describe("keymap.json", () => {
       keys: ["H"],
       hold: false,
       repeat: false,
-      menu: false,
       dev: false,
       typing: false,
     });
   });
 
-  it("marks the menu accelerators the menu bar uses, and only those", () => {
-    const menu = KEYMAP.filter((r) => r.menu).map((r) => [r.id, r.keys[0], r.dev]);
+  it("keeps the old menu bar's keys as page rows that act while typing (issue 197)", () => {
+    const menu = KEYMAP.filter((r) => r.id.startsWith("app.") && r.typing && !r.id.endsWith("region")).map(
+      (r) => [r.id, r.keys[0], r.dev],
+    );
     expect(menu).toEqual([
       ["app.about", "F1", false],
       ["app.feedback", "F2", false],
@@ -63,7 +64,6 @@ describe("keymap.json", () => {
         keys: r.keys,
         hold: r.hold,
         repeat: r.repeat,
-        menu: r.menu,
         dev: r.dev,
         typing: r.typing,
       })),
@@ -116,8 +116,8 @@ describe("parseKeymap", () => {
       "a key that clashes with an everywhere row",
       [ok, { id: "app.shortcuts", place: "everywhere", keys: ["F"] }],
     ],
-    ["a menu row with two keys", [{ ...ok, place: "everywhere", keys: ["F1", "F2"], menu: true }]],
-    ["a development row that is not on the menu", [{ ...ok, dev: true }]],
+    ["a development row that is not for everywhere", [{ ...ok, dev: true }]],
+    ["the old menu flag", [{ ...ok, menu: true }]],
     ["a row that is both hold and repeat", [{ ...ok, hold: true, repeat: true }]],
   ])("rejects %s", (_why, table) => {
     expect(() => parseKeymap(table)).toThrow(KeymapError);
@@ -175,7 +175,6 @@ function docRows() {
         keys: groups[i],
         hold: flags.includes("hold"),
         repeat: flags.includes("repeat"),
-        menu: flags.includes("menu"),
         dev: flags.includes("dev"),
         typing: flags.includes("typing"),
       }),

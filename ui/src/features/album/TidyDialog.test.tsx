@@ -185,17 +185,19 @@ describe("Tidy dialog", () => {
   });
 });
 
-describe("Tidy button", () => {
+describe("Tidy in the More menu (issue 197)", () => {
   it("opens the dialog", async () => {
     const user = userEvent.setup();
     setApi(createFakeApi({ album_tidy_list: () => [] }));
     render(<TopBar />);
-    await user.click(screen.getByRole("button", { name: /Tidy/ }));
+    expect(screen.queryByRole("button", { name: /Tidy/ })).toBeNull();
+    await user.click(screen.getByRole("button", { name: "More" }));
+    await user.click(screen.getByRole("menuitem", { name: "Tidy…" }));
     const dialog = await screen.findByRole("dialog", { name: t.tidyTitle });
     expect(await within(dialog).findByText(t.tidyNothing)).toBeInTheDocument();
   });
 
-  it("is disabled in a view-only album", () => {
+  it("is disabled in a view-only album", async () => {
     setApi(createFakeApi());
     useAlbumStore.setState({
       status: fakeStatus("C:\\Photos", {
@@ -204,6 +206,7 @@ describe("Tidy button", () => {
       }),
     });
     render(<TopBar />);
-    expect(screen.getByRole("button", { name: /Tidy/ })).toHaveAttribute("aria-disabled", "true");
+    await userEvent.click(screen.getByRole("button", { name: "More" }));
+    expect(screen.getByRole("menuitem", { name: "Tidy…" })).toHaveAttribute("aria-disabled", "true");
   });
 });

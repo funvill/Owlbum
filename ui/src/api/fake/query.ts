@@ -394,6 +394,10 @@ export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
       held.push({ token, tiles, stacks, filter, text, base: tiles.length, photos: shown.length });
       while (held.length > TOKENS_KEPT) held.shift();
       const chipList = chips(filter, "");
+      // The search text's chip leads the row and is not a panel filter, as in Rust.
+      const searchChip = isSearch(query.search)
+        ? [{ id: "search", text: `Photos with '${query.search!.trim()}'`, remove: filter }]
+        : [];
       const byId = new Map(shown.map((p) => [p.id, p]));
       const tilePhotos = tiles.map((id) => byId.get(id)!);
       const weight = (i: number) => {
@@ -409,7 +413,7 @@ export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
         album_photos: list.length,
         filtered: Object.keys(filter).length > 0 || isSearch(query.search),
         panel_count: chipList.length,
-        chips: chipList,
+        chips: [...searchChip, ...chipList],
         kept: keep === null ? null : settle(keep, old, tiles, stacks),
         ...(timeline ? timelineGroups(tilePhotos, query.timeline_unit, weight) : {}),
         ...(passed.facets === undefined ? {} : { facets: passed.facets }),

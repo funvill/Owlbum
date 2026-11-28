@@ -841,6 +841,16 @@ The first row that matches wins:
 | `done + failed == total` and `failed` is above 0 | "{failed} photos could not be tagged." ("1 photo could not be tagged."), with **Try failed photos again** (`tagging_retry_failed`) and a close button that hides the line until the counts next change. |
 | Otherwise (finished, nothing failed) | Nothing. |
 
+**What it is and what it is doing** (owner's feedback on 0.1.4, #198). Pointing at the bar shows a tooltip, and the same words are its accessible description (`aria-description` on the progress bar while it moves, on the line otherwise):
+
+| Row | Tooltip |
+|---|---|
+| Running | "Photo tagging: describing photos with Florence-2 base and finding keywords with CLIP base, 120 of 2,000 done, 3 failed, about 15 minutes left". Each chosen part is named with its model (read with `tagging_models` when a run starts; "tagging photos on this computer" until it answers). The failed part shows only when above 0. The time left is the page's own: the photos still to tag at the pace since the run started, shown once 3 photos and 10 seconds have gone by ("less than a minute", "about N minutes", above 90 minutes "about N hours"). |
+| Paused | "Photo tagging is paused: 120 of 2,000 done. Resume to go on." |
+| Stopped | "Photo tagging stopped by itself: {problem}" |
+| Not working | "Photo tagging is not working: a chosen model is damaged or would not load. Settings has the models." |
+| Finished with failures | "Photo tagging has finished. 3 photos could not be tagged." |
+
 The bar is a `role=progressbar` with the label "Tagging photos". **Pause** and **Resume** call `tagging_pause`. The page does not guess the new state; it waits for the next event, which arrives at once. An error from any of these buttons raises a toast.
 
 ### Settings → Photo tagging

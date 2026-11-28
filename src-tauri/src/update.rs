@@ -101,7 +101,6 @@ fn set<R: Runtime>(app: &AppHandle<R>, new: UpdateState) {
     if let Some(u) = app.try_state::<Updates>() {
         u.lock().state = new.clone();
     }
-    crate::menu::update_item(app, &new);
     let _ = crate::events::emit(app, &new);
 }
 
@@ -327,7 +326,7 @@ pub fn after_close<R: Runtime>(app: &AppHandle<R>) {
     }
 }
 
-/// Help's update item was chosen: check, download or install, by state.
+/// The More menu's update item was chosen: check, download or install, by state.
 pub fn menu_chosen<R: Runtime>(app: &AppHandle<R>) {
     let now = app.try_state::<Updates>().map(|u| u.current().state);
     match now {

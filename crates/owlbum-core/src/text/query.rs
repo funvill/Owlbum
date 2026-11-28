@@ -78,6 +78,11 @@ pub mod chip {
             .join(", ")
     }
 
+    /// The search text's chip (owner's feedback, issue 196).
+    pub fn search(text: &str) -> String {
+        format!("Photos with '{text}'")
+    }
+
     /// The one chip of `from` and `to`: "{from} → {to}", "From {from}" or
     /// "Until {to}".
     pub fn dates(from: Option<&str>, to: Option<&str>) -> String {

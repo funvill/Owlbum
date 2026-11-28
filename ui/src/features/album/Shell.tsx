@@ -17,6 +17,7 @@ import { Notices } from "./Notices";
 import { OpenQuestions } from "./OpenQuestions";
 import { ReadingBar } from "./ReadingBar";
 import { useAlbumStore } from "./session";
+import { useAppKeys } from "./MoreMenu";
 import { TaggingBar } from "./TaggingBar";
 import { TopBar } from "./TopBar";
 import "./Shell.css";
@@ -35,14 +36,15 @@ export function Shell() {
   const settingsOpen = useSettingsOpen((s) => s.open);
   const aboutOpen = useAboutOpen((s) => s.open);
   const here: Where = editing ? "edit" : viewing ? "viewer" : "browse";
-  // `?` opens the shortcut overlay from every place (docs/08, "The overlay").
-  useShortcutKey(
-    useCallback(
-      (): Where =>
-        useEditStore.getState().photoId !== null ? "edit" : useViewerStore.getState().open ? "viewer" : "browse",
-      [],
-    ),
+  const where = useCallback(
+    (): Where =>
+      useEditStore.getState().photoId !== null ? "edit" : useViewerStore.getState().open ? "viewer" : "browse",
+    [],
   );
+  // `?` opens the shortcut overlay from every place (docs/08, "The overlay").
+  useShortcutKey(where);
+  // The old menu bar's keys: the page handles them now (issue 197).
+  useAppKeys(where);
   // F6 and Shift+F6 move between the regions (docs/09, "Accessibility baseline").
   useRegionKeys();
   useEffect(() => {

@@ -13,8 +13,6 @@ pub mod desktop;
 pub mod events;
 pub mod fatal;
 pub mod handoff;
-pub mod keymap;
-pub mod menu;
 pub mod navigation;
 pub mod protocol;
 pub mod session;
@@ -40,7 +38,6 @@ pub fn setup<R: Runtime>(builder: tauri::Builder<R>) -> tauri::Builder<R> {
         .manage(update::Updates::default())
         .manage(window::Geometry::default())
         .manage(commands::tagging::TaggingState::default())
-        .on_menu_event(|app, event| menu::chosen(app, event.id().as_ref()))
         .on_window_event(|window, event| match event {
             WindowEvent::Focused(true) => window.state::<session::Session>().focused(),
             WindowEvent::Moved(_) | WindowEvent::Resized(_) => self::window::changed(window),
@@ -191,9 +188,9 @@ pub fn run() {
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
             use_bundled_ort(app.handle());
-            // Step 6: the menu.
-            let menu = menu::build(app.handle(), dev, &settings)?;
-            app.set_menu(menu)?;
+            // Step 6: no menu bar. Its commands are in the page's More
+            // menu, and the page handles every key (owner's feedback,
+            // issue 197).
             // Step 8: the window, hidden, with the restored geometry.
             let window = main_window(app, dev)?;
             self::window::place(&window, &saved_window);

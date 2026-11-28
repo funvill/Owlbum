@@ -138,16 +138,19 @@ export function setEditing(on: boolean): void {
   editing = on;
 }
 
+/** Development-only rows act only in a development build. */
+const DEV_BUILD = import.meta.env.DEV;
+
 /**
- * Finds the row a keydown reaches in this place, or null. Menu rows never
- * match: the shell's menu owns them.
+ * Finds the row a keydown reaches in this place, or null. A development
+ * row matches only in a development build.
  */
 export function matchKey(event: KeyLike, context: MatchContext): KeyMatch | null {
   if (event.defaultPrevented || event.isComposing) return null;
   const focus = context.focus ?? focusOf(event.target);
   if (focus === "dialog") return null;
   for (const r of KEYMAP) {
-    if (r.menu) continue;
+    if (r.dev && !DEV_BUILD) continue;
     if (editing && r.place === "browse") continue;
     if (r.place !== context.place && r.place !== "everywhere") continue;
     if (focus === "typing" && !r.typing) continue;

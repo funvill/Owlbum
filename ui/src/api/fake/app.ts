@@ -177,6 +177,10 @@ export const appHandlers: AreaHandlers<AppCommands> = {
   app_pick_folder: () => null,
   // Opening the browser does nothing here; tests read the calls.
   app_open_feedback: () => null,
+  app_open_data_folder: () => null,
+  app_full_screen: () => null,
+  app_developer_tools: () => null,
+  app_update_choose: () => null,
   app_open_repository: () => null,
   app_open_licence: () => null,
   app_open_notices: () => null,

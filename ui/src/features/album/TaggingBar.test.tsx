@@ -11,7 +11,7 @@ import { taggingBarText as t } from "../../text/album";
 import { useSettingsOpen } from "../app/settingsOpen";
 import { useAlbumStore } from "./session";
 import { TaggingBar } from "./TaggingBar";
-import { resetTagging } from "./tagging";
+import { resetTagging, setTaggingClock } from "./tagging";
 
 const p = (over: Partial<TaggingProgress>): TaggingProgress => ({ ...idleProgress, ...over });
 
@@ -30,7 +30,8 @@ async function show(start: TaggingProgress, open = true): Promise<FakeApi> {
   return fake;
 }
 
-const commands = (fake: FakeApi) => fake.calls.map((c) => c.command).filter((c) => c !== "tagging_status");
+const commands = (fake: FakeApi) =>
+  fake.calls.map((c) => c.command).filter((c) => c !== "tagging_status" && c !== "tagging_models");
 
 beforeEach(() => {
   resetTagging();
@@ -123,5 +124,30 @@ describe("the tagging bar", () => {
     });
     await user.click(screen.getByRole("button", { name: t.pause }));
     await waitFor(() => expect(useToasts.getState().toasts.map((x) => x.message)).toEqual(["View only: this folder can't be written to."]));
+  });
+
+  it("says what it is and what it is doing, as its tooltip and description (issue 198)", async () => {
+    let clock = 1_000_000;
+    setTaggingClock(() => clock);
+    const fake = await show(p({ total: 2000, done: 100, running: true }));
+    // The chosen models' names are read when a run starts.
+    await waitFor(() => expect(fake.calls.some((c) => c.command === "tagging_models")).toBe(true));
+    const bar = screen.getByRole("progressbar", { name: t.label });
+    await waitFor(() => expect(bar).toHaveAccessibleDescription(/^Photo tagging: (describing photos|finding keywords|tagging photos)/));
+    expect(bar).toHaveAccessibleDescription(/100 of 2,000 done$/);
+    // After 20 photos in 60 seconds, 1,880 are left: about 94 minutes, shown as 2 hours.
+    clock += 60_000;
+    act(() => fake.emit("tagging_progress", p({ total: 2000, done: 120, running: true })));
+    expect(bar).toHaveAccessibleDescription(/120 of 2,000 done, about 2 hours left$/);
+    act(() => fake.emit("tagging_progress", p({ total: 2000, done: 120, paused: true })));
+    expect(screen.getByRole("progressbar")).toHaveAccessibleDescription(
+      "Photo tagging is paused: 120 of 2,000 done. Resume to go on.",
+    );
+    act(() => fake.emit("tagging_progress", p({ total: 2000, done: 120, problem: "The disk is full." })));
+    const line = screen.getByText(t.stopped("The disk is full.")).closest<HTMLElement>('[role="status"]')!;
+    expect(line).toHaveAccessibleDescription("Photo tagging stopped by itself: The disk is full.");
+    // Pointing at the bar shows the same words.
+    await userEvent.hover(screen.getByText(t.stopped("The disk is full.")));
+    expect(await screen.findByRole("tooltip")).toHaveTextContent("Photo tagging stopped by itself: The disk is full.");
   });
 });

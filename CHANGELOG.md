@@ -26,6 +26,9 @@ the window's title shows the version that is running.
   flash before the page draws.
 - The same message is no longer shown twice at once: a repeat replaces
   the one on screen and starts its time again.
+- Clear filter after a search or filter that matched nothing brings the
+  thumbnails back at once; before, the grid stayed empty until the window
+  was resized.
 
 ## [0.1.5] - 2026-11-27
 

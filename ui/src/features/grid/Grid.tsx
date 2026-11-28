@@ -114,6 +114,11 @@ export function Grid(props: GridProps) {
   );
   const count = result?.count ?? 0;
   const groups = result?.groups ?? null;
+  // A filter that matches nothing shows a message in place of the box. The
+  // box is a new element when the grid comes back, so what measures it and
+  // takes its wheel is set up again (issue 195: the old box, taken out of
+  // the page, measured 0 and the rows came back with no width).
+  const noMatch = result !== null && count === 0 && result.album_photos > 0;
 
   const blocks = useMemo(() => gridBlocks(), []);
   useSyncExternalStore(
@@ -265,7 +270,7 @@ export function Grid(props: GridProps) {
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, [across]);
+  }, [across, noMatch]);
 
   // Above the height limit the page scrolls by the wheel and page keys itself, in real pixels.
   useEffect(() => {
@@ -284,7 +289,7 @@ export function Grid(props: GridProps) {
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
-  }, []);
+  }, [noMatch]);
 
   /** Scrolls group `g`'s heading to the top of the view (the month rail). */
   const jump = useCallback(
@@ -420,7 +425,7 @@ export function Grid(props: GridProps) {
     [hasMenu, hasStar, hasStack],
   );
 
-  if (result !== null && count === 0 && result.album_photos > 0) {
+  if (noMatch) {
     const s = useGridStore.getState();
     return (
       <div className="ow-grid ow-grid--empty">

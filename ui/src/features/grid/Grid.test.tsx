@@ -9,6 +9,7 @@ import { createQueryFake, type FakePhoto } from "../../api/fake/query";
 import type { Row } from "../../api/bindings/Row";
 import { seriousFindings } from "../../test/axe";
 import { gridText } from "../../text/grid";
+import { FilterBar } from "../organise/FilterBar";
 import { Grid } from "./Grid";
 import { BLOCK, FETCHES } from "./blocks";
 import { MAX_SCROLL, PAD, gridLayout, scrollRatio } from "./layout";
@@ -40,13 +41,14 @@ beforeAll(() => {
   Object.defineProperty(HTMLElement.prototype, "clientWidth", {
     configurable: true,
     get(this: HTMLElement) {
-      return isGrid(this) ? box.width : 0;
+      // A box taken out of the page measures nothing, as in a browser.
+      return isGrid(this) && this.isConnected ? box.width : 0;
     },
   });
   Object.defineProperty(HTMLElement.prototype, "clientHeight", {
     configurable: true,
     get(this: HTMLElement) {
-      return isGrid(this) ? box.height : 0;
+      return isGrid(this) && this.isConnected ? box.height : 0;
     },
   });
   vi.stubGlobal("ResizeObserver", FakeResizeObserver);
@@ -313,6 +315,41 @@ describe("the grid", () => {
     await userEvent.click(screen.getByRole("button", { name: gridText.clearFilter }));
     await waitFor(() => expect(useGridStore.getState().result?.count).toBe(3));
     expect(useGridStore.getState().query.filter).toEqual({});
+  });
+
+  it("draws its rows again when a filter that matched nothing is cleared (issue 195)", async () => {
+    useAlbum(photos(3), (album) => ({
+      query_run: (args) =>
+        args.query.filter.star === "yes"
+          ? {
+              token: "none",
+              revision: 0,
+              count: 0,
+              photos: 0,
+              total: 3,
+              album_photos: 3,
+              filtered: true,
+              panel_count: 1,
+              chips: [],
+              kept: null,
+            }
+          : album.handlers.query_run(args),
+    }));
+    render(
+      <>
+        <FilterBar />
+        <Grid />
+      </>,
+    );
+    await waitFor(() => expect(tiles()).toHaveLength(3));
+    act(() => useGridStore.getState().setQuery({ ...useGridStore.getState().query, filter: { star: "yes" } }));
+    expect(await screen.findByText(gridText.noMatch)).toBeInTheDocument();
+    // The box that was taken out reports its new size, as a browser's observer does.
+    act(() => observers.forEach((fire) => fire()));
+    const row = screen.getByRole("region", { name: "Active filters" });
+    await userEvent.click(within(row).getByRole("button", { name: "Clear filter" }));
+    await waitFor(() => expect(tiles()).toHaveLength(3));
+    expect(screen.getByRole("grid")).toHaveAttribute("aria-colcount", "2");
   });
 
   it("never says no photos match while the album holds none", async () => {

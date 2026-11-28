@@ -441,12 +441,16 @@ fn the_queue_tags_describe_then_keywords_and_counts() {
 fn focus_comes_before_scan_order() {
     let mut fx = Fx::new(&["a.jpg", "b.jpg", "c.jpg", "d.jpg"]);
     fx.control.set_delay(Duration::from_millis(30));
-    fx.tagging.runtime().pause(true);
     fx.choose(None, Some(K));
+    // Opening clears the pause, so the queue is held by a scan instead
+    // until the focus is set: nothing may start before it.
+    fx.scanning.store(true, Ordering::Relaxed);
     fx.open();
     let d = fx.id("d.jpg");
     let c = fx.id("c.jpg");
     fx.tagging.runtime().focus(&[d, c]);
+    fx.scanning.store(false, Ordering::Relaxed);
+    fx.tagging.runtime().pause(false);
     fx.finished();
     let names: Vec<String> = fx.control.runs().into_iter().map(|(_, n)| n).collect();
     assert_eq!(names, ["d.jpg", "c.jpg", "a.jpg", "b.jpg"]);

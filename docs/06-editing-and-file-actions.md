@@ -322,7 +322,7 @@ Edit mode edits one photo inside the preview pane. It opens with the E key, the 
 | What can be edited | Still images and RAW files. Not video, not an animated picture. A file that could not be read (a row with `scan_error`) is in no result, so it can never be chosen. See [Formats](#formats). |
 | Starting point | The stored edit, or identity, read from the detail record's `edit` (`photo_detail`) when edit mode opens. The aspect starts at Free, not swapped. |
 | One at a time | Opening edit mode on another photo first ends the current one as Done. |
-| While a save runs | Edit mode cannot open on a photo that is being saved to its file. |
+| While a save runs | Edit mode cannot open on a photo that is being saved to its file. (Not built yet: see #69 final pass.) |
 | The viewer | The viewer cannot open over edit mode. |
 | Undo | Ctrl+Z does nothing while edit mode is open. Outside it, each stored change is one undo step in the list [Organising](05-organising.md#undo-ctrlz) keeps. |
 
@@ -596,7 +596,7 @@ Closing loses nothing, because every edit is already in the album. So there is n
 | Situation | What happens |
 |---|---|
 | Edit mode is open | It ends as Done first. |
-| A save is running | The close waits for the current photo's sequence to finish. Save all stops after that photo. The window shows "Finishing saving…" meanwhile (as built, #160: in the place of the Save all button, from `app_closing` until the save ends). |
+| A save is running | The close waits for the current photo's sequence to finish, at most 120 seconds. Save all stops after that photo. The window shows "Finishing saving…" meanwhile (as built, #160: in the place of the Save all button, from `app_closing` until the save ends). |
 | `album` mode | The window closes. |
 | `file` mode with photos waiting | One native question, below. It is asked for closing the window, File > Quit, and before installing an update. |
 
@@ -687,7 +687,7 @@ The key hints come from the one shortcut table (see [Desktop, release and tests]
 
 | Item | Acts on | Disabled when (tooltip) |
 |---|---|---|
-| **Edit** | one | The photo cannot be edited (the reason from [Formats](#formats)); it is being saved ("This photo is being saved"); view-only. |
+| **Edit** | one | The photo cannot be edited (the reason from [Formats](#formats)); it is being saved ("This photo is being saved"; not built yet: see #69 final pass); view-only. |
 | **Rotate left**, **Rotate right**, **Flip horizontally** | all | No target can be edited (the reason from Formats); view-only. |
 | **Save** | all targets that have an edit; the label is "Save (N)" when that is more than one | Every such target is copy-only ("<Label> photos can only be saved as a copy"); a save is running ("Saving…"); view-only. Tooltip when enabled: "Save the edit into the photo file (the original goes to the <bin>)". |
 | **Save as…** | one | A save is running. |
@@ -790,7 +790,7 @@ Ctrl+C with several photos selected calls `file_copy_files(photo_ids)`. It puts 
 
 ## Dragging photos out
 
-Tiles and the preview can be dragged into other programs: a file manager, a mail message, a layout program.
+Tiles, and the preview while it is not zoomed in, can be dragged into other programs: a file manager, a mail message, a layout program.
 
 | Rule | Detail |
 |---|---|
@@ -808,7 +808,7 @@ Tiles and the preview can be dragged into other programs: a file manager, a mail
 3. Rust uses the prepared result when it is for the same list and at most 10 seconds old. Otherwise it prepares now (it does not wait for a preparation still in flight).
 4. Just before the drag starts, the files are checked for existence once more. If none is left, nothing happens.
 
-Rust starts the drag from the shell crate. `tauri-plugin-drag` offers the page a command that takes file paths, which the id rule forbids, so that command is **not** granted to the page. The shell needs a Rust-side way to start the same drag; see the open questions.
+Rust starts the drag from the shell crate. `tauri-plugin-drag` offers the page a command that takes file paths, which the id rule forbids, so the plugin is not used. As built, the shell calls the `drag` crate (the library under the plugin) on the main thread with the paths and the icon, offering copy only.
 
 | Failure | Message |
 |---|---|
@@ -968,12 +968,12 @@ Error codes this part adds to `AppError`:
 ## Open questions
 
 1. **Is the close question in `file` mode wanted at all?** Nothing is lost by closing, so it is only a reminder. It could be dropped, or shown once per session.
-2. **Does the trash library ever delete for good?** On a Windows drive with no Recycle Bin, a recycle request can turn into a permanent delete unless the right flags are set. A prototype must show that `trash` fails there instead, on Windows and on Linux mounts with no trash folder. If it cannot, the shell needs its own call.
+2. **Does the trash library ever delete for good?** On a Windows drive with no Recycle Bin, a recycle request can turn into a permanent delete unless the right flags are set. A prototype must show that `trash` fails there instead, on Windows and on Linux mounts with no trash folder. If it cannot, the shell needs its own call. Settled on Windows: Rust sends a file to the bin only on a local fixed drive and refuses any other drive itself (see [Move to the Recycle Bin or Trash](#move-to-the-recycle-bin-or-trash)). Linux mounts are still to check.
 3. **File lists on the Linux clipboard.** Which mechanism works on both X11 and Wayland, and whether the clipboard keeps the list after the window loses focus, is not known until the prototype.
 4. **Writing metadata.** Settled in #150: a small pure-Rust rewriter instead of `little_exif`; see [Metadata as built](#metadata-as-built).
 5. **Colour management.** Settled: the renderer decodes through the handlers' `source` call and converts with `moxcms` (8- and 16-bit transforms) by the [Colour profiles](#rendering) table (#150).
 6. **SVG filters on many tiles in WebKitGTK.** A grid in which most tiles carry a colour filter and a transform may scroll slowly on Linux. If it does, tiles with a colour edit need small rendered thumbnails from Rust instead.
 7. **TIFF in place.** TIFF is copy-only in version 1 because writing TIFF with its metadata intact is unproven. Scans kept as TIFF would be better served by saving as TIFF.
 8. **Lossless JPEG turns.** A save whose edit is only a quarter turn or a flip could turn the JPEG without re-encoding. Version 1 re-encodes at quality 95.
-9. **Starting a drag from Rust.** It is assumed, not yet confirmed, that the library under `tauri-plugin-drag` can be called from the shell crate with a list of paths, and that it can offer copy and link without move. The Linux prototype checks this on both platforms.
+9. **Starting a drag from Rust.** Settled on Windows: the shell calls the `drag` crate with a list of paths and offers copy only (link is left out). The Linux prototype still checks it there.
 10. **A file changed by another program while it has a stored edit.** The edit is kept and drawn on the new content. Whether to warn is undecided.

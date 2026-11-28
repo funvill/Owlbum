@@ -52,9 +52,10 @@ Owlbum/
     src/controls/         the base controls: buttons, inputs, menus, dialogs, toasts, tooltips
     src/icons/            the icon set, inline SVG
     src/keys/keymap.json  the one table of keyboard shortcuts
-  e2e/                    the thin WebdriverIO smoke test, run by hand before a release
-  scripts/                check.sh (the gate, on Windows under Git Bash and on Linux), bindings.sh, the notices generator (notices.mjs), fetch-ort.mjs and build-installer.sh
+  e2e/                    the thin WebdriverIO smoke test, run by hand before a release (not built yet: see #69 final pass)
+  scripts/                check.sh (the gate, on Windows under Git Bash and on Linux), bindings.sh, the notices generator (notices.mjs), fetch-ort.mjs, build-installer.sh, build-test.sh (a numbered test build), countries.mjs, check-site.mjs, check-utf8.mjs, prune-target.sh and env.sh (sourced by the others)
   site/                   the marketing page (static HTML), deployed to GitHub Pages by a workflow
+  fixtures/               edit-plans.json, edit plans shared by the Rust and page tests
   docs/                   these documents; docs/archive holds the old program's
   .github/workflows/      checks.yml (the gate on pushes and pull requests), release.yml (installers on a tag), pages.yml (site)
   notices/                hand-written third-party notices for things that are not packages
@@ -125,7 +126,7 @@ A command is a request with a reply (`invoke`). Names are `snake_case`, grouped 
 
 **One source for types.** Commands, events and every type they carry are declared once, in Rust. A command is written with the shell's `command!` macro in the module for its prefix (`src-tauri/src/commands/<prefix>.rs`) and listed in that module's `area!` call, which also lists the events the area sends; an event is a payload type in `owlbum-core` that implements `Event` (its `NAME` is the event name). The shell routes each `invoke` to the module that lists the command, so adding a command never edits a shared list. `scripts/bindings.sh` writes the TypeScript types to `ui/src/api/bindings/` with ts-rs; the page's `invoke` and `listen` and the fake backend are typed from them, and a test fails while they are stale. Arguments are passed by their Rust names in `snake_case`. 64-bit integers are TypeScript `number`s.
 
-**Photo identity.** The page refers to a photo by its integer `id` from the album database, never by a path. Rust resolves ids to paths. A command given an unknown id answers `photo_not_found`. Because the page cannot name a path, it cannot ask Rust to touch a file outside the open album. The only command that takes a path is `album_open`. Rust does send paths to the page for display (the album root, a photo's full path in the details panel); the page never sends one back.
+**Photo identity.** The page refers to a photo by its integer `id` from the album database, never by a path. Rust resolves ids to paths. A command given an unknown id answers `photo_not_found`. Because the page cannot name a path, it cannot ask Rust to touch a file outside the open album. The only command that takes a path is `album_open` (`app_recent_remove` names a recent-list entry by its root, and touches no file). Rust does send paths to the page for display (the album root, a photo's full path in the details panel); the page never sends one back.
 
 ### The query model
 
@@ -150,12 +151,11 @@ An event is pushed from Rust to the page. There is no polling anywhere.
 | `album_changed` | `{ revision, reason, rekeyed? }` | Rows were added, removed or changed. |
 | `tagging_progress` | `{ total, done, failed, paused, running, not_working, problem }` | While tagging runs, and on any state change. |
 | `download_progress` | `{ model, received, total, error, finished }` | While a model downloads. |
-| `edit_save_progress` | `{ done, total, current }` | While Save all runs. `current` is the id of the photo being saved. |
+| `edit_save_progress` | `{ done, total, current }` | While Save all runs. `current` is the file name being saved, null at the end. |
 | `open_folder` | `{ path, photo }` | A second launch, the File menu, or a folder dropped on the window asked for a folder. `photo` is the picture a second launch named, to show once the folder is open (#184), else null. A folder given on the command line at start, or one that arrived before the page called `app_startup`, is returned by `app_startup` instead, so it cannot arrive before the page listens. |
 | `folder_drop` | `{ phase }` | Something is dragged over the window (`over`), the drag left or was dropped (`left`), or a drop held nothing that could be opened (`refused`). The page draws the drop outline from it; a drop that opens a folder sends `left`, then `open_folder`. |
 | `app_menu` | `{ item }` | A menu item that the page carries out was chosen. |
 | `app_closing` | `{}` | The window is about to close; the page finishes what it is doing and answers with `app_close_ready`. |
-| `app_fatal` | `{ title, message, advice, details }` | Something failed that the page should show before the program stops. |
 | `update_state` | `{ state, version?, percent? }` | The updater's state changed. `state` is `unavailable`, `idle`, `checking`, `available`, `downloading`, `ready` or `installing`. |
 | `update_message` | `{ kind, … }` | What a check, download or install came to; the page shows it as a dialog ([Desktop and release](08-desktop-and-release.md#messages)). |
 | `app_fatal` | `{ title, message }` | A fatal error the page shows ([Desktop and release](08-desktop-and-release.md#the-fatal-error-dialog)). |
@@ -214,7 +214,7 @@ Owlbum makes four kinds of network request. Map tiles and model downloads are of
 |---|---|---|---|
 | Map tiles | The webview | `tile.openstreetmap.org` | Choosing "Load maps" on the Map tab. |
 | Model downloads | Rust | `huggingface.co`, `*.huggingface.co`, `*.hf.co`; HTTPS only, default port, no credentials | Choosing Download in Settings. |
-| Update check | Rust (the updater) | `github.com` and its release-asset hosts | On by default, once a day; can be turned off in Help. The first start says so. |
+| Update check | Rust (the updater) | `github.com` and its release-asset hosts | On by default, once a day; can be turned off in Help (Check automatically) or in Settings. The first start says so. |
 | Feedback | The user's own browser | `github.com` | Choosing Help > Send feedback. |
 
 The webview is restricted by policy:
@@ -252,7 +252,7 @@ These are the starting choices. A prototype may replace one; the replacement is 
 | Model downloads | `ureq` (rustls with the webpki roots, redirects handled by hand), `sha2` | `ureq` is the client `ort` already builds with; blocking suits the one download thread. |
 | Colour profiles | `moxcms` | Converting embedded profiles to sRGB (`media::colour`). Chosen by measurement in #7 over `lcms2` and `qcms` ([Media and scanning](03-media-and-scanning.md#open-questions), question 8). `image` already depends on it. |
 | EXIF writing | none: `owlbum_core::edit::metadata` | Only when an edit is saved into a file or copied: keep the block, reset orientation, set the new size, drop the embedded thumbnail. A small pure-Rust TIFF rewriter, because `little_exif` could not drop the thumbnail (#150). Lossless WebP with its profile, EXIF and XMP is written with `image-webp`, the version `image` already uses. |
-| Video poster frames | The `windows` crate (the shell's thumbnails; Media Foundation is a follow-up); `gstreamer` linked to the system libraries on Linux, not built yet | System codecs only. |
+| Video poster frames | The `windows` crate (the shell's thumbnail, then a frame through Media Foundation's source reader when the shell has none); `gstreamer` linked to the system libraries on Linux, not built yet | System codecs only. |
 | Country outlines | Natural Earth 5.1.2 Admin 0 countries at 1:10m, simplified to about 1 km and bundled (public domain) | For the Country row and country search. `scripts/countries.mjs` downloads the pinned file, checks its SHA-256, simplifies each outline (Douglas-Peucker, 0.01°) and writes `crates/owlbum-core/data/countries.bin` (258 countries, 746 KB), read by `owlbum_core::info::country`. 1:10m simplified was chosen over the low-resolution scales by measurement (#25): of points within 11 km of a border or coast, 1:110m put 28% in the wrong country or none and 1:50m 11%, against 2% here; 1:110m also lacks 81 small countries and territories. |
 | Local dates and times | `chrono` (clock only) | Backup file names and the time shown for a stale lock. |
 | Logging | `tracing`, with Owlbum's own small subscriber writing the file (`owlbum_core::appdata::log`) | `tracing-subscriber` and `tracing-appender` were not needed: the line format, the one rotation at open and the temp-folder fallback are a few dozen lines. |
@@ -262,11 +262,11 @@ These are the starting choices. A prototype may replace one; the replacement is 
 | Drag-out | `drag`, the library under `tauri-plugin-drag`, called from the shell | The plugin's own command takes paths, so it is not used. Windows only for now; the Linux prototype waits for Linux work to resume (#42). |
 | Clipboard | `arboard` for text and one image; `clipboard-win` for a list of files on Windows | `arboard` is what `tauri-plugin-clipboard-manager` uses; called directly, since no clipboard command is granted to the page. The shell keeps one `arboard::Clipboard` for the program's life, as its Linux backend needs (#40, #41). |
 | Reveal in file manager | `tauri-plugin-opener` | Its `reveal_item_in_dir` function only; the plugin is not registered. |
-| Updates | `tauri-plugin-updater` | Needs a signing key, created at final review. |
+| Updates | `tauri-plugin-updater` | Needs a signing key, created at final review. (Not done yet: `plugins.updater.pubkey` is empty, so the release workflow stops; see #69 final pass.) |
 | Single instance | `tauri-plugin-single-instance` | |
-| Native dialogs | `tauri-plugin-dialog` | |
+| Native dialogs | `tauri-plugin-dialog`; `rfd` for the fatal-error box shown when the page cannot show it | |
 | Page | React, TypeScript, Vite, zustand, Leaflet, `leaflet.markercluster`, Vitest, Testing Library, ESLint | |
-| Smoke test | WebdriverIO with `tauri-driver` | Run by hand before a release. |
+| Smoke test | WebdriverIO with `tauri-driver` | Run by hand before a release. (Not built yet: see #69 final pass.) |
 
 ## What is deliberately absent
 

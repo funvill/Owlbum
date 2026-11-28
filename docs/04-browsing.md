@@ -67,7 +67,7 @@ The window is one column. Parts appear top to bottom in this order:
 | BODY (fills the rest): start screen | message | review screen                              |
 |                                                                                            |
 +--------------------------------------------------------------------------------------------+
-                                                                  toasts: fixed bottom-right
+                                                                 toasts: fixed bottom centre
 ```
 
 ### Body states
@@ -181,7 +181,8 @@ Rules:
 Owner's feedback on 0.1.3 (#184): Owlbum can be the program that opens pictures (see [Desktop and release](08-desktop-and-release.md#opening-pictures)). A launch that names a picture file, from the file manager or the command line, opens the folder that holds it (or the album that holds that folder, scoped to it, as any open does) with that picture current, the only one selected and in view, so the preview shows it. A second launch hands the picture to the running window the same way; when its folder is already open only the current photo changes.
 
 - The page asks `photo_find(path)` for the picture's id. Found, the album opens in the grid with that photo current: the saved session's view, filters and search are not used for this open, so nothing can hide it.
-- Not found yet (a folder opened for the first time, whose scan has not reached it): the album opens as usual and the page asks again each time the status is read during the scan; when the picture is found and the grid holds it, it becomes current. If the scan ends without it, the page stops asking.
+- Not found yet (a folder opened for the first time, whose scan has not reached it): the album opens as usual and the page asks again each time the status is read during the scan; when the picture is found and the grid holds it, it becomes current. If the scan ends without it, the page stops asking; a picture found that the grid does not hold yet is tried up to 5 more times, a second apart.
+- The picture reaches the page as `launch_photo` in the `app_startup` answer, or as the `photo` of an `open_folder` event.
 - A picture inside a closed stack cannot be shown as a tile; the album opens without moving to it.
 
 ## Top bar
@@ -197,13 +198,14 @@ The bar is 48px high. It has a left group that takes the free space and a right 
 
 **Right group**
 
+- **Save all (N)** (album open, `edit_target` is `file` and a photo has an edit): defined in [Editing and file actions](06-editing-and-file-actions.md).
 - **Thumbnail size** (album open): a grid icon and a slider, 120px wide, minimum 96, maximum 320, step 8. Label and tooltip "Thumbnail size". See [Thumbnail size](#thumbnail-size).
 - **Tidy…** (album open): defined in [Organising](05-organising.md). Disabled in a view-only album.
 - **Close folder** (album open).
 - **Open folder** (album open; on the start screen the button is in the body instead).
 - **Settings** (always): a gear icon button, label and tooltip "Settings". Defined in [Desktop](08-desktop-and-release.md).
 
-The bar never wraps. The window cannot be narrower than 960px, and below 1280px the bar gives up room in the order [Visual design](09-visual-design.md#the-bars) sets: the search box shrinks, then the buttons become icon buttons, the slider moves into a popover and the search box's hint row is hidden.
+The bar never wraps. The window cannot be narrower than 960px, and below 1280px the bar gives up room in the order [Visual design](09-visual-design.md#the-bars) sets: the search box shrinks, then below 1100px the buttons become icon buttons, the slider moves into a popover and the search box's hint row is hidden. (The slider's popover is not built yet: the slider stays in the bar; see #69 final pass.)
 
 ## Album banners
 
@@ -222,7 +224,7 @@ A banner is a full-width strip under the top bar. Its look (fill, icon, text siz
 | `view_only = "chosen"` and `lock_host` is null (Open view-only with no old lock) | "View only: you opened this album view-only." | **Open for changes** calls `album_open(path)`. |
 | `conflict_file` is set | "Another computer changed this album at the same time. Owlbum is using its own copy and has not merged "<file name>"." | **x** |
 
-**What view-only disables.** Browsing, filtering, the viewer, the map, copy and drag-out work. These controls are disabled, each with a tooltip that says why, which is the first sentence of the banner in force (for example "View only: this folder can't be written to."): the star button on tiles, every typed field in the details panel, people chips' remove buttons, "Use the camera's date", Edit, Tidy, and the tagging controls. The keys S, F, H, E, `[`, `]`, Up, Down, Delete and Ctrl+Z do nothing and show the toast "This album is view-only." at most once every 4 seconds.
+**What view-only disables.** Browsing, filtering, the viewer, the map, copy and drag-out work. These controls are disabled, each with a tooltip that says why, which is the first sentence of the banner in force (for example "View only: this folder can't be written to."): the star button on tiles, every typed field in the details panel, people chips' remove buttons, "Use the camera's date", Edit, Tidy, and the tagging controls. The keys S, F, H, E, `[`, `]`, Up, Down, Delete and Ctrl+Z do nothing and show the toast "This album is view-only." at most once every 4 seconds. (The keys do nothing, but the toast is not built yet: see #69 final pass.)
 
 **Scoped open.** A scoped open has no banner. It is shown by the scope folder in the window title and the **Show whole album** link in the top bar. Counts, the result, the map and the recent list all refer to the scope only.
 
@@ -559,7 +561,7 @@ The picture is always laid out at its fitted size and placed with `transform: tr
 - **Clamping the pan.** On each axis: if the scaled picture is no bigger than the stage, centre it; otherwise keep its position within `[stage − size, 0]`, so no gap shows at an edge.
 - **Zooming at a point.** `zoom = clamp(zoom × factor, MIN_ZOOM, MAX_ZOOM)`. If that is 1, use the fit view. Otherwise keep the picture point under the pointer fixed, then clamp the pan.
 - **Wheel.** Up zooms in by 1.2, down zooms out by 1/1.2. The wheel never scrolls the page.
-- **Drag.** With zoom above 1, a drag with the primary button pans. The cursor is `grab`, and `grabbing` while pressed.
+- **Drag.** With zoom above 1, a drag with the primary button pans. The cursor is `grab`, and `grabbing` while pressed. At fit in the preview, a press and drag drags the photo out of the window, as from a tile (see 06).
 - **Double-click.** When zoomed in, back to fit. At fit: in the preview it opens the viewer; in the viewer it zooms to actual size (one picture pixel to one screen pixel) at the pointer.
 - **Right-click.** Opens the photo menu.
 - **Resizing the stage** (a splitter, the window) goes back to fit.
@@ -650,7 +652,7 @@ The viewer covers the whole window: a `role=dialog` with `aria-modal`, labelled 
 +--------------------------------------------------------------------------------------------+
 ```
 
-**Top bar.** The file name in bold (tooltip: the full path); a filled star in `--accent` when starred; an eye-off icon when hidden; "{index + 1} / {count}"; the key hint "← → move · S or F star · H hide · I details · Esc close" (small, muted, hidden below 900px of width); a close button, tooltip "Close (Esc)". The bar fades out after 3 seconds without pointer movement and returns on any pointer movement or key.
+**Top bar.** The file name in bold (tooltip: the full path); a filled star in `--accent` when starred; an eye-off icon when hidden; the edit badge when the photo has an edit (**Edited** or **Edited · not saved**, as in the caption); "{index + 1} / {count}"; the key hint "← → move · S or F star · H hide · I details · Esc close" (small, muted, hidden below 900px of width); a close button, tooltip "Close (Esc)". The bar fades out after 3 seconds without pointer movement and returns on any pointer movement or key.
 
 **Picture.** The same rules as the preview: medium picture from the cache, else this photo's small thumbnail until the medium one is decoded. **The picture shown is the edited one whenever the photo has an edit**, the same as the tile and the preview. **Zoom, pan, the mini map and the full-size swap work exactly as in the preview.** While the next picture is being decoded the previous photo is not left on screen under the new name: the new photo's small thumbnail is shown at once.
 
@@ -734,7 +736,7 @@ The panel shows the current photo. With no current photo the column is an empty 
 
 **Icons on buttons.** The panel's buttons carry an icon from Owlbum's set (see [Visual design](09-visual-design.md#icons)) as well as their words (owner's feedback, #183): Copy and Copy path `copy`, Regenerate `rescan`, Pick on map `map-pin`, Show on map `map`, Use the camera's date `undo`, Clear the date `x`. Links inside a sentence (Settings, Retry) and the chips stay as they are.
 
-**Loading.** The panel calls `photo_detail(id)` when the current photo changes, and again when an `album_changed` event arrives for a revision newer than the detail's `revision` (also when such an event arrived while the detail was being read). While the first answer is on its way, the body is empty; the previous photo's facts are never shown for the new one. An answer for a photo that is no longer current is thrown away.
+**Loading.** The panel calls `photo_detail(id)` when the current photo changes, and again when an `album_changed` event arrives for a revision newer than the detail's `revision` (also when such an event arrived while the detail was being read). While the first answer is on its way, the body is empty; the previous photo's facts are never shown for the new one. If the read fails, the body says "The details of this photo could not be read." An answer for a photo that is no longer current is thrown away.
 
 **Notes under the score card.** In a view-only album: "This album is view-only, so nothing here can be changed." When the last save of this photo failed: the error's message, in a note with an `--error` border, until a later save succeeds.
 
@@ -900,7 +902,7 @@ The timeline shows the same photos as the grid, in date order, with a heading ov
 
 | Topic | Rule |
 |---|---|
-| Order | Always the effective date, oldest first; photos with the same date are in the name order of [Organising](05-organising.md#sorting). Photos with no date come last. The Sort control (see 05) is not shown in the timeline (owner's feedback, #166). The chosen sort is kept and applies again in Grid and Map. |
+| Order | Always the effective date, oldest first; photos with the same date are in the name order of [Organising](05-organising.md#sorting). Photos with no date come last. The Sort control (see 05) is shown only in the grid (owner's feedback, #166 and #182), not in the timeline or the map. The chosen sort is kept and applies again in Grid, and to the order the map's photos are stepped through. |
 | Filters, search, stacks, hidden photos | Exactly as in the grid. A stack sits where its face sorts. |
 | Which date | The effective date: the typed date, else the camera's. |
 | Grouping | By the written calendar date: the first 10 characters (`YYYY-MM-DD`) for Day, the first 7 (`YYYY-MM`) for Month. The date is never converted through a time zone, so a photo taken at 23:30 abroad stays on its day. |
@@ -968,6 +970,7 @@ The map is the one view that needs every matching photo at once, so it does not 
 
 - **Located** means the effective place (typed, else GPS) has a latitude from −90 to 90 and a longitude from −180 to 180.
 - **Note.** "1 photo has no location" or "N photos have no location", shown only when `unlocated` is above 0.
+- **Empty.** When no photo of the result has a place, the stage shows the empty state "No photos with a location".
 - **When the result changes**, markers whose id, place and `thumb_key` are unchanged are kept; the rest are added or removed. The map does not move.
 
 ### The map
@@ -975,7 +978,7 @@ The map is the one view that needs every matching photo at once, so it does not 
 - Zoom from 1 to 19, a zoom control, wrapping across the date line, and no keyboard handling of its own (the arrow keys belong to stepping through photos).
 - The first view is latitude 20, longitude 0, zoom 2.
 - **First fit.** When the first points of an album arrive, the map fits all of them with 24px of padding, zooming in no further than 15, without animation. It fits again only for another album.
-- **Markers.** One per located photo: a 36px round picture of the small thumbnail with a 2px white border and a shadow. The thumbnail is loaded only when the marker is drawn. The tooltip is the file name. A click makes the photo the current photo and the whole selection; Ctrl-click adds or removes it.
+- **Markers.** One per located photo: a 36px round picture of the small thumbnail with a 2px white border and a shadow. The thumbnail is loaded only when the marker is drawn. The tooltip is the file name. A click makes the photo the current photo and the whole selection; Ctrl-click adds or removes it. A right-click opens the photo menu, as on a tile (see 06).
 - **Current photo.** Its marker has a 3px `--select` border and a white ring, and is drawn above the others. When the current photo changes and its marker is off screen, the map pans to it and keeps the zoom. If it is inside a cluster, the cluster is opened far enough to show it.
 - **Clusters.** Markers within 48px join into a cluster: a 40px `--accent` circle with the count in bold and a 3px white border. A click zooms in to split it.
 - **The library's default marker image is never requested.**
@@ -1015,7 +1018,8 @@ One table for the whole review screen and the viewer. "Owner" names the part tha
 | Esc | Closes the photo menu if open. Otherwise, with more than one photo selected, reduces the selection to the current photo. | Back to fit if zoomed in; otherwise close. | No | 04 |
 | Ctrl+A | Select every photo shown in the result. Not while typing. | — | No | 04 |
 | Ctrl+D | Select nothing. Not while typing. | — | No | 04 |
-| I | — | Show or hide the details panel. | No | 04 |
+| T | Hide or show the thumbnails (see [Hiding and moving the panels](#hiding-and-moving-the-panels)). Not while typing. | — | No | 04 |
+| I | Hide or show the details panel. Not while typing. | Show or hide the viewer's details panel. | No | 04 |
 | `+` (or `=`), `-` | — | Zoom in or out by 1.2 about the centre. | Yes | 04 |
 | `0` | — | Back to fit. | No | 04 |
 | S, F | Star or unstar. Both keys do the same thing everywhere. Not while typing. | The same, for the shown photo, with the star mark. | No | 05 |
@@ -1047,9 +1051,9 @@ Rules for the 04 rows:
 
 **Toasts** follow the Toast component of [Visual design](09-visual-design.md#toasts): fixed at the bottom centre, 16px above the edge, stacked with an 8px gap (`--space-3`), newest at the bottom, at most 3 on screen (the oldest goes first).
 
-- Each is `--panel-3` with a 3px left edge and a matching icon: `--select` for information, `--error` for an error, `--ok` for success. Maximum width 380px, `--text-md`.
-- Its **x** dismisses it. An information or success toast goes by itself after 4,000 ms; an error stays until dismissed. The timer pauses while the pointer is over the toast or focus is on it.
-- An identical toast already on screen is not repeated; its timer restarts.
+- Each is `--panel-3` with a 3px left edge and a matching icon: `--select` for information, `--error` for an error, `--ok` for success. Maximum width 620px (`--size-dialog-wide`), `--text-md`.
+- Its **x** dismisses it. An information or success toast goes by itself after 4,000 ms, or 8,000 ms when it carries an action such as Undo; an error stays until dismissed. The timer pauses while the pointer is over the toast or focus is on it.
+- An identical toast already on screen is not repeated; its timer restarts. (Not built yet: an identical toast is shown again; see #69 final pass.)
 - Toasts are in a `role=status` region; errors use `role=alert`.
 
 Toasts this part raises:
@@ -1060,7 +1064,7 @@ Toasts this part raises:
 | "The last folder isn't available: <folder name>" | Reopening at start found the folder gone. |
 | "Drop a folder to open it." | A drop held nothing that could be opened. |
 | "Couldn't change the map setting." | Saving `maps_online` failed. |
-| "This album is view-only." | A changing key was pressed in a view-only album. |
+| "This album is view-only." | A changing key was pressed in a view-only album. (Not built yet: see #69 final pass.) |
 | The error's `message` | Any failed save of a typed field, and any other failed command with no wording of its own. |
 
 **Dialogs** are centred on `--backdrop`, 440px wide (the small size) unless stated wide (620px), with the title at the top and buttons right-aligned at the bottom, the primary one last. Esc and a click on the backdrop do what Cancel does. Focus starts on the safest button (Cancel, or Close) and returns to where it was when the dialog closes. Keys inside a dialog do not reach the page behind. This part defines three: the stale-lock question and the damaged-database question (see [Opening a folder](#opening-a-folder)), and **Files not shown** (see [Notices](#notices)). For the stale-lock question the safest button is Open view-only. The close question that is asked only when `edit_target` is `file` belongs to 06 and is a native box; Tidy belongs to 05.
@@ -1082,7 +1086,7 @@ Per recent folder, in `recent.session` in `app.sqlite` (see [Data](02-data.md)):
 | `selected` | The current photo, stored as its path relative to the album root. The page sends and receives an id; Rust converts. |
 | `scroll` | The index of the first photo in the top row of the grid or timeline. An index, not pixels, so it still fits after the window or thumbnail size changes. |
 
-Kept for all albums, as settings: `thumb_size`, `panel.grid_width`, `panel.details_width`, `sections`, `stack_similar`, `timeline_unit`, `maps_online`, `reopen_last`, and `view` (the view used for an album that has no session yet).
+Kept for all albums, as settings: `thumb_size`, `panel.grid_width`, `panel.details_width`, `panel.grid_shown`, `panel.details_shown`, `panel.grid_place`, `panel.strip_height`, `sections`, `stack_similar`, `timeline_unit`, `maps_online`, `reopen_last`, and `view` (the view used for an album that has no session yet).
 
 The session carries the `Query`'s own fields under their own names, so a field the `Query` gains later is kept with no change to the session. The `Query` fields that are not kept are `open_stacks` and `want_facets` (forgotten on close) and `timeline_unit` and `stack` (settings for every album).
 
@@ -1099,6 +1103,7 @@ The page's first call is `app_startup`, defined in [Desktop, release and tests](
 | Situation | What happens |
 |---|---|
 | A folder was given on the command line | It opens. Its own saved session, if it has one, is restored. |
+| A picture was given on the command line (`launch_photo`) | Its folder opens with that picture current, as in [Opening a picture](#opening-a-picture). |
 | `reopen_last` is false | The start screen. |
 | The recent list is empty | The start screen. |
 | The newest recent folder exists | It opens and its session is restored. |
@@ -1130,7 +1135,7 @@ Names follow the prefixes in [Architecture](01-architecture.md). Every command a
 
 | Command | Arguments | Answer | Notes |
 |---|---|---|---|
-| `app_startup` | none | Defined in [Desktop, release and tests](08-desktop-and-release.md#commands-and-events-this-part-adds). This part uses `version`, `settings`, `recent`, `launch_folder` and `reopen`. | Called once when the page loads. |
+| `app_startup` | none | Defined in [Desktop, release and tests](08-desktop-and-release.md#commands-and-events-this-part-adds). This part uses `version`, `settings`, `recent`, `launch_folder`, `launch_photo` and `reopen`. | Called once when the page loads. |
 | `app_settings_get` | none | `Settings` (every key in the table in [Data](02-data.md#appsqlite), with defaults filled in) | |
 | `app_settings_set` | `patch` (keys to values) | `Settings` | Unknown keys are kept. A value outside its range answers `setting_out_of_range` and changes nothing; the page clamps the thumbnail size and the column widths itself before it sends them. |
 | `app_recent_list` | none | `Recent[]`, newest first | `Recent = { root, name, opened_at, exists }`. |
@@ -1139,7 +1144,7 @@ Names follow the prefixes in [Architecture](01-architecture.md). Every command a
 | `app_session_save` | `Session` with `selected_id` | nothing | Stores against the open album's folder. A no-op when no album is open. |
 | `app_place_search` | `text` | `CountryMatch[]` = `{ name, lat, lon }[]`, at most 6 | Countries whose name contains the text, in the order [Country search](#how-typed-fields-save) gives; empty text answers `[]`. |
 | `app_country_at` | `lat`, `lon` | `string` or null | The country that holds the point, from the same outlines; null at sea. The [place picker](#the-place-picker) uses it as the place name. |
-| `album_open` | `path`, `options?: { take_lock?, view_only?, restore_backup? }` | `{ status: AlbumStatus, session: Session \| null }` | Closes any open album first. It returns as soon as the database is open and starts the scan in the background. Errors: the shared `not_a_folder` and `folder_unreadable`, and this part's `album_lock_stale` and `album_damaged`, each with a `details` object. |
+| `album_open` | `path`, `options?: { take_lock?, view_only?, restore_backup? }` | `{ status: AlbumStatus, session: Session \| null, notices?: string[] }` | `notices`, left out when empty, are sentences shown as error toasts, such as a save into a file that could not be finished (see 06). Closes any open album first. It returns as soon as the database is open and starts the scan in the background. Errors: the shared `not_a_folder` and `folder_unreadable`, and this part's `album_lock_stale` and `album_damaged`, each with a `details` object. |
 | `album_close` | none | nothing | Releases the lock. Drops every token. Like `album_open`, it runs off the main thread, and the two never overlap: an open waits for a close, so the old album's lock is gone before the new one is taken. |
 | `album_status` | none | `AlbumStatus \| null` | Null when no album is open. |
 | `query_ids` | `token`, `offset`, `limit` | `number[]` | The ids at those places of the token's list, in order: one id per tile, so the face of a closed stack and not its folded members, and the meaning segment when the range reaches it. For Shift ranges, heading clicks and Ctrl+A. No limit on `limit`. Error: `query_expired`. |
@@ -1160,7 +1165,7 @@ The names and payloads are those in [Architecture](01-architecture.md#events).
 |---|---|---|
 | `scan_progress` | `{ phase, found, done, failed, finished, cancelled }` | Draws the reading bar. On `finished` (which is also sent for a cancelled scan, with `cancelled: true`), hides it and reads `album_status` for the notices. |
 | `album_changed` | `{ revision, reason, rekeyed? }` | Re-runs the query when the reason calls for it (see [Running a query](#running-a-query)), refreshes the details panel, drops cached pictures of the photos in `rekeyed`, and, when `reason` is `status`, reads `album_status` for the banners. |
-| `open_folder` | `{ path }` | Opens the folder, as described in [Opening a folder](#opening-a-folder). |
+| `open_folder` | `{ path, photo }` | Opens the folder, as described in [Opening a folder](#opening-a-folder). `photo` is a picture a second launch named, or null; see [Opening a picture](#opening-a-picture). |
 | `folder_drop` | `{ phase: 'over' \| 'left' \| 'refused' }` | Shows the drop outline while `over`, hides it on `left`, and shows the toast "Drop a folder to open it." on `refused`. |
 
 ### Shapes
@@ -1269,5 +1274,5 @@ type Session = Partial<Query> & {   // the Query's own fields (05), less open_st
 2. **Dropping a folder on Linux.** Folder drops are expected to work through the shell on both platforms, but this has not been tried on WebKitGTK, nor together with drag-out of photos. If it cannot be made reliable, it ships on Windows only, as the Linux rule in the README allows.
 3. **Memory for decoded pictures.** Forty medium pictures is about 400 MB on a large screen. Whether `CAPACITY` should shrink on machines with little memory, or the cache should hold pictures in a cheaper form, needs measuring on real hardware.
 4. **Video in the preview on Linux.** [Architecture](01-architecture.md) notes a known problem with video over a custom scheme on Linux. If the fallback in 03 cannot play inside the page, the preview and viewer show the poster and the cannot-play message there, with **Show in folder**.
-5. **Opening a file rather than a folder.** A file path opens its folder. Whether it should also select that file (useful for "Open with Owlbum") is undecided; it would need `album_open` to answer with the file's id.
+5. **Opening a file rather than a folder.** Answered (owner's feedback, #184): a picture named by a launch (command line, second launch, Explorer) opens its folder with that picture current and selected; a dropped file only opens its folder. The page finds the picture's id with `photo_find` after `album_open`, so `album_open` itself is unchanged. See [Opening a picture](#opening-a-picture).
 6. **Timeline order.** Oldest first is specified. Some people expect newest first in a timeline. A setting is possible but not planned.

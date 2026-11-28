@@ -18,7 +18,7 @@ Behaviour of the grid, viewer, filters, edits and tagging belongs to parts 4 to 
 
 **The version has one source.** It is `version` under `[workspace.package]` in the root `Cargo.toml`. Both crates inherit it. `src-tauri/tauri.conf.json` has no `version` key, so Tauri reads it from the crate. `ui/package.json` is private and its version is never shown; the page learns the version from `app_startup`.
 
-**Every test build has a new version.** `scripts/build-test.sh` raises the last number of the workspace version, turns the `Unreleased` section of `CHANGELOG.md` into that version's section, commits both to `main` (no tag: a version tag starts a real release, which only a person makes) and builds the exe. `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): each change that a user would notice is added under `Unreleased` in the same pull request as the change.
+**Every test build has a new version.** `scripts/build-test.sh` raises the last number of the workspace version, turns the `Unreleased` section of `CHANGELOG.md` into that version's section, commits both to `main` and pushes it (no tag: a version tag starts a real release, which only a person makes), and builds the exe. `CHANGELOG.md` follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/): each change that a user would notice is added under `Unreleased` in the same pull request as the change.
 
 **A development build** is one compiled with debug assertions. It uses the identifier `com.funvill.owlbum.dev`, the name `Owlbum Dev` and the `OwlbumData Dev` / `owlbum-dev` app data folder (see [Data](02-data.md)), so it runs beside an installed copy and never touches its data. The identifier and name come from `src-tauri/tauri.dev.conf.json`, merged by the page's `app:dev` script (`npm --prefix ui run app:dev`); the shell picks the `Dev` app data folder when the build has debug assertions **or** carries an identifier ending in `.dev` (`owlbum_lib::is_dev_build`), so a release-profile build started with the dev config still never touches an installed copy's data.
 
@@ -92,7 +92,7 @@ One window, titled `Owlbum <version>` (for example `Owlbum 0.1.3`), so a tester 
 | Default size | 1440 × 900 |
 | Minimum size | 960 × 600 |
 | Background while loading | The theme's window colour (see [Visual design](09-visual-design.md)), so there is no white flash. |
-| Webview data folder | `<app data>/webview`. Nothing Owlbum relies on is kept there. |
+| Webview data folder | `<app data>/webview`. Nothing Owlbum relies on is kept there. (Not built yet: see #69 final pass. The webview keeps Tauri's default folder, named after the identifier.) |
 | Developer tools | Development builds only. |
 | Files dropped on the window | Never navigate the webview. Rust receives the drop; a dropped folder is opened through `open_folder` (see [Browsing](04-browsing.md)). |
 
@@ -117,7 +117,7 @@ The `window` setting holds `{ "x", "y", "width", "height", "maximised" }`. The f
 
 On Linux under Wayland a program cannot read or set its window position. There only the size and the maximised state are restored.
 
-As built (#58): the window is made hidden (`visible: false`), placed, and shown when `app_startup` arrives or 3 seconds after start, whichever is first. The saved bounds are the window's outer position and inner size, which is what Tauri sets back. "The display it lands on" is the display that holds the saved top-left corner, else the primary display. The loading background colour is not set yet.
+As built (#58): the window is made hidden (`visible: false`), placed, and shown when `app_startup` arrives or 3 seconds after start, whichever is first. The saved bounds are the window's outer position and inner size, which is what Tauri sets back. "The display it lands on" is the display that holds the saved top-left corner, else the primary display. The loading background colour is not set yet. (Not built yet: see #69 final pass.)
 
 ### Closing and quitting
 
@@ -129,9 +129,9 @@ Closing the window quits Owlbum. Quit, the window's close button, and an update 
 4. The open album is closed: its writer thread finishes, the `lock` file is removed, and tagging and scanning stop.
 5. The process exits with code 0.
 
-As built (#47, `src-tauri/src/closing.rs`): the window's close request is held and the steps run on a thread of their own; a second close while they run is ignored. Before step 2 the shell asks a running save to stop after its current photo and waits for it (at most 2 minutes). The native question uses the dialog plugin's two custom buttons, which cannot choose the default button, so "Close anyway" is the default on Windows (Esc is "Go back"), the same limit as the trash confirm (#148). "Go back" lets saves run again and allows the next close. While it waits the page shows "Finishing saving…" in the place of Save all (#160). File > Quit and `app_quit` start these steps with `closing::requested` (#58); the update install must do the same when the updater exists (#62). Step 3 writes the bounds the window last had (`src-tauri/src/window.rs`).
+As built (#47, `src-tauri/src/closing.rs`): the window's close request is held and the steps run on a thread of their own; a second close while they run is ignored. Before step 2 the shell asks a running save to stop after its current photo and waits for it (at most 2 minutes). The native question uses the dialog plugin's two custom buttons, which cannot choose the default button, so "Close anyway" is the default on Windows (Esc is "Go back"), the same limit as the trash confirm (#148). "Go back" lets saves run again and allows the next close. While it waits the page shows "Finishing saving…" in the place of Save all (#160). File > Quit and `app_quit` start these steps with `closing::requested` (#58); the update install starts them with reason `update` (`closing::requested_for`, #62). Step 3 writes the bounds the window last had (`src-tauri/src/window.rs`). Before the album closes in step 4, tagging stops: the model download is cancelled, the run in hand is told to end and the models are unloaded.
 
-If step 4 takes longer than 5 seconds the process exits anyway and the log says so. Every typed change was already committed when its command returned, so nothing typed is lost.
+If step 4 takes longer than 5 seconds the process exits anyway and the log says so. (Not built yet: see #69 final pass. The shell waits for the album to close however long it takes.) Every typed change was already committed when its command returned, so nothing typed is lost.
 
 ## Menus
 
@@ -226,7 +226,7 @@ The gear button in the top bar opens Settings. It is a modal dialog. Esc, the cl
 
 In a view-only album every control here still works, because none of them writes to the album.
 
-As built (#59, `ui/src/features/app/SettingsDialog.tsx`): Check now is left out until the updater exists (#62). The Photo tagging section is a slot, `ui/src/features/app/TaggingSettings.tsx`, which #57 fills. A refused change shows "Couldn't keep the setting: <reason>" as a toast. Changing `edit_target` reads `edit_status` again, because what waits to be saved depends on it. The cache limit's message reads "Use a whole number from 1 to 1000. The limit was put back."
+As built (#59, `ui/src/features/app/SettingsDialog.tsx`): Check now came with the updater (#62). The Photo tagging section is `ui/src/features/app/TaggingSettings.tsx` (#57). A refused change shows "Couldn't keep the setting: <reason>" as a toast. Changing `edit_target` reads `edit_status` again, because what waits to be saved depends on it. The cache limit's message reads "Use a whole number from 1 to 1000. The limit was put back."
 
 ## Opening pictures
 
@@ -242,7 +242,7 @@ Owner's feedback on 0.1.3 (#184): people can use Owlbum as their main picture vi
 - **On or off** is read from the registry each time: on when the ProgID's open command names this copy of the program. Registered for another copy (an older install place, a development build) reads as off, and turning it on points it at this copy.
 - **Double-clicking a picture** then starts Owlbum with the file (see [Command line](#command-line)), or hands it to the running copy.
 - **Tests** never touch the real registry: the writes go through the `Registry` trait (`owlbum_core::app::assoc`), which shell tests fill with a map, as file actions use the `Desktop` trait.
-- **The installer** does not offer it yet; it must only ever be an opt-in (a question, never a silent takeover), and the uninstaller should remove the entries. Follow-up issue.
+- **The installer** does not offer it yet; it must only ever be an opt-in (a question, never a silent takeover), and the uninstaller should remove the entries. (Not built yet: issue 193.)
 - **Linux** (paused): a `.desktop` file's `MimeType` line will do it later. `app_associate_status` answers `available: false` there, and Settings leaves the checkbox out.
 
 ## Keyboard shortcuts
@@ -531,8 +531,9 @@ Updater artefacts are only built by the release workflow. `bundle.createUpdaterA
 - **Help's update item acts in Rust**: it checks, starts the download, or offers the install again, by state. It does not send `app_menu update`.
 - **The first-start notice** is a banner under the top bar, on the start screen and above an open album alike, until answered (`app_update_notice_answer`). After OK the quiet check's clock starts in the same session.
 - **The quiet clock** starts at `app_startup` (or at the notice's answer) only when the updater is set up: 10 seconds, then every 6 hours, testing the rule each time.
-- **Install.** Restart now runs the closing steps with reason `update` (`closing::requested_for`); "Go back" puts the state back to `ready`. After step 4 the plugin installs; on Windows the NSIS installer takes over and the process ends. If the install fails, the log says why and the current version starts again; the "Install failed" message is not shown after that restart.
-- **Not built yet:** the taskbar progress bar; the Linux install checks (AppImage folder writable, `.deb` through `pkexec` with its question). Linux was not run.
+- **Install.** Restart now runs the closing steps with reason `update` (`closing::requested_for`); "Go back" puts the state back to `ready`. After step 4 the plugin installs; on Windows the NSIS installer takes over and the process ends. If the install fails, the log says why and the current version starts again; the "Install failed" message is not shown after that restart. (Not built yet: issue 178.)
+- **Not built yet (issue 178):** the taskbar progress bar; the Linux install checks (AppImage folder writable, `.deb` through `pkexec` with its question). Linux was not run.
+- **Waits for the owner:** the signing key, the two secrets and the public key in `tauri.conf.json` (see The signing key). Until then no build can update itself, and the real update path has not been tried end to end.
 
 ## About box
 
@@ -571,7 +572,7 @@ The paragraphs, in order:
 4. "Its thumbnails, settings and models are kept in:" and the app data folder.
 5. The credits: "Built from the open-source project funvill/Owlbum on GitHub, under the MIT License." then the copyright line from `LICENSE`, then "It includes software from other projects, each under its own licence: see "Third-party notices"."
 
-As built (#61, `ui/src/features/app/AboutDialog.tsx`): the logo is the owner's gold owl (see [Visual design](09-visual-design.md)), a 128 px copy at `ui/src/assets/owlbum-icon.png` drawn at 64 px and bundled with the page. Under the credits is the repository's address, `https://github.com/funvill/Owlbum`, drawn as a link; choosing it calls `app_open_repository`, and Rust opens the address in the user's browser. The buttons are **Give feedback** (as F2) and **OK** (focused; Esc also closes). The other buttons came with #62 and the rest of #61: **Check for updates** shows while the updater's state is not `unavailable`; **Licence** opens `LICENSE.txt` from the resources (`bundle.resources` copies the repository's `LICENSE` there) or, when a development build has none, a copy of the licence compiled into the program, written to the app data folder; **Third-party notices** shows only when `THIRD-PARTY-NOTICES.txt` is among the resources (`app_about` answers `has_notices`). Generating that file (`scripts/notices.mjs`) is not built yet, so the button is hidden for now. The package kind is not shown on Linux yet.
+As built (#61, `ui/src/features/app/AboutDialog.tsx`): the logo is the owner's gold owl (see [Visual design](09-visual-design.md)), a 128 px copy at `ui/src/assets/owlbum-icon.png` drawn at 64 px and bundled with the page. Under the credits is the repository's address, `https://github.com/funvill/Owlbum`, drawn as a link; choosing it calls `app_open_repository`, and Rust opens the address in the user's browser. The buttons are **Give feedback** (as F2) and **OK** (focused; Esc also closes). The other buttons came with #62 and the rest of #61: **Check for updates** shows while the updater's state is not `unavailable`; **Licence** opens `LICENSE.txt` from the resources (`bundle.resources` copies the repository's `LICENSE` there) or, when a development build has none, a copy of the licence compiled into the program, written to the app data folder; **Third-party notices** shows only when `THIRD-PARTY-NOTICES.txt` is among the resources (`app_about` answers `has_notices`): in an installed copy, whose installer carries the file made by `scripts/notices.mjs` (#66), but not in a development build or the test exe of `scripts/build-test.sh`, which have no such resource. The credits' last sentence ("It includes software from other projects…") is not shown. (Not built yet: see #69 final pass.) The package kind is not shown on Linux yet.
 
 Buttons:
 
@@ -786,8 +787,8 @@ A shell test reads the capability file and fails if it grants anything outside t
 | `bundle.targets` | `nsis` on Windows; `deb` and `appimage` on Linux. The installer builds pass `--bundles nsis` on Windows. |
 | `bundle.category` | `Photography` |
 | `bundle.shortDescription` | The product description |
-| `bundle.licenseFile` | `LICENSE` |
-| `bundle.resources` | Not in this file: see below. |
+| `bundle.licenseFile` | `../LICENSE` (the repository's `LICENSE`) |
+| `bundle.resources` | `LICENSE` only, as `LICENSE.txt`. The generated and downloaded files are added by `tauri.bundle.conf.json`: see below. |
 | `bundle.icon` | The files in `src-tauri/icons/` |
 | `bundle.createUpdaterArtifacts` | `false` (set true by `tauri.release.conf.json`) |
 | `plugins.updater.endpoints` | The feed address above |
@@ -801,7 +802,7 @@ A shell test reads the capability file and fails if it grants anything outside t
 | `THIRD-PARTY-NOTICES.txt` | `resources/THIRD-PARTY-NOTICES.txt`, made by `scripts/notices.mjs` (below). |
 | `onnxruntime.dll` | `resources/onnxruntime.dll`, put there by `scripts/fetch-ort.mjs` (below). |
 
-They are listed in `src-tauri/tauri.bundle.conf.json`, not in `tauri.conf.json`, because Tauri's build script copies the resources on every `cargo build` and fails when one is missing: a plain build, `tauri dev` and the tests must not need the generated or downloaded files. The installer builds merge it with `--config src-tauri/tauri.bundle.conf.json`. The repository's `resources/` folder holds only generated and downloaded files and is ignored by git. The About box (#61) finds the two text files with `BaseDirectory::Resource`; a build made without the bundle configuration has neither: the About box then hides Third-party notices, and Licence opens a copy of the compiled-in licence.
+`tauri.conf.json` lists only `LICENSE.txt`, which is always there. The notices and the library are listed in `src-tauri/tauri.bundle.conf.json`, because Tauri's build script copies the resources on every `cargo build` and fails when one is missing: a plain build, `tauri dev` and the tests must not need the generated or downloaded files. The installer builds merge it with `--config src-tauri/tauri.bundle.conf.json`. The repository's `resources/` folder holds only generated and downloaded files and is ignored by git. The About box (#61) finds the two text files with `BaseDirectory::Resource`; a build made without the bundle configuration has no notices, so the About box hides Third-party notices. When `LICENSE.txt` is missing too (a development build), Licence opens a copy of the compiled-in licence.
 
 **Building an installer on this computer.** `./scripts/build-installer.sh` fetches ONNX Runtime, builds the notices with `--strict` (it needs `cargo install cargo-about --locked --features cli`) and runs `tauri build --bundles nsis --config src-tauri/tauri.bundle.conf.json`. The installer lands in `<target>/release/bundle/nsis/`. It has no updater files, so it needs no signing key. `scripts/build-test.sh` builds only the exe; it copies `onnxruntime.dll` beside `owlbum-test.exe`, where tagging finds it.
 
@@ -875,11 +876,7 @@ Two text files ship in the program's resources and are opened from the About box
 
 A missing licence text fails the release build: `--strict`, used by the release workflow and `scripts/build-installer.sh`, turns every problem the script reports into a failure. Without it the file is still written and the problems are listed.
 
-**The LGPL notice.** `rawler`, the camera RAW decoder, is under LGPL-2.1 and is linked into the program. The notices carry this entry, with the exact version taken from `Cargo.lock`:
-
-> Owlbum includes rawler <version>, a camera RAW decoder, under the GNU Lesser General Public License version 2.1. Its source is at https://github.com/dnglab/dnglab. The full text of the licence follows.
->
-> You may replace rawler with your own changed version. Owlbum's complete source, with its build instructions, is at https://github.com/funvill/Owlbum under the MIT License: change the `rawler` dependency in `Cargo.toml` to point at your version and build Owlbum again.
+**The LGPL notice.** `rawler`, the camera RAW decoder, is under LGPL-2.1 and is linked into the program. As built, `about.toml` accepts LGPL-2.1 for it alone, so the crate and the full LGPL-2.1 text appear among the Rust crates, and the hand-written `notices/rawler.txt` adds an entry that says: Owlbum reads RAW files with rawler 0.8, from the dnglab project (https://github.com/dnglab/dnglab); it is linked unmodified; its source is available at the version named in Owlbum's `Cargo.lock`; and Owlbum's own source is public (https://github.com/funvill/Owlbum), so the program can be rebuilt with a changed rawler as the licence allows.
 
 ### Bundle size
 
@@ -915,7 +912,7 @@ Steps on each runner:
 1. Check out the tagged commit.
 2. **Version check.** Read the workspace version with `cargo metadata`. If `v<version>` is not the tag, fail with: "The tag <tag> does not match the version <version> in Cargo.toml."
 3. **Secrets check.** If `TAURI_SIGNING_PRIVATE_KEY` is empty, fail with: "The updater signing key is not set. Create it and add the secrets TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD (see docs/08-desktop-and-release.md, The signing key)." The same check fails if `plugins.updater.pubkey` is empty. This runs before any build, so the failure takes seconds and says what to do.
-4. Install Rust (stable) and Node (the version in `ui/.nvmrc`). On Ubuntu, install the Tauri build packages (`libwebkit2gtk-4.1-dev`, `build-essential`, `libssl-dev`, `librsvg2-dev`, `patchelf` and the others Tauri lists).
+4. Install Rust (the version pinned in `rust-toolchain.toml`) and Node (the version in `ui/.nvmrc`). On Ubuntu, install the Tauri build packages (`libwebkit2gtk-4.1-dev`, `build-essential`, `libssl-dev`, `librsvg2-dev`, `patchelf` and the others Tauri lists).
 5. `npm ci` in `ui/`.
 6. Fetch ONNX Runtime (`node scripts/fetch-ort.mjs`), then build the notices (`node scripts/notices.mjs --strict`; `cargo-about` comes from `taiki-e/install-action`).
 7. Run `tauri-apps/tauri-action` with `tagName` set to the tag, `releaseDraft: true`, `includeUpdaterJson: true`, `tauriScript: npm --prefix ui run tauri --` and `args: --bundles nsis --config src-tauri/tauri.bundle.conf.json --config src-tauri/tauri.release.conf.json`. It builds the page and the program, signs the updater artefacts, creates the draft release if it does not exist, and uploads the installers and `latest.json`.
@@ -935,7 +932,7 @@ The workflow never publishes. If a release for the tag is already published, it 
 | Steps | Check out; `node scripts/check-site.mjs`; a "Pages is on" check; `actions/configure-pages`; `actions/upload-pages-artifact` with `path: site`; `actions/deploy-pages`. |
 | Build | None. The folder is published as it is. |
 
-The "Pages is on" step asks the GitHub API for the repository's Pages settings and stops the run, before anything is uploaded, with "GitHub Pages is not switched on for this repository..." when Pages is off, or a similar message when its source is not GitHub Actions. A person switches Pages on with "GitHub Actions" as the source at final review, then runs the workflow once by hand; adding the push trigger afterwards is optional.
+The "Pages is on" step asks the GitHub API for the repository's Pages settings and stops the run, before anything is uploaded, with "GitHub Pages is not switched on for this repository..." when Pages is off, or a similar message when its source is not GitHub Actions. The owner switched Pages on with "GitHub Actions" as the source and ran the workflow (see [The marketing site](#the-marketing-site)). Adding the push trigger is optional and waits for the owner; until then a change to `site/` is published only when someone runs the workflow.
 
 ## The marketing site
 
@@ -966,7 +963,7 @@ The buttons link to the release page rather than to a file, because file names c
 | 2. Core integration tests | Whole features against a real album in a temp folder: scan, thumbnails, database, queries, edits, tagging with fake models. | `crates/owlbum-core/tests/` | `cargo test`, fixtures from `owlbum-fixtures` |
 | 3. Shell tests | Commands through Tauri's mock runtime (`tauri::test`) where the wiring matters: argument checks, error mapping, menu text per update state, the capability file, the CSP string, the key table against the menu. | `src-tauri/src/**`, `src-tauri/tests/` | `cargo test` |
 | 4. Page tests | Components and flows against a faked `ui/src/api/` module. No Tauri, no Rust. | `ui/src/**/*.test.tsx` | Vitest, Testing Library, jsdom |
-| 5. Smoke test (optional) | The built program starts, opens the `trip` fixture, shows tiles, stars a photo, and quits cleanly. | `e2e/` | `tauri-driver` and WebdriverIO |
+| 5. Smoke test (optional) | The built program starts, opens the `trip` fixture, shows tiles, stars a photo, and quits cleanly. (Not built yet: see #69 final pass. There is no `e2e/` folder.) | `e2e/` | `tauri-driver` and WebdriverIO |
 
 Rules for the layers:
 
@@ -995,7 +992,7 @@ Tests run locally, on Windows and on Linux under WSL, and on GitHub Actions on W
 | Rewrite the TypeScript bindings | `./scripts/bindings.sh` |
 | Smoke test | `npm --prefix e2e test` after `npm --prefix ui run tauri build -- --debug` |
 
-`scripts/check.sh` first checks that text files are UTF-8 and that the website is sound (`node scripts/check-site.mjs`, see [The marketing site](#the-marketing-site)). It then installs the page's packages when `ui/node_modules` is missing or older than `ui/package-lock.json`, then runs the eight rows after it, in that order, and stops at the first failure. There is one script for both systems; on Windows it runs under Git Bash. It points `CARGO_TARGET_DIR` at the main checkout's `target/` when the variable is not set, so every git worktree of a clone shares one build directory.
+`scripts/check.sh` first checks that text files are UTF-8 and that the website is sound (`node scripts/check-site.mjs`, see [The marketing site](#the-marketing-site)). It then installs the page's packages when `ui/node_modules` is missing or older than `ui/package-lock.json`, waits for any other gate run that shares the build directory (a lock folder in it), then runs the eight rows after it, in that order, and stops at the first failure. `./scripts/check.sh --quick` runs only format, lint, bindings, page types and page lint: the merge check for one issue, with the full run on `main` every few merges. There is one script for both systems; on Windows it runs under Git Bash. It points `CARGO_TARGET_DIR` at the main checkout's `target/` when the variable is not set, so every git worktree of a clone shares one build directory.
 
 **Temporary folders.** `scripts/check.sh` runs the Rust tests with `TMP`, `TEMP` and `TMPDIR` pointing at a new folder of its own, fails when the tests leave anything in it, and then removes that folder only. Tests put albums and app data in a `tempfile::TempDir`, which deletes its folder when dropped and ignores a failure; on Windows the delete fails while a database inside is still open, so the `TempDir` must be dropped after everything that opened files in it. A fixture struct keeps its `TempDir` as its last field, since fields drop in order. Shell tests get their app from `common::window`, whose `TestApp` closes the album and takes the app data and thumbnail cache out of the app when dropped, because Tauri never frees what an app manages.
 
@@ -1031,9 +1028,9 @@ An issue is done when all of these are true:
 
 ### Versions and releasing
 
-Versions follow `major.minor.patch` and start at `0.1.0`. The version is not bumped on every commit. It is bumped when a release is made.
+Versions follow `major.minor.patch` and start at `0.1.0`. The version is not bumped on every commit. It is bumped by each test build (`scripts/build-test.sh`, the last number) and when a release is made.
 
-1. Run `scripts/check.sh` on Windows and in WSL. Run the smoke test on both.
+1. Run `scripts/check.sh` on Windows and in WSL. Run the smoke test on both (when it exists; see The layers). While Linux work is paused, Windows only.
 2. Set the new version in the root `Cargo.toml` and run `cargo check` so `Cargo.lock` follows.
 3. Rename `CHANGELOG.md`'s `Unreleased` section to the version and its date; What's new shows it.
 4. Commit as `chore: version <version>`.
@@ -1042,7 +1039,7 @@ Versions follow `major.minor.patch` and start at `0.1.0`. The version is not bum
 7. **A person** installs each installer from the draft on a clean Windows and Linux machine, checks that Owlbum starts and opens a folder, and records the installer sizes.
 8. **A person** edits the release notes and presses Publish. From then on installed copies are offered the update.
 
-Done once, at final review, by a person: create the signing key, add the two secrets, put the public key in `tauri.conf.json`, switch on GitHub Pages, and test one real update from version `0.1.0` to a test version using `OWLBUM_UPDATE_FEED`.
+Done once, at final review, by a person (these wait for the owner): create the signing key, add the two secrets, put the public key in `tauri.conf.json`, and test one real update from version `0.1.0` to a test version using `OWLBUM_UPDATE_FEED`. Then push the first version tag and publish the draft. GitHub Pages is already on (2026-11-28).
 
 ## Environment variables
 
@@ -1054,6 +1051,7 @@ Done once, at final review, by a person: create the signing key, add the two sec
 | `OWLBUM_NO_WHATS_NEW` | Shell | Any non-empty value stops What's new from showing at start. |
 | `OWLBUM_LOG` | Shell | `debug` adds debug lines to the log. |
 | `OWLBUM_TEST_MODELS_DIR` | Tests | Points the real-model test at downloaded models. Unset skips it. |
+| `OWLBUM_ORT_DYLIB` | Shell, tests | The full path of ONNX Runtime, used when the program's resources hold none (a development build). See [ONNX Runtime](#onnx-runtime). |
 | `TAURI_SIGNING_PRIVATE_KEY`, `TAURI_SIGNING_PRIVATE_KEY_PASSWORD` | `release.yml` | The updater signing key. Secrets; never set on a developer's computer for ordinary work. |
 | `LOCALAPPDATA` | Shell (Windows) | The default app data location. |
 | `XDG_DATA_HOME` | Shell (Linux) | The default app data location. |
@@ -1081,7 +1079,7 @@ The events `open_folder` and `update_state` are listed in [Architecture](01-arch
 | `app_whats_new_seen` | | Records `whats_new.last_seen`. |
 | `app_cache_usage` | → `{ bytes, limit_bytes }` | For Settings. |
 | `app_cache_clear` | → `{ bytes_freed }` | Empties the thumbnail cache. |
-| `app_open_data_folder`, `app_open_log_folder` | | Open a folder in the file manager. |
+| `app_open_log_folder` | | Opens the log's folder in the file manager. (File > Open the data folder acts in Rust; there is no `app_open_data_folder` command.) |
 | `app_open_licence`, `app_open_notices` | | Open a resource text file. |
 | `app_open_feedback`, `app_open_repository`, `app_open_release_page`, `app_open_release_notes` | the last takes no address, only the offered version held by Rust | Open one fixed address in the user's browser. `app_open_feedback` and `app_open_repository` are built (#61); the opener is the shell's `Browser` state, which shell tests replace. |
 | `app_copy_details` | | Copies the fatal error's technical block. |
@@ -1090,21 +1088,21 @@ The events `open_folder` and `update_state` are listed in [Architecture](01-arch
 
 | Event | Payload | When |
 |---|---|---|
-| `app_menu` | `{ item }` | A menu item that acts in the page was chosen. `item` is one of `close_folder`, `rescan`, `shortcuts`, `update`, `whats_new`, `about`. |
+| `app_menu` | `{ item }` | A menu item that acts in the page was chosen. `item` is one of `close_folder`, `rescan`, `shortcuts`, `whats_new`, `about`, `toggle_grid`, `toggle_details`, `grid_place`. The type also allows `update`, but Help's update item acts in Rust and never sends it. |
 | `app_closing` | `{}` | The window is about to close, for a close, a quit or an update install. The page answers with `app_close_ready`. |
 | `app_fatal` | `{ title, message }` | A fatal error of phase `run` that the page should show. `message` holds the message and the advice. |
 | `update_message` | `{ kind, … }` | What a check, download or install came to; the page shows the matching message of [Messages](#messages). |
 
 `update_state.state` is one of `unavailable`, `idle`, `checking`, `available`, `downloading`, `ready`, `installing`.
 
-Error codes this part adds to `AppError`: `update_unavailable`, `update_check_failed`, `update_download_failed`, `update_install_blocked`, `update_install_failed`, `setting_out_of_range`, `cannot_open_folder`.
+Error codes this part adds to `AppError`: `setting_out_of_range`. As built (#62), the update commands return nothing and every outcome is an `update_message` event, so there are no update error codes; a file or folder that cannot be opened answers `internal`.
 
 ## Open questions
 
 1. **Native accelerators while the webview has focus.** F1, F2, F11, `Ctrl+O`, `Ctrl+W` and `Ctrl+Q` are specified as native menu accelerators. Whether they fire reliably on both platforms while focus is inside the webview needs a prototype. If they do not, the page handles them from the same key table and the menu only displays them.
-2. **The native fatal message box.** Tauri's dialog plugin offers at most three custom buttons. Whether that form behaves the same on Windows and Linux, and what closing it by the title bar returns, needs checking. So does whether Tauri reports the webview process ending; if not, phase `page` rests on the 30-second `app_startup` rule alone.
+2. **The native fatal message box.** Tauri's dialog plugin offers at most three custom buttons. Whether that form behaves the same on Windows and Linux, and what closing it by the title bar returns, needs checking. So does whether Tauri reports the webview process ending; if not, phase `page` rests on the 30-second `app_startup` rule alone. Answered in part (#61): the native box is `rfd`'s three-button message box, not the dialog plugin's, and closing it by its title bar ends the program; whether Tauri reports the webview process ending is not checked, so phase `page` rests on the 30-second rule. Linux is paused.
 3. **OpenStreetMap's tile rules.** The old program sent a bare `User-Agent` and almost no other headers. Owlbum cannot rewrite the webview's request headers, so it adds its name to the user agent and sends no referrer. Whether that satisfies the tile usage policy for a desktop program, and whether the webview's own tile cache is enough to meet its caching rule, should be confirmed before release.
-4. **Installer sizes.** Unknown until the first build. Proposed targets: Windows installer under 40 MB, `.deb` under 40 MB, AppImage under 120 MB with the media framework bundled. ONNX Runtime is the largest single part; whether it is linked in or shipped as a library, and how much it adds, comes from the tagging prototype.
+4. **Installer sizes.** Unknown until the first build. Proposed targets: Windows installer under 40 MB, `.deb` under 40 MB, AppImage under 120 MB with the media framework bundled. ONNX Runtime is the largest single part. Answered in part (#52, #171): it is shipped as a library, `onnxruntime.dll` of 17,253,728 bytes, beside the program; the installer's size is recorded at the first release.
 5. **AppImage video.** Bundling the media framework makes the AppImage much larger. If video through the system's own codecs proves reliable without it, the setting can be turned off. This depends on the video work in [Media and scanning](03-media-and-scanning.md).
 6. **Entries in `latest.json`.** The updater must pick the `.deb` on a `.deb` install and the AppImage on an AppImage. The exact entry names that the pinned `tauri-action` and updater versions agree on need confirming with a real draft release, and the final job's check should name them.
 7. **Symbol keys on other keyboards.** `[`, `]` and `\` need AltGr on several European layouts, and AltGr reaches the page as Ctrl+Alt on Windows. The matching rule allows for it, but whether these keys are comfortable enough, or need alternatives, should be decided with [Editing and file actions](06-editing-and-file-actions.md).

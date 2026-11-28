@@ -14,7 +14,7 @@ Changes from the old look are few and are listed where they happen. Larger ideas
 
 Tokens are CSS custom properties on `:root`. The theme is chosen by a `data-theme` attribute on the root element, which is `dark` in version 1. The root also sets `color-scheme` to match, so native scrollbars and form parts follow.
 
-The light column is a proposal. It is not built in version 1. It is here to prove the token set is enough to describe a second theme, and its values were checked for contrast in the same way as the dark ones.
+The light column is a proposal. It is not built in version 1 (issue 75). It is here to prove the token set is enough to describe a second theme, and its values were checked for contrast in the same way as the dark ones.
 
 ### Surfaces and lines
 
@@ -215,8 +215,8 @@ A gap that is not on the scale is a defect. One-pixel borders and the sizes in t
 
 | Thing | Size |
 |---|---|
-| Top bar | 48 px high. |
-| Filter bar | 48 px high; 64 px when the query-word hint row shows. |
+| Top bar | 64 px high: it holds the search box and its query-word hint row (owner's feedback, #182). |
+| Filter bar | 48 px high. |
 | Button | 30 px high, 12 px padding left and right. |
 | Small button | 26 px high, 8 px padding left and right, `--text-sm`. |
 | Icon button | 28 × 28 px, icon 16 px. |
@@ -238,8 +238,8 @@ The sizes above are tokens as well, so that no component writes a pixel size of 
 
 | Token | Value | Use |
 |---|---|---|
-| `--size-bar` | 48 px | Top bar and filter bar. |
-| `--size-bar-tall` | 64 px | Filter bar with the query-word hint row. |
+| `--size-bar` | 48 px | Filter bar; the smallest height of a banner. |
+| `--size-bar-tall` | 64 px | Top bar, with the search box's hint row. |
 | `--size-control` | 30 px | Buttons, text inputs, selects, menu rows. |
 | `--size-control-sm` | 26 px | Small buttons, segments. |
 | `--size-icon-button` | 28 px | Icon buttons. |
@@ -412,7 +412,7 @@ Bars never wrap onto a second line and never scroll sideways. As the window narr
 |---|---|---|
 | 1280 px and wider | Everything shows with its label, and the search box with the query-word hint row. | Everything shows. |
 | 1100 to 1279 px | The search box shrinks towards 200 px. | Everything shows. |
-| 960 to 1099 px | Buttons other than the primary one become icon buttons with tooltips. The thumbnail-size slider moves into a popover behind the `grid` icon. The search box's hint row is hidden (a bad query word's error still shows there); the same examples are in the box's tooltip and in Help. | The photo count shows the number alone. |
+| 960 to 1099 px | Buttons other than the primary one become icon buttons with tooltips. The thumbnail-size slider moves into a popover behind the `grid` icon (not built yet: see #69 final pass; the slider stays in the bar). The search box's hint row is hidden (a bad query word's error still shows there); the same examples are in the box's tooltip and in Help. | The photo count shows the number alone. |
 
 The search box is in the top bar and Sort beside the view switch (owner's feedback, #182). The view switch's bar, at the top of the thumbnail column, is the one bar that may wrap: in a narrow column Sort (or Day / Month) moves onto a second line.
 
@@ -543,7 +543,7 @@ A progress bar is a 6 px `--panel-3` track with an `--accent` fill and `--radius
 
 ### Empty states
 
-An empty state is a centred block: the owl mark at 64 px in `--muted`, a heading in `--text-xl`, one sentence in `--muted`, and at most one button.
+An empty state is a centred block: a heading in `--text-xl`, one sentence in `--muted`, and at most one button. The owl mark at 64 px in `--muted` above the heading waits for the owner's decision (suggestion 6); as built, no empty state shows a picture.
 
 The words are owned by [Browsing](04-browsing.md#body-states) and are repeated here only to show the pattern.
 
@@ -621,7 +621,7 @@ The icon is a gold owl, face on, with a frowning brow, ear tufts, large ringed e
 | Form | Use |
 |---|---|
 | The icon | The program icon, installers, the About dialog, the website's favicon and the README. |
-| Icon plus the word "Owlbum" | The website header and the About dialog. The word is set in Inter at weight 700, letter-spacing −0.02em, to the right of the icon. |
+| Icon plus the word "Owlbum" | The website header. The word is set in Inter at weight 700, letter-spacing −0.02em, to the right of the icon. The About dialog puts "Owlbum <version>" beside the icon instead, in `--text-xl` with heading letter-spacing. |
 
 The one-colour `OwlMark` in `ui/src/controls/` was drawn from an earlier draft and is not used by any screen; empty states show no picture (suggestion 6).
 
@@ -636,7 +636,7 @@ These are optional. Each has a default that applies if the owner says nothing. T
 3. **One slimmer combined bar.** Reason: the top bar and filter bar together take about 110 px of height from the photos. One 48 px bar could hold the album name, search, Filters and Sort, with the rest moved into a menu. Default: not in v1 (two bars).
 4. **A status bar for progress.** Reason: scan and tagging strips that appear under the top bar push the grid down when they come and go. A 24 px status bar along the bottom would hold both, plus the photo count and selection count, and nothing would jump. Default: not in v1 (strips under the top bar).
 5. **A tile hover effect.** Reason: a slight lift (scale 1.02 and a brighter outline) makes the grid feel more alive and shows what a click will pick. It would be off under reduced motion. Default: not in v1 (no hover change beyond showing the star).
-6. **The owl in empty states.** Reason: an empty window is the first thing a new user sees, and the mark makes it look intended. Uses the one-colour mark at 64 px; no new artwork. Depends on the logo being approved; without it, empty states show no picture. Default: in v1.
+6. **The owl in empty states.** Reason: an empty window is the first thing a new user sees, and the mark makes it look intended. Uses the one-colour mark at 64 px; no new artwork. Depends on the logo being approved; without it, empty states show no picture. Default: in v1. As built: the approved logo is a picture, and the one-colour `OwlMark` was drawn from an earlier draft, so no screen shows it and empty states have no picture. Showing the approved icon there, or a mark drawn from it, waits for the owner.
 7. **Stronger borders on inputs and checkboxes.** Reason: the old border colour measures 1.3:1 against the panel, well under the 3:1 that level AA asks of a control's edge. `--line-strong` is the one clearly visible change to the old look. Default: in v1.
 8. **Darker score toast colours.** Reason: white text on the old green measured 3.8:1. The new green and red pass 4.5:1 even over a white photo, and look a little deeper. Default: in v1.
 9. **Query-word examples without a monospace font.** Reason: bundling Inter only means no second typeface; the examples become small boxed words in Inter. Default: in v1.

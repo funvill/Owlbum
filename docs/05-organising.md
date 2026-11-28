@@ -544,7 +544,7 @@ Rules for values:
 
 - Fixed values (`yes`, `portrait`, `location` and so on) match without regard to case.
 - `from:2024-02-30` is not a real day and is a bad value.
-- `folder:` is matched without regard to case against each folder's full path in the open scope, and the filter gets the folder's exact path. `folder:top` means the top folder, and is valid only when the top folder holds a photo. A name that matches no folder is a bad value: the filter is never set to a folder that would show nothing.
+- `folder:` is matched without regard to case against each folder's full path in the open scope, and, in a scoped open, also against its path from the scope's folder; the filter gets the folder's exact path. `folder:top` means the top folder, and is valid only when the top folder holds a photo. A name that matches no folder is a bad value: the filter is never set to a folder that would show nothing.
 - `tag:` and `object:` values are trimmed. The chip shows them as typed; they are compared in lower case against the lower-case labels in `photo_labels`.
 - `person:` is matched without regard to case against the album's people, and the filter gets the stored spelling.
 - Setting `from` later than an existing `to` (or `to` earlier than `from`) is a bad value with the hint `from must not be after to`.
@@ -1048,7 +1048,7 @@ When the page re-runs its query after `album_changed` is decided by the reason, 
 
 1. **Should a folder filter include the folders beneath it?** It matches exactly, as the old program did. In a deep album (`2024/06/Day 1`), choosing `2024` shows only photos directly in `2024`. Including subfolders may be what people expect, but it changes the meaning of "Top folder".
 2. **Newest first.** Date taken sorts oldest first only. A direction toggle is easy for the engine; whether the bar has room for it is a design question.
-3. **A filter for kind.** Owlbum shows videos and RAW files, which the old program did not. There is no "Videos only" filter or `is:video` word yet.
+3. **A filter for kind.** Settled (#165): the `kinds` and `formats` filters, the Type group of the panel, and the `kind:`, `no:` and `format:` words. There is no `is:video` word; `kind:video` does that.
 4. **Languages without spaces.** The `unicode61` tokeniser treats a run of Chinese, Japanese or Thai text as one word, so only the start of the run can be found. Version 1 is English only; this is recorded so it is not a surprise.
 5. **The 2,000 limit on burst comparisons.** It bounds the worst case. It needs checking against a real album of one long event to confirm it never splits a burst a person would notice.
 6. **Loading the index over a network share.** The 2-second target is for a local SSD. Reading 100,000 wide rows over a slow share may take much longer; if it does, the slim columns may need their own table or a covering index in [Data](02-data.md).

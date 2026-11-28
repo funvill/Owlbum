@@ -144,7 +144,7 @@ All four use the 8-bit quantised ONNX files (`q8` in the id). The seconds-per-ph
 
 The two CLIP models share one `preprocessor_config.json` and one `tokenizer_config.json`.
 
-The Rust runtime may need ONNX files with other names, or a different export of the same weights (see Open questions). If so, the file lists above change, and with them the byte counts, hashes and perhaps the ids. Nothing else in this document changes.
+The prototype (#52) ran the base models' files as they are in the Rust runtime, so the lists stand; the large models are the same exports of larger weights. A different export would change the file lists, and with them the byte counts, hashes and the ids.
 
 ## Model files on disk
 
@@ -925,7 +925,7 @@ File lists and hashes are not sent to the page.
 
 ## Network rules
 
-- **Models never use the network.** A model is a folder of local files given to the runtime. Neither `ort` nor any wrapper around it is allowed to fetch anything at run time; if `usls` cannot be configured that way, it is not used.
+- **Models never use the network.** A model is a folder of local files given to the runtime. Neither `ort` nor any wrapper around it is allowed to fetch anything at run time. Owlbum drives `ort` directly and does not use `usls` (#52).
 - **Downloads happen only on request.** Files are fetched only after the user confirms Download in Settings. Nothing is fetched in the background. There is no check for newer models: the catalogue is fixed in each version of Owlbum.
 - **Who makes the request.** Rust, never the webview. The page has no way to name a URL: `tagging_download` takes a model id, and the URL is built from the catalogue.
 - **Where it may go.** Only to URLs that pass the allowed-hosts rule, on every redirect hop, over HTTPS.
@@ -942,7 +942,7 @@ File lists and hashes are not sent to the page.
 | ONNX Runtime (Microsoft) | MIT | Shipped inside Owlbum. |
 | `ort` | MIT or Apache-2.0 | |
 | `tokenizers` | Apache-2.0 | |
-| `usls`, if used or ported | To be confirmed before any code is copied | A port carries its copyright notice. |
+| `usls` | Not used (#52) | Nothing was copied from it. |
 
 Everything shipped is listed in the third-party notices. The model licences are shown in Settings beside each model, and in the notices with a line saying the models are downloaded on request. A model may be added to the catalogue only if its licence is MIT, Apache-2.0 or BSD-3-Clause.
 
@@ -965,7 +965,7 @@ Owlbum ships Microsoft's `onnxruntime.dll` (Windows) or `libonnxruntime.so` (Lin
 Other notes:
 
 - No model file is ever put in an installer.
-- The release build prints the ONNX Runtime version in the log at the first model load, and About lists it.
+- The release build prints the ONNX Runtime version in the log at the first model load, and About lists it. (Not built yet: see #69 final pass. The log names the library's path when it loads; About does not mention ONNX Runtime.)
 - The prebuilt ONNX Runtime uses the processor's vector instructions when they exist and works without them. No per-processor build is made.
 
 ## Commands and events
@@ -1086,6 +1086,8 @@ Run with Vitest against the faked API module.
 
 ## Prototype plan
 
+Done (#52). Its findings are written into The runtime and Packaging above; the plan is kept as a record.
+
 The first spike answers one question: can Rust run the pinned files and get the old program's results? It is done before any other tagging work, on Windows and on Linux.
 
 1. Download the nine `florence2-base-q8` files and the six `clip-base-q8` files by hand, and check their hashes against this document.
@@ -1114,14 +1116,14 @@ Fallback decisions:
 
 ## Open questions
 
-1. **Do the pinned ONNX files load in the Rust runtime as they are?** The exports were made for another runtime. The merged decoder takes a switch input and a set of cached values that `usls` may not expect. The answer decides the catalogue's file lists.
-2. **Greedy or beam search for tagging?** The base model's `generation_config.json` may ask for several beams. This document specifies greedy, which is what the old program is believed to have done in effect. The prototype compares captions to settle it.
-3. **The exact prompt strings and vector lengths.** They are stated here as expected values (the two prompts; 512 and 768). The prototype reads them from the pinned files.
-4. **Can `ort` end a run in progress on both platforms?** If not, the time limit for a single run rests on the "stuck" rule alone.
+1. **Do the pinned ONNX files load in the Rust runtime as they are?** Answered (#52): yes. Owlbum drives the merged decoder itself (see What runs the models), and the catalogue's file lists are unchanged.
+2. **Greedy or beam search for tagging?** Answered (#52): greedy, with the model's `no_repeat_ngram_size` of 3; its `num_beams` is not used (see What runs the models).
+3. **The exact prompt strings and vector lengths.** Answered (#52) for the base models: the prompts are read from the pinned files and CLIP base gives 512 numbers. CLIP large's 768 is checked when it loads (a vector of another length fails the load).
+4. **Can `ort` end a run in progress on both platforms?** Answered on Windows (#52): a run ended within about half a second of its deadline through the run options. Linux is paused.
 5. **Memory.** The figures in this document are estimates. If Florence-2 large needs much more than 1.5 GB, Settings should say so beside the model.
-6. **The licence of `usls`.** It must allow copying a module into an MIT program.
+6. **The licence of `usls`.** No longer a question: `usls` is not used and nothing was copied from it (#52).
 7. **Database size.** 100,000 vectors add 205 MB (CLIP base) or 307 MB (CLIP large) to the album database. The daily backup leaves the `vectors` table out (see [Data](02-data.md#backups-and-damage)), so a restored backup has its keywords model run again. Whether Tidy should offer to delete rows of models no longer chosen is undecided.
-8. **Proxies and certificates.** Whether model downloads should follow the system's proxy settings and certificate store by default, as the updater does, has not been checked on Linux.
+8. **Proxies and certificates.** Whether model downloads should follow the system's proxy settings and certificate store by default, as the updater does, has not been checked on Linux. As built, downloads use `ureq` with `rustls` and its bundled web PKI roots, so they use neither Windows' certificate store nor its system proxy setting; a network that needs either cannot download models.
 
 ## Appendix: the keyword vocabulary
 

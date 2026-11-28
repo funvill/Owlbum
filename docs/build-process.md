@@ -11,6 +11,10 @@ In this file `<checkout>` is the main checkout (for example `C:/dev/Owlbum`); wo
 - **Test builds.** After a batch or two lands, the orchestrator builds a test exe with `./scripts/build-test.sh` from an up-to-date `main` in the main checkout (set `OWLBUM_GIT` to the push wrapper). It raises the last number of the version (0.1.4 to 0.1.5), turns the `Unreleased` section of `CHANGELOG.md` into that version's section, commits and pushes that (no tag), and copies the exe, with ONNX Runtime beside it, to `~/Documents/OwlbumDemo` (`OWLBUM_TEST_DIR`). The window title shows the version, so the owner can say which build a finding is about, and `CHANGELOG.md` says what each build changed. That is why every agent writes each change a user would notice into `Unreleased`.
 - **Owner feedback.** The owner tries each test build and comments on #69. Each finding becomes an issue (or a fix at once when it is tiny) and goes ahead of the remaining batches.
 
+## Owner feedback
+
+Feedback on a test build is handled as [AGENTS.md](../AGENTS.md) says: one `Feedback on <version>` issue first, research on every item, linked issues for the large items, closed when all of it is addressed.
+
 ## Resuming
 
 1. Clone the repository, install Rust (the version in `rust-toolchain.toml` installs itself), Node 24 (`ui/.nvmrc`), Git for Windows, and the WebView2 runtime. Run `./scripts/check.sh` once from Git Bash; it must end with "All checks passed".

@@ -51,6 +51,8 @@ export const albumText = {
   // Top bar
   showWholeAlbum: "Show whole album",
   viewOnlyBadge: "View only",
+  /** A changing key was pressed in a view-only album. */
+  viewOnlyToast: "This album is view-only.",
   closeFolder: "Close folder",
   tidy: "Tidy…",
   tidyTooltip: "Remove what Owlbum remembers about photos that are no longer in the album",

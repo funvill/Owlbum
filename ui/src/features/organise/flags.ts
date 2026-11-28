@@ -11,6 +11,7 @@ import { api, toAppError } from "../../api";
 import type { InfoPatch } from "../../api/bindings/InfoPatch";
 import type { Row } from "../../api/bindings/Row";
 import { showToast } from "../../controls/toastQueue";
+import { albumText } from "../../text/album";
 import { useAlbumStore, viewOnlyReason } from "../album";
 import { gridBlocks, useGridStore } from "../grid";
 
@@ -52,17 +53,33 @@ const sent = new Map<string, { value: boolean; token: string | null }>();
 /** Presses go one after another, so each reads the value the one before sent. */
 let chain: Promise<unknown> = Promise.resolve();
 
+/** When the view-only toast last showed (ms), so it shows at most every 4 s. */
+let viewOnlyToastAt: number | null = null;
+const viewOnlyToastGap = 4_000;
+
 /** For tests: nothing sent, no mark. */
 export function resetFlags(): void {
   sent.clear();
+  viewOnlyToastAt = null;
   chain = Promise.resolve();
   useMarkStore.setState({ mark: null });
 }
 
-/** Whether the open album takes changes. With no status read yet, it does. */
+/**
+ * Whether the open album takes changes. With no status read yet, it does.
+ * Called by the changing keys and actions: when the album is view-only it
+ * shows "This album is view-only." at most once every 4 seconds
+ * (docs/04-browsing.md, "What view-only disables").
+ */
 export function canChange(): boolean {
   const status = useAlbumStore.getState().status;
-  return status === null || viewOnlyReason(status) === null;
+  if (status === null || viewOnlyReason(status) === null) return true;
+  const now = Date.now();
+  if (viewOnlyToastAt === null || now - viewOnlyToastAt >= viewOnlyToastGap) {
+    viewOnlyToastAt = now;
+    showToast({ kind: "info", message: albumText.viewOnlyToast });
+  }
+  return false;
 }
 
 /**

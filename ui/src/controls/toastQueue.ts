@@ -33,10 +33,20 @@ export const useToasts = create<ToastState>(() => ({ toasts: [] }));
 
 let nextId = 1;
 
-/** Shows a toast and returns its id. */
+/** Whether two toasts say the same thing (same kind, words and action). */
+function same(a: ToastInput, b: ToastInput): boolean {
+  return a.kind === b.kind && a.message === b.message && a.action?.label === b.action?.label;
+}
+
+/**
+ * Shows a toast and returns its id. An identical toast already on screen is
+ * not repeated: it is replaced by this one, which restarts its timer.
+ */
 export function showToast(input: ToastInput): number {
   const id = nextId++;
-  useToasts.setState((s) => ({ toasts: [...s.toasts, { ...input, id }].slice(-maxToasts) }));
+  useToasts.setState((s) => ({
+    toasts: [...s.toasts.filter((t) => !same(t, input)), { ...input, id }].slice(-maxToasts),
+  }));
   return id;
 }
 

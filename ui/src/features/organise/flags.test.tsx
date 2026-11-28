@@ -232,6 +232,25 @@ describe("Star and hide keys", () => {
     expect(screen.queryByRole("button", { name: /^(Star|Unstar)$/ })).toBeNull();
   });
 
+  it("says the album is view-only when a changing key is pressed, at most every 4 s", async () => {
+    useAlbumStore.setState({ status: fakeStatus("D:/Photos", { view_only: "read_only" }) });
+    await show(2);
+    const now = vi.spyOn(Date, "now").mockReturnValue(1_000_000);
+    const viewOnly = () => useToasts.getState().toasts.filter((t) => t.message === "This album is view-only.");
+    press("f");
+    press("h");
+    await waitFor(() => expect(viewOnly()).toHaveLength(1));
+    useToasts.setState({ toasts: [] });
+    now.mockReturnValue(1_003_999);
+    press("f");
+    await new Promise((r) => setTimeout(r, 20));
+    expect(viewOnly()).toHaveLength(0);
+    now.mockReturnValue(1_004_000);
+    press("f");
+    await waitFor(() => expect(viewOnly()).toHaveLength(1));
+    now.mockRestore();
+  });
+
   it("removes the mark after 0.8 s", async () => {
     await show(2);
     press("f");
@@ -415,6 +434,7 @@ describe("Undo key", () => {
     press("z", { ctrlKey: true });
     await new Promise((r) => setTimeout(r, 20));
     expect(undos()).toEqual([]);
-    expect(toasts()).toEqual([]);
+    // Only the view-only toast: nothing was undone.
+    expect(toasts().map((t) => t.message)).toEqual(["This album is view-only."]);
   });
 });

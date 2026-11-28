@@ -965,7 +965,7 @@ Owlbum ships Microsoft's `onnxruntime.dll` (Windows) or `libonnxruntime.so` (Lin
 Other notes:
 
 - No model file is ever put in an installer.
-- The release build prints the ONNX Runtime version in the log at the first model load, and About lists it. (Not built yet: see #69 final pass. The log names the library's path when it loads; About does not mention ONNX Runtime.)
+- The release build prints the ONNX Runtime version in the log at the first model load, and About lists it. (Not built yet: issue 202. The log names the library's path when it loads; About does not mention ONNX Runtime.)
 - The prebuilt ONNX Runtime uses the processor's vector instructions when they exist and works without them. No per-processor build is made.
 
 ## Commands and events

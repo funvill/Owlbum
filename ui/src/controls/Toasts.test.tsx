@@ -32,6 +32,23 @@ describe("Toasts", () => {
     expect(layerRoot().contains(status)).toBe(true);
   });
 
+  it("does not repeat an identical toast, and restarts its timer", () => {
+    render(<Toasts />);
+    act(() => showToast({ kind: "info", message: "Same." }));
+    act(() => vi.advanceTimersByTime(toastMs.plain - 1000));
+    act(() => showToast({ kind: "info", message: "Same." }));
+    expect(screen.getAllByText("Same.")).toHaveLength(1);
+    act(() => vi.advanceTimersByTime(toastMs.plain - 1));
+    expect(screen.getByText("Same.")).toBeInTheDocument();
+    act(() => vi.advanceTimersByTime(1));
+    expect(screen.queryByText("Same.")).toBeNull();
+    act(() => {
+      showToast({ kind: "info", message: "Same." });
+      showToast({ kind: "error", message: "Same." });
+    });
+    expect(screen.getAllByText("Same.")).toHaveLength(2);
+  });
+
   it("removes info and success after 4 seconds, and keeps errors until dismissed", () => {
     render(<Toasts />);
     act(() => {

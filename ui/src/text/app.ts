@@ -64,6 +64,7 @@ export const aboutText = {
     "Everything stays on this computer. Owlbum uses the network only for OpenStreetMap map tiles, and only after you choose Load maps on the Map tab; to download photo-tagging models from Hugging Face when you ask for one in Settings; and to check GitHub for a new version once a day, unless you turn that off in Help.",
   dataFolder: "Its thumbnails, settings and models are kept in:",
   credits: "Built from the open-source project funvill/Owlbum on GitHub, under the MIT License.",
+  includes: "It includes software from other projects, each under its own licence: see Third-party notices.",
   repository: "Owlbum on GitHub",
   feedback: "Give feedback",
   checkForUpdates: "Check for updates",

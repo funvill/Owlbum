@@ -9,6 +9,21 @@ the window's title shows the version that is running.
 
 ## [Unreleased]
 
+### Added
+
+- In a view-only album, a key that would change something (star, hide,
+  score, edit, delete, undo) now says "This album is view-only." instead
+  of doing nothing silently. It says so at most once every 4 seconds.
+- The About box says that Owlbum includes software from other projects,
+  each under its own licence, and points to Third-party notices.
+
+### Fixed
+
+- The window is the theme's dark colour while it loads, with no white
+  flash before the page draws.
+- The same message is no longer shown twice at once: a repeat replaces
+  the one on screen and starts its time again.
+
 ## [0.1.5] - 2026-11-27
 
 ### Added

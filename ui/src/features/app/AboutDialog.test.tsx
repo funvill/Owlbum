@@ -22,6 +22,7 @@ describe("the About box", () => {
     expect(screen.getByText(t.versionLine("0.0.0-fake", "windows", "x86_64"))).toBeInTheDocument();
     expect(screen.getByText("C:\\Users\\sam\\AppData\\Local\\OwlbumData")).toBeInTheDocument();
     expect(screen.getByText("Copyright (c) 2026 Owlbum contributors")).toBeInTheDocument();
+    expect(screen.getByText(t.includes)).toBeInTheDocument();
     expect(dialog.querySelector("img")).not.toBeNull();
     // OK is focused, so Enter or Esc closes the box.
     expect(screen.getByRole("button", { name: t.ok })).toHaveFocus();

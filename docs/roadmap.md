@@ -2,9 +2,31 @@
 
 Every version 1 feature is one GitHub issue. Issues are grouped into milestones, and milestones are built in order. Inside a milestone, issues are built in the order listed unless one is blocked.
 
-Each issue links to the section of the design document that specifies it. An issue is done when its behaviour matches the spec, it has Rust tests and page tests written first, and the tests pass on Windows and on Linux. A decision made while building (a prototype that failed, a spec that was wrong) is recorded as a comment on the issue, and the design document is corrected in the same pull request.
+Each issue links to the section of the design document that specifies it. An issue is done when its behaviour matches the spec, it has Rust tests and page tests written first, and the tests pass on Windows and on Linux (while Linux is paused by the owner, on Windows only). A decision made while building (a prototype that failed, a spec that was wrong) is recorded as a comment on the issue, and the design document is corrected in the same pull request.
 
 Titles below are the issue titles. The numbers are a working order, not GitHub issue numbers.
+
+## Status (2026-11-27)
+
+Every issue in milestones 0 to 6 is closed except #69, the final pass. The owner's feedback on test builds 0.1.1 to 0.1.3 was built too (#165 to #169, #182 to #185), and test builds up to 0.1.5 are recorded in `CHANGELOG.md`. Version 1 is built and tested on Windows only: Linux work is paused by the owner.
+
+The final pass (#69) checked every design document against the program on Windows and corrected the documents. What it found not built is marked in the document where the spec says it, with its issue:
+
+| Issue | Gap | Label |
+|---|---|---|
+| #199 | Quit: exit 5 seconds after a stalled album close | v1 |
+| #200 | Edit: block edit mode while the photo is being saved | after-v1 |
+| #201 | Narrow window: the thumbnail-size slider's popover | after-v1 |
+| #202 | Log the ONNX Runtime version and show it in About | after-v1 |
+| #203 | Keep the webview's data in `<app data>/webview` | after-v1 |
+| #204 | Smoke test with `tauri-driver` | after-v1 |
+| #205 | Check the photo score thresholds on the `trip` fixture | after-v1 |
+
+Still open for version 1:
+
+- **#69, the rest of the final pass:** the owner's test pass in a real window (the checklist comment on #69 lists what only the running app can show), and the whole Linux half.
+- **#199** (above).
+- **Linux** (paused by the owner): the Linux gate and CI job, Linux packaging and the release job (#181), and the Linux halves of copy and drag (#147) and video poster frames (#156).
 
 ## Milestone 0: Foundation
 
@@ -132,8 +154,11 @@ These are filed as issues with the label `after-v1` and are not built now.
 
 ## What needs a person
 
-These are not done by the unattended build and wait for the owner's final review:
+These are not done by the unattended build and wait for the owner:
 
-- Creating the updater signing key and adding it to the repository's secrets.
-- Publishing a release.
-- Switching on GitHub Pages.
+- Creating the updater signing key, adding it and its password to the repository's secrets, and putting the public key in `plugins.updater.pubkey` in `src-tauri/tauri.conf.json` (see [Desktop, release and tests](08-desktop-and-release.md)). Until then no build can update itself and the release workflow stops.
+- Pushing the first version tag and publishing the draft release the workflow makes.
+- The test pass in a real window: the checklist comment on #69.
+- Resuming Linux work.
+
+Done by the owner: GitHub Pages was switched on on 2026-11-28 (the site is published by the hand-run `pages.yml`).

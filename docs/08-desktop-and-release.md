@@ -92,7 +92,7 @@ One window, titled `Owlbum <version>` (for example `Owlbum 0.1.3`), so a tester 
 | Default size | 1440 × 900 |
 | Minimum size | 960 × 600 |
 | Background while loading | The theme's window colour (see [Visual design](09-visual-design.md)), so there is no white flash. |
-| Webview data folder | `<app data>/webview`. Nothing Owlbum relies on is kept there. (Not built yet: see #69 final pass. The webview keeps Tauri's default folder, named after the identifier.) |
+| Webview data folder | `<app data>/webview`. Nothing Owlbum relies on is kept there. (Not built yet: issue 203. The webview keeps Tauri's default folder, named after the identifier.) |
 | Developer tools | Development builds only. |
 | Files dropped on the window | Never navigate the webview. Rust receives the drop; a dropped folder is opened through `open_folder` (see [Browsing](04-browsing.md)). |
 
@@ -117,7 +117,7 @@ The `window` setting holds `{ "x", "y", "width", "height", "maximised" }`. The f
 
 On Linux under Wayland a program cannot read or set its window position. There only the size and the maximised state are restored.
 
-As built (#58): the window is made hidden (`visible: false`), placed, and shown when `app_startup` arrives or 3 seconds after start, whichever is first. The saved bounds are the window's outer position and inner size, which is what Tauri sets back. "The display it lands on" is the display that holds the saved top-left corner, else the primary display. The loading background colour is not set yet. (Not built yet: see #69 final pass.)
+As built (#58): the window is made hidden (`visible: false`), placed, and shown when `app_startup` arrives or 3 seconds after start, whichever is first. The saved bounds are the window's outer position and inner size, which is what Tauri sets back. "The display it lands on" is the display that holds the saved top-left corner, else the primary display. The loading background is `--bg` (`#161618`), set as the window's `backgroundColor` in `tauri.conf.json`; a unit test keeps the two the same.
 
 ### Closing and quitting
 
@@ -131,7 +131,7 @@ Closing the window quits Owlbum. Quit, the window's close button, and an update 
 
 As built (#47, `src-tauri/src/closing.rs`): the window's close request is held and the steps run on a thread of their own; a second close while they run is ignored. Before step 2 the shell asks a running save to stop after its current photo and waits for it (at most 2 minutes). The native question uses the dialog plugin's two custom buttons, which cannot choose the default button, so "Close anyway" is the default on Windows (Esc is "Go back"), the same limit as the trash confirm (#148). "Go back" lets saves run again and allows the next close. While it waits the page shows "Finishing saving…" in the place of Save all (#160). File > Quit and `app_quit` start these steps with `closing::requested` (#58); the update install starts them with reason `update` (`closing::requested_for`, #62). Step 3 writes the bounds the window last had (`src-tauri/src/window.rs`). Before the album closes in step 4, tagging stops: the model download is cancelled, the run in hand is told to end and the models are unloaded.
 
-If step 4 takes longer than 5 seconds the process exits anyway and the log says so. (Not built yet: see #69 final pass. The shell waits for the album to close however long it takes.) Every typed change was already committed when its command returned, so nothing typed is lost.
+If step 4 takes longer than 5 seconds the process exits anyway and the log says so. (Not built yet: issue 199. The shell waits for the album to close however long it takes.) Every typed change was already committed when its command returned, so nothing typed is lost.
 
 ## Menus
 
@@ -572,7 +572,7 @@ The paragraphs, in order:
 4. "Its thumbnails, settings and models are kept in:" and the app data folder.
 5. The credits: "Built from the open-source project funvill/Owlbum on GitHub, under the MIT License." then the copyright line from `LICENSE`, then "It includes software from other projects, each under its own licence: see "Third-party notices"."
 
-As built (#61, `ui/src/features/app/AboutDialog.tsx`): the logo is the owner's gold owl (see [Visual design](09-visual-design.md)), a 128 px copy at `ui/src/assets/owlbum-icon.png` drawn at 64 px and bundled with the page. Under the credits is the repository's address, `https://github.com/funvill/Owlbum`, drawn as a link; choosing it calls `app_open_repository`, and Rust opens the address in the user's browser. The buttons are **Give feedback** (as F2) and **OK** (focused; Esc also closes). The other buttons came with #62 and the rest of #61: **Check for updates** shows while the updater's state is not `unavailable`; **Licence** opens `LICENSE.txt` from the resources (`bundle.resources` copies the repository's `LICENSE` there) or, when a development build has none, a copy of the licence compiled into the program, written to the app data folder; **Third-party notices** shows only when `THIRD-PARTY-NOTICES.txt` is among the resources (`app_about` answers `has_notices`): in an installed copy, whose installer carries the file made by `scripts/notices.mjs` (#66), but not in a development build or the test exe of `scripts/build-test.sh`, which have no such resource. The credits' last sentence ("It includes software from other projects…") is not shown. (Not built yet: see #69 final pass.) The package kind is not shown on Linux yet.
+As built (#61, `ui/src/features/app/AboutDialog.tsx`): the logo is the owner's gold owl (see [Visual design](09-visual-design.md)), a 128 px copy at `ui/src/assets/owlbum-icon.png` drawn at 64 px and bundled with the page. Under the credits is the repository's address, `https://github.com/funvill/Owlbum`, drawn as a link; choosing it calls `app_open_repository`, and Rust opens the address in the user's browser. The buttons are **Give feedback** (as F2) and **OK** (focused; Esc also closes). The other buttons came with #62 and the rest of #61: **Check for updates** shows while the updater's state is not `unavailable`; **Licence** opens `LICENSE.txt` from the resources (`bundle.resources` copies the repository's `LICENSE` there) or, when a development build has none, a copy of the licence compiled into the program, written to the app data folder; **Third-party notices** shows only when `THIRD-PARTY-NOTICES.txt` is among the resources (`app_about` answers `has_notices`): in an installed copy, whose installer carries the file made by `scripts/notices.mjs` (#66), but not in a development build or the test exe of `scripts/build-test.sh`, which have no such resource. The credits' last sentence ("It includes software from other projects…") is always shown. The package kind is not shown on Linux yet.
 
 Buttons:
 
@@ -963,7 +963,7 @@ The buttons link to the release page rather than to a file, because file names c
 | 2. Core integration tests | Whole features against a real album in a temp folder: scan, thumbnails, database, queries, edits, tagging with fake models. | `crates/owlbum-core/tests/` | `cargo test`, fixtures from `owlbum-fixtures` |
 | 3. Shell tests | Commands through Tauri's mock runtime (`tauri::test`) where the wiring matters: argument checks, error mapping, menu text per update state, the capability file, the CSP string, the key table against the menu. | `src-tauri/src/**`, `src-tauri/tests/` | `cargo test` |
 | 4. Page tests | Components and flows against a faked `ui/src/api/` module. No Tauri, no Rust. | `ui/src/**/*.test.tsx` | Vitest, Testing Library, jsdom |
-| 5. Smoke test (optional) | The built program starts, opens the `trip` fixture, shows tiles, stars a photo, and quits cleanly. (Not built yet: see #69 final pass. There is no `e2e/` folder.) | `e2e/` | `tauri-driver` and WebdriverIO |
+| 5. Smoke test (optional) | The built program starts, opens the `trip` fixture, shows tiles, stars a photo, and quits cleanly. (Not built yet: issue 204. There is no `e2e/` folder; the owner's checklist on #69 stands in for it.) | `e2e/` | `tauri-driver` and WebdriverIO |
 
 Rules for the layers:
 

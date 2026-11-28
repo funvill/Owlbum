@@ -205,7 +205,7 @@ The bar is 48px high. It has a left group that takes the free space and a right 
 - **Open folder** (album open; on the start screen the button is in the body instead).
 - **Settings** (always): a gear icon button, label and tooltip "Settings". Defined in [Desktop](08-desktop-and-release.md).
 
-The bar never wraps. The window cannot be narrower than 960px, and below 1280px the bar gives up room in the order [Visual design](09-visual-design.md#the-bars) sets: the search box shrinks, then below 1100px the buttons become icon buttons, the slider moves into a popover and the search box's hint row is hidden. (The slider's popover is not built yet: the slider stays in the bar; see #69 final pass.)
+The bar never wraps. The window cannot be narrower than 960px, and below 1280px the bar gives up room in the order [Visual design](09-visual-design.md#the-bars) sets: the search box shrinks, then below 1100px the buttons become icon buttons, the slider moves into a popover and the search box's hint row is hidden. (The slider's popover is not built yet: the slider stays in the bar; issue 201.)
 
 ## Album banners
 
@@ -224,7 +224,7 @@ A banner is a full-width strip under the top bar. Its look (fill, icon, text siz
 | `view_only = "chosen"` and `lock_host` is null (Open view-only with no old lock) | "View only: you opened this album view-only." | **Open for changes** calls `album_open(path)`. |
 | `conflict_file` is set | "Another computer changed this album at the same time. Owlbum is using its own copy and has not merged "<file name>"." | **x** |
 
-**What view-only disables.** Browsing, filtering, the viewer, the map, copy and drag-out work. These controls are disabled, each with a tooltip that says why, which is the first sentence of the banner in force (for example "View only: this folder can't be written to."): the star button on tiles, every typed field in the details panel, people chips' remove buttons, "Use the camera's date", Edit, Tidy, and the tagging controls. The keys S, F, H, E, `[`, `]`, Up, Down, Delete and Ctrl+Z do nothing and show the toast "This album is view-only." at most once every 4 seconds. (The keys do nothing, but the toast is not built yet: see #69 final pass.)
+**What view-only disables.** Browsing, filtering, the viewer, the map, copy and drag-out work. These controls are disabled, each with a tooltip that says why, which is the first sentence of the banner in force (for example "View only: this folder can't be written to."): the star button on tiles, every typed field in the details panel, people chips' remove buttons, "Use the camera's date", Edit, Tidy, and the tagging controls. The keys S, F, H, E, `[`, `]`, Up, Down, Delete and Ctrl+Z do nothing and show the toast "This album is view-only." at most once every 4 seconds.
 
 **Scoped open.** A scoped open has no banner. It is shown by the scope folder in the window title and the **Show whole album** link in the top bar. Counts, the result, the map and the recent list all refer to the scope only.
 
@@ -1053,7 +1053,7 @@ Rules for the 04 rows:
 
 - Each is `--panel-3` with a 3px left edge and a matching icon: `--select` for information, `--error` for an error, `--ok` for success. Maximum width 620px (`--size-dialog-wide`), `--text-md`.
 - Its **x** dismisses it. An information or success toast goes by itself after 4,000 ms, or 8,000 ms when it carries an action such as Undo; an error stays until dismissed. The timer pauses while the pointer is over the toast or focus is on it.
-- An identical toast already on screen is not repeated; its timer restarts. (Not built yet: an identical toast is shown again; see #69 final pass.)
+- An identical toast already on screen (same kind, words and action) is not repeated: the new one replaces it, which restarts its timer.
 - Toasts are in a `role=status` region; errors use `role=alert`.
 
 Toasts this part raises:
@@ -1064,7 +1064,7 @@ Toasts this part raises:
 | "The last folder isn't available: <folder name>" | Reopening at start found the folder gone. |
 | "Drop a folder to open it." | A drop held nothing that could be opened. |
 | "Couldn't change the map setting." | Saving `maps_online` failed. |
-| "This album is view-only." | A changing key was pressed in a view-only album. (Not built yet: see #69 final pass.) |
+| "This album is view-only." | A changing key or action was tried in a view-only album (at most once every 4 seconds). |
 | The error's `message` | Any failed save of a typed field, and any other failed command with no wording of its own. |
 
 **Dialogs** are centred on `--backdrop`, 440px wide (the small size) unless stated wide (620px), with the title at the top and buttons right-aligned at the bottom, the primary one last. Esc and a click on the backdrop do what Cancel does. Focus starts on the safest button (Cancel, or Close) and returns to where it was when the dialog closes. Keys inside a dialog do not reach the page behind. This part defines three: the stale-lock question and the damaged-database question (see [Opening a folder](#opening-a-folder)), and **Files not shown** (see [Notices](#notices)). For the stale-lock question the safest button is Open view-only. The close question that is asked only when `edit_target` is `file` belongs to 06 and is a native box; Tidy belongs to 05.

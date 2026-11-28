@@ -346,7 +346,7 @@ describe("DetailsPanel", () => {
     expect(photo).toContainElement(copy);
     expect(panel().querySelector("header")).toBeNull();
     // The score card comes first.
-    const score = screen.getByText(/Photo score/);
+    const score = await screen.findByText(/Photo score/);
     expect(score.compareDocumentPosition(copy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 

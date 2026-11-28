@@ -423,6 +423,24 @@ fn folder_dialog<R: Runtime>(
 mod tests {
     use super::*;
 
+    /// The window is filled with the theme's window colour (`--bg`) before
+    /// the page draws, so there is no white flash (docs/08, "The window").
+    #[test]
+    fn the_window_background_is_the_theme_colour() {
+        let conf: serde_json::Value =
+            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
+        let main = &conf["app"]["windows"][0];
+        assert_eq!(main["label"], "main");
+        let tokens = include_str!("../../ui/src/styles/tokens.css");
+        let bg = tokens
+            .lines()
+            .find_map(|l| l.trim().strip_prefix("--bg:"))
+            .expect("tokens.css sets --bg")
+            .trim()
+            .trim_end_matches(';');
+        assert_eq!(main["backgroundColor"], bg);
+    }
+
     #[test]
     fn the_window_title_carries_the_version() {
         assert_eq!(window_title("0.1.1", None), "Owlbum 0.1.1");

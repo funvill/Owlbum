@@ -354,8 +354,12 @@ pub mod fake {
         CutShort,
         /// Flips a byte of each body.
         Corrupt,
-        /// Sends half of each body, then nothing more.
+        /// Sends half of each body, then nothing more for a minute: the
+        /// job's own stall limit has to notice.
         Stall,
+        /// Sends half of each body, then the read fails with a time-out,
+        /// as a socket's receive time-out does.
+        TimeOut,
         /// Redirects to a host that is not allowed.
         BadRedirect,
         /// Redirects without a location.
@@ -408,17 +412,20 @@ pub mod fake {
     struct Chunks {
         data: Vec<u8>,
         at: usize,
-        stall: bool,
+        fault: Fault,
     }
 
     impl Read for Chunks {
         fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
             if self.at >= self.data.len() {
-                if self.stall {
-                    std::thread::sleep(Duration::from_millis(300));
-                    return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
+                match self.fault {
+                    // Longer than any stall limit a test sets, so only the
+                    // job's own clock ends it (the thread is left behind).
+                    Fault::Stall => std::thread::sleep(Duration::from_secs(60)),
+                    Fault::TimeOut => {}
+                    _ => return Ok(0),
                 }
-                return Ok(0);
+                return Err(std::io::Error::from(std::io::ErrorKind::TimedOut));
             }
             let n = buf.len().min(7).min(self.data.len() - self.at);
             buf[..n].copy_from_slice(&self.data[self.at..self.at + n]);
@@ -490,7 +497,7 @@ pub mod fake {
                 _ => (200, Vec::new(), data),
             };
             let body = match fault {
-                Fault::CutShort | Fault::Stall => body[..body.len() / 2].to_vec(),
+                Fault::CutShort | Fault::Stall | Fault::TimeOut => body[..body.len() / 2].to_vec(),
                 _ => body,
             };
             if let Some(cb) = self.on_chunk.lock().unwrap().as_ref() {
@@ -502,7 +509,7 @@ pub mod fake {
                 body: Box::new(Chunks {
                     data: body,
                     at: 0,
-                    stall: fault == Fault::Stall,
+                    fault,
                 }),
             })
         }
@@ -515,6 +522,9 @@ mod tests {
     use super::*;
     use crate::tagging::fake::FAKE_MODELS;
     use crate::tagging::install::{InstallState, quick_state};
+
+    /// The stall limit of the tests that stall on purpose.
+    const SHORT: Duration = Duration::from_millis(200);
 
     struct Run {
         tmp: tempfile::TempDir,
@@ -539,7 +549,13 @@ mod tests {
             self.tmp.path().join(model().id)
         }
 
+        /// A download with the real stall limit, so that a slow machine
+        /// never fails it: only the stall tests use a short one.
         fn go(&self) -> (Outcome, Vec<(u64, u64)>) {
+            self.go_with(STALL)
+        }
+
+        fn go_with(&self, stall: Duration) -> (Outcome, Vec<(u64, u64)>) {
             let mut seen = Vec::new();
             let mut progress = |r, t| seen.push((r, t));
             let dir = self.dir();
@@ -549,7 +565,7 @@ mod tests {
                 fetch: &self.fetch,
                 cancel: &self.cancel,
                 progress: &mut progress,
-                stall: Duration::from_millis(200),
+                stall,
             });
             (outcome, seen)
         }
@@ -650,6 +666,7 @@ mod tests {
                 "Couldn't reach Hugging Face. Check the internet connection and try again.".to_owned(),
             ),
             (Fault::Stall, "The download stalled. Try again.".to_owned()),
+            (Fault::TimeOut, "The download stalled. Try again.".to_owned()),
             (
                 Fault::CutShort,
                 "model.bin did not pass its check (wrong size or SHA-256); it was deleted. Try again."
@@ -659,7 +676,8 @@ mod tests {
         for (fault, reason) in cases {
             let r = setup();
             r.fetch.set_fault(fault);
-            assert_eq!(r.go().0, Outcome::Failed(reason), "{fault:?}");
+            let stall = if fault == Fault::Stall { SHORT } else { STALL };
+            assert_eq!(r.go_with(stall).0, Outcome::Failed(reason), "{fault:?}");
         }
         assert_eq!(
             write_error(
@@ -688,7 +706,10 @@ mod tests {
     fn a_stalled_part_is_kept_for_the_next_try() {
         let r = setup();
         r.fetch.set_fault(Fault::Stall);
-        r.go();
+        assert_eq!(
+            r.go_with(SHORT).0,
+            Outcome::Failed("The download stalled. Try again.".into())
+        );
         assert!(install::part_path(&r.dir(), &model().files[0]).exists());
         r.fetch.set_fault(Fault::None);
         assert_eq!(r.go().0, Outcome::Done);

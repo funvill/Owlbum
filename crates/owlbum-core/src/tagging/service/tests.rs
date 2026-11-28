@@ -134,7 +134,9 @@ impl Fx {
             events.clone(),
             runtime,
         )
-        .with_stall(Duration::from_millis(200));
+        // The real limit: no test here stalls on purpose, and a short one
+        // fails downloads on a slow machine (issue 222).
+        .with_stall(crate::tagging::download::STALL);
         Self {
             tagging,
             control,

@@ -33,4 +33,14 @@ export const mapText = {
   saveFailed: "Couldn't change the map setting.",
   /** A cluster bubble's label. */
   cluster: (n: number) => `${group(n)} photos here. Zoom in`,
+  /** The place picker (docs/04-browsing.md, "The place picker"). */
+  picker: {
+    open: "Pick on map",
+    openTip: "Choose where the photo was taken on a map",
+    title: (n: number) => (n === 1 ? "Where was this photo taken?" : `Where were these ${group(n)} photos taken?`),
+    hint: "Click the map where the photo was taken, or click another photo to use its place.",
+    region: "Map to pick a place",
+    cancel: "Cancel",
+    saving: "Saving the place…",
+  },
 };

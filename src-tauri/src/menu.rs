@@ -74,7 +74,7 @@ pub const CHECK_AUTOMATICALLY: &str = "help.check_automatically";
 pub const WHATS_NEW: &str = "help.whats_new";
 
 /// Every line of the menu bar, in order. The update item of Help comes with
-/// the updater (#62); About and Send feedback with #61 ([`LATER`]).
+/// the updater (#62).
 pub const ENTRIES: &[Entry] = &[
     item(Bar::File, "app.open_folder", text::OPEN_FOLDER),
     item(Bar::File, "app.close_folder", text::CLOSE_FOLDER),
@@ -99,12 +99,11 @@ pub const ENTRIES: &[Entry] = &[
         ..item(Bar::Help, CHECK_AUTOMATICALLY, text::CHECK_AUTOMATICALLY)
     },
     item(Bar::Help, WHATS_NEW, text::WHATS_NEW),
+    separator(Bar::Help),
+    item(Bar::Help, "app.feedback", text::FEEDBACK),
+    separator(Bar::Help),
+    item(Bar::Help, "app.about", text::ABOUT),
 ];
-
-/// Menu rows of the key table whose items come with a later issue: About
-/// and Send feedback (F1, F2) come with issue 61, so their keys stay free
-/// until then.
-pub const LATER: &[&str] = &["app.about", "app.feedback"];
 
 /// The entries of a build: development-only items only when `dev`.
 pub fn entries(dev: bool) -> impl Iterator<Item = &'static Entry> {
@@ -232,6 +231,8 @@ pub enum Action {
     /// Sent to the page as `app_menu`.
     Page(PageItem),
     OpenDataFolder,
+    /// The project's issues page in the user's browser.
+    OpenFeedback,
     /// Through the close handshake (`closing::requested`).
     Quit,
     FullScreen,
@@ -254,6 +255,8 @@ pub fn action(id: &str) -> Option<Action> {
         "app.shortcuts" => Action::Page(PageItem::Shortcuts),
         CHECK_AUTOMATICALLY => Action::ToggleUpdatesAuto,
         WHATS_NEW => Action::Page(PageItem::WhatsNew),
+        "app.feedback" => Action::OpenFeedback,
+        "app.about" => Action::Page(PageItem::About),
         _ => return None,
     })
 }
@@ -289,6 +292,9 @@ pub fn chosen<R: Runtime>(app: &AppHandle<R>, id: &str) {
             {
                 tracing::warn!(target: "app", "the data folder could not be opened: {e}");
             }
+        }
+        Action::OpenFeedback => {
+            let _ = crate::commands::app::open_fixed(app, owlbum_core::app::FEEDBACK_URL);
         }
         Action::Quit => {
             if !crate::closing::requested(app) {
@@ -338,7 +344,7 @@ mod tests {
     #[test]
     fn every_menu_row_of_the_key_table_has_a_menu_item() {
         let ids: HashSet<_> = ENTRIES.iter().map(|e| e.id).collect();
-        for r in keymap::menu_rows(true).filter(|r| !LATER.contains(&r.id.as_str())) {
+        for r in keymap::menu_rows(true) {
             assert!(ids.contains(r.id.as_str()), "{} has no menu item", r.id);
             let entry = ENTRIES.iter().find(|e| e.id == r.id).unwrap();
             assert_eq!(entry.dev, r.dev, "{}: dev differs from the key table", r.id);
@@ -378,6 +384,8 @@ mod tests {
             action("help.whats_new"),
             Some(Action::Page(PageItem::WhatsNew))
         );
+        assert_eq!(action("app.feedback"), Some(Action::OpenFeedback));
+        assert_eq!(action("app.about"), Some(Action::Page(PageItem::About)));
         assert_eq!(action("nothing"), None);
     }
 

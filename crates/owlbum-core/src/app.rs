@@ -150,6 +150,56 @@ impl Event for AppMenu {
     const NAME: &'static str = "app_menu";
 }
 
+/// The project's page on GitHub. The About box links to it
+/// (docs/08-desktop-and-release.md, "About box").
+pub const REPOSITORY_URL: &str = "https://github.com/funvill/Owlbum";
+
+/// Where feedback goes: the project's issues page (docs/08, "Feedback").
+/// The owner asked for the plain issues page (issue 61), so nothing about
+/// the computer is put in the address.
+pub const FEEDBACK_URL: &str = "https://github.com/funvill/Owlbum/issues";
+
+/// The copyright line of the `LICENSE` file, compiled in.
+pub fn copyright() -> &'static str {
+    include_str!("../../../LICENSE")
+        .lines()
+        .find(|l| l.starts_with("Copyright"))
+        .unwrap_or("")
+}
+
+/// The reply of `app_about`: the About box's facts
+/// (docs/08-desktop-and-release.md, "About box"). The page holds the words.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct About {
+    pub version: String,
+    /// `windows` or `linux`.
+    pub platform: String,
+    /// `x86_64`, for example.
+    pub arch: String,
+    /// `nsis`, `deb`, `appimage` or `dev`.
+    pub package: String,
+    /// The app data folder.
+    pub data_dir: String,
+    /// The copyright line of the licence.
+    pub copyright: String,
+    /// The project's address, shown as the link's text. The link itself is
+    /// followed by `app_open_repository`: the page never opens an address.
+    pub repository: String,
+}
+
+/// The About box's facts for a data folder and package kind.
+pub fn about(data_dir: &Path, package: &str) -> About {
+    About {
+        version: version().version,
+        platform: std::env::consts::OS.to_owned(),
+        arch: std::env::consts::ARCH.to_owned(),
+        package: package.to_owned(),
+        data_dir: data_dir.display().to_string(),
+        copyright: copyright().to_owned(),
+        repository: REPOSITORY_URL.to_owned(),
+    }
+}
+
 /// The folder a path opens: a folder opens itself, a file the folder that
 /// holds it. A path that is neither (gone, unreadable) is kept, so that
 /// opening it shows why it cannot be opened.
@@ -196,6 +246,17 @@ mod tests {
     #[test]
     fn version_is_the_workspace_version() {
         assert_eq!(version().version, env!("CARGO_PKG_VERSION"));
+    }
+
+    #[test]
+    fn about_names_the_version_the_repository_and_the_licence() {
+        let a = about(Path::new("/data"), "dev");
+        assert_eq!(a.version, env!("CARGO_PKG_VERSION"));
+        assert_eq!(a.repository, "https://github.com/funvill/Owlbum");
+        assert!(a.copyright.starts_with("Copyright (c) "), "{}", a.copyright);
+        assert_eq!(a.data_dir, Path::new("/data").display().to_string());
+        assert_eq!(a.package, "dev");
+        assert_eq!(FEEDBACK_URL, "https://github.com/funvill/Owlbum/issues");
     }
 
     #[test]

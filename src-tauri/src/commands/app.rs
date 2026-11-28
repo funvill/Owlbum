@@ -7,7 +7,9 @@ use crate::handoff::Handoff;
 use crate::session::Session;
 use crate::{area, command};
 use owlbum_core::album::reopen;
-use owlbum_core::app::{self, AppClosing, AppMenu, AppVersion, FolderDrop, OpenFolder, Startup};
+use owlbum_core::app::{
+    self, About, AppClosing, AppMenu, AppVersion, FolderDrop, OpenFolder, Startup,
+};
 use owlbum_core::appdata::{AppData, Recent, Settings};
 use owlbum_core::files::Capabilities;
 use owlbum_core::info::country::{self, CountryMatch};
@@ -20,11 +22,15 @@ use tauri::{AppHandle, Manager, Runtime, State};
 area! {
     prefix: "app",
     commands: [
+        app_about,
         app_cache_clear,
         app_cache_usage,
         app_capabilities,
         app_close_ready,
+        app_country_at,
         app_formats,
+        app_open_feedback,
+        app_open_repository,
         app_pick_folder,
         app_place_search,
         app_quit,
@@ -37,6 +43,61 @@ area! {
         app_version,
     ],
     events: [AppClosing, AppMenu, FolderDrop, OpenFolder],
+}
+
+command! {
+    /// The About box's facts (docs/08-desktop-and-release.md, "About box").
+    pub fn app_about<R: Runtime>(; app: AppHandle<R>, data: State<'_, AppData>) -> About {
+        let dev = crate::is_dev_build(cfg!(debug_assertions), &app.config().identifier);
+        let package = app::package_kind(dev, std::env::var_os("APPIMAGE").is_some());
+        Ok(app::about(data.dir(), package))
+    }
+}
+
+/// Opens an address in the user's own browser. `run` installs the real
+/// one; shell tests install a fake that records what it was given.
+#[derive(Clone)]
+pub struct Browser(pub Arc<OpenAddress>);
+
+/// Opens one address; an error says why it could not.
+pub type OpenAddress = dyn Fn(&str) -> Result<(), String> + Send + Sync;
+
+/// Opens one of the program's own fixed addresses: the page never passes
+/// an address (docs/08-desktop-and-release.md, "Navigation and new
+/// windows").
+pub fn open_fixed<R: Runtime>(app: &AppHandle<R>, url: &'static str) -> Result<(), AppError> {
+    let browser = app
+        .try_state::<Browser>()
+        .ok_or_else(|| AppError::internal(text::appdata::OPENING_ADDRESS))?;
+    (browser.0)(url).map_err(|e| {
+        tracing::warn!(target: "app", "{url} could not be opened: {e}");
+        AppError::internal(text::appdata::OPENING_ADDRESS)
+            .with_details(serde_json::json!({ "cause": e }))
+    })
+}
+
+command! {
+    /// Help > Give feedback (F2): the project's issues page in the user's
+    /// browser (docs/08-desktop-and-release.md, "Feedback").
+    pub fn app_open_feedback<R: Runtime>(; app: AppHandle<R>) -> () {
+        open_fixed(&app, app::FEEDBACK_URL)
+    }
+}
+
+command! {
+    /// The About box's link: the project's page on GitHub.
+    pub fn app_open_repository<R: Runtime>(; app: AppHandle<R>) -> () {
+        open_fixed(&app, app::REPOSITORY_URL)
+    }
+}
+
+command! {
+    /// The country that holds a point, from the bundled outlines, or null
+    /// (at sea): the place name a pick on the map gives (docs/04-browsing.md,
+    /// "The place picker").
+    pub async fn app_country_at(lat: f64, lon: f64) -> Option<String> {
+        Ok(country::country_at(lat, lon).map(str::to_owned))
+    }
 }
 
 command! {

@@ -102,3 +102,13 @@ fn recent_remove_takes_out_one_entry() {
         ["/photos/a"]
     );
 }
+
+#[test]
+fn app_about_answers_the_version_the_data_folder_and_the_repository() {
+    let f = fixture();
+    let reply = invoke(&f.window, "app_about", json!({})).expect("app_about answers");
+    let about: owlbum_core::app::About = reply.deserialize().unwrap();
+    assert_eq!(about.version, env!("CARGO_PKG_VERSION"));
+    assert_eq!(about.repository, "https://github.com/funvill/Owlbum");
+    assert_eq!(about.data_dir, f.data.dir().display().to_string());
+}

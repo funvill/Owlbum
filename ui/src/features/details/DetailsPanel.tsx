@@ -12,6 +12,7 @@ import { IconButton, Pill, Tooltip } from "../../controls";
 import { Icon } from "../../icons";
 import { detailsText as t, type SectionId } from "../../text/details";
 import { useAlbumStore, viewOnlyReason } from "../album";
+import { PickPlaceButton } from "../map/PlacePicker";
 import { ScoreCard } from "../organise/ScoreCard";
 import { cameraRows, factRows, formatCoordinates, type FactRow } from "./facts";
 import { HistogramSection } from "./HistogramChart";
@@ -137,6 +138,7 @@ function PlaceFacts({
   return (
     <>
       {rows.length > 0 && <Rows rows={rows} />}
+      <PickPlaceButton photoId={detail.id} disabledReason={disabledReason} />
       <LocationField detail={detail} disabledReason={disabledReason} saver={saver} />
     </>
   );

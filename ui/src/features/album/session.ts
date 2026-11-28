@@ -8,6 +8,7 @@ import { showToast } from "../../controls";
 import { albumText } from "../../text/album";
 import { useSettingsStore } from "../app/settings";
 import { toggleShortcuts } from "../app/shortcuts";
+import { openAbout } from "../app/aboutOpen";
 import { restoreSession, type SavedSession } from "../grid";
 import { followEditStatus } from "../edit/save";
 import { flushSession, followSession, stopSession } from "./reopen";
@@ -276,12 +277,12 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         // before Rust closes the album.
         api().listen("app_closing", () => void closingWindow()),
         // Menu items that act in the page (docs/08-desktop-and-release.md,
-        // "Menus"). About, What's new and the update item come with issues 61 to
-        // 63.
+        // "Menus"). What's new and the update item come with issues 62 and 63.
         api().listen("app_menu", ({ item }) => {
           if (item === "close_folder") void get().close();
           else if (item === "rescan") void useScanStore.getState().rescan();
           else if (item === "shortcuts") toggleShortcuts();
+          else if (item === "about") openAbout();
         }),
         api().listen("folder_drop", (e) => {
           if (e.phase === "over") set({ dropOver: true });

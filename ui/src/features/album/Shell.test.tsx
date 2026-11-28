@@ -11,7 +11,7 @@ import { fakeStatus } from "../../api/fake/album";
 import { defaultSettings } from "../../api/fake/app";
 import { Toasts, useToasts } from "../../controls";
 import { albumText } from "../../text/album";
-import { settingsText } from "../../text/app";
+import { aboutText, settingsText } from "../../text/app";
 import { shortcutsText } from "../../text/keys";
 import { seriousFindings } from "../../test/axe";
 import { createQueryFake } from "../../api/fake/query";
@@ -484,8 +484,11 @@ describe("the menu bar and the top bar's gear (docs/08-desktop-and-release.md)",
     await waitFor(() => expect(screen.queryByRole("dialog", { name: shortcutsText.title })).not.toBeInTheDocument());
     act(() => fake.emit("app_menu", { item: "close_folder" }));
     await waitFor(() => expect(fake.calls.some((c) => c.command === "album_close")).toBe(true));
-    // Items whose features come later do nothing yet.
     act(() => fake.emit("app_menu", { item: "about" }));
+    const about = await screen.findByRole("dialog", { name: aboutText.title });
+    expect(await within(about).findByText(aboutText.name("0.0.0-fake"))).toBeInTheDocument();
+    await userEvent.click(within(about).getByRole("button", { name: aboutText.ok }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: aboutText.title })).not.toBeInTheDocument());
   });
 
   it("opens Settings from the gear, with or without an album", async () => {

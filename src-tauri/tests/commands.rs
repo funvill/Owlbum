@@ -116,3 +116,49 @@ fn area_prefixes_match_the_architecture_table() {
         ]
     );
 }
+
+#[test]
+fn feedback_and_the_repository_open_fixed_addresses_in_the_browser() {
+    use std::sync::{Arc, Mutex};
+    use tauri::Manager;
+    let (_app, window) = app_window();
+    let opened = Arc::new(Mutex::new(Vec::<String>::new()));
+    let seen = Arc::clone(&opened);
+    window
+        .app_handle()
+        .manage(owlbum_lib::commands::app::Browser(Arc::new(move |url| {
+            seen.lock().unwrap().push(url.to_owned());
+            Ok(())
+        })));
+    invoke(&window, "app_open_feedback", serde_json::json!({})).expect("feedback opens");
+    invoke(&window, "app_open_repository", serde_json::json!({})).expect("the repository opens");
+    assert_eq!(
+        *opened.lock().unwrap(),
+        [
+            "https://github.com/funvill/Owlbum/issues",
+            "https://github.com/funvill/Owlbum"
+        ]
+    );
+}
+
+#[test]
+fn app_country_at_names_the_country_of_a_point() {
+    let (_app, window) = app_window();
+    let reply = invoke(
+        &window,
+        "app_country_at",
+        serde_json::json!({ "lat": 48.85837, "lon": 2.29448 }),
+    )
+    .expect("app_country_at answers");
+    assert_eq!(
+        reply.deserialize::<Option<String>>().unwrap().as_deref(),
+        Some("France")
+    );
+    let reply = invoke(
+        &window,
+        "app_country_at",
+        serde_json::json!({ "lat": 0.0, "lon": -30.0 }),
+    )
+    .expect("app_country_at answers at sea");
+    assert_eq!(reply.deserialize::<Option<String>>().unwrap(), None);
+}

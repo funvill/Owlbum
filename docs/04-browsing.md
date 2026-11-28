@@ -762,7 +762,7 @@ The page calls `photo_histogram(id)` when the section is open and the photo or i
 
 ### How typed fields save
 
-Every typed change goes through `photo_set_info([id], patch)`. A null in the patch clears that field. Typed fields always change the current photo only, never the rest of the selection.
+Every typed change goes through `photo_set_info([id], patch)`. A null in the patch clears that field. Typed fields always change the current photo only, never the rest of the selection. The one exception is the [place picker](#the-place-picker), which the owner asked to work for a selection (#169).
 
 - **Confirmation.** On success the field's label shows "Saved" in `--ok` (`role=status`) for 1,800 ms.
 - **Failure.** An error toast shows the error's message, the note under the score card appears, and the field keeps what was typed.
@@ -774,7 +774,7 @@ Every typed change goes through `photo_set_info([id], patch)`. A null in the pat
 | Notes | Text area, 4 rows, resizable downwards, label "Notes" | On blur. Enter adds a line. | `{ notes }`: the same rule. |
 | People | Chips, plus a text box with the placeholder "Add a name, press Enter" and suggestions | Enter, a comma (also inside pasted text), or blur with text in the box adds a name. A chip's **x** removes one. Backspace in an empty box removes the last chip. | `{ people }`: the whole list, or null when empty. |
 | Date and time | One-line text box, label "Date and time taken" | On blur or Enter. | `{ date_override }`; see the rules below. |
-| Location | A group: "Search for a country…", Latitude, Longitude, Place name | When focus leaves the whole group, or Enter in any of its boxes. | `{ location: { lat, lon, name } }` or `{ location: null }`; see the rules below. |
+| Location | A group: "Search for a country…", Latitude, Longitude, Place name. The **Pick on map** button above it opens the [place picker](#the-place-picker). | When focus leaves the whole group, or Enter in any of its boxes. | `{ location: { lat, lon, name } }` or `{ location: null }`; see the rules below. |
 
 **People rules.**
 
@@ -821,6 +821,17 @@ Each coordinate has spaces removed from its ends; an empty box counts as absent.
 - **Leaving without blur.** When the panel is about to show another photo or close, it first saves a changed description, changed notes, a valid changed date and a valid changed location. Invalid text is dropped.
 - **Order.** Saves for one photo are sent one after another. The panel is updated from the answer to the last one.
 - **Sent once.** A value on its way is remembered, so blur followed at once by a photo change does not send it twice.
+
+### The place picker
+
+At the owner's request (#169), the Place section has a **Pick on map** button (small, map-pin icon, tooltip "Choose where the photo was taken on a map") above the Location group. It is disabled, with the view-only reason as its tooltip, in a view-only album. It opens a wide dialog titled "Where was this photo taken?" (or "Where were these N photos taken?") holding a map 480 px high (at most 60 % of the window's height), with the hint "Click the map where the photo was taken, or click another photo to use its place." above it and **Cancel** below.
+
+- **Which photos.** When the photo the panel shows is the grid's current photo and several photos are selected, the whole selection; otherwise that photo alone.
+- **The map** is the Map view's (`ui/src/features/map/photoMap.ts`): the same markers, clusters, zoom and tile layer. It holds every located photo of the album other than the ones being changed, from a query of its own with no filter, no search and no stacks, so a filter on the grid does not hide them. It starts on the world view (latitude 20, longitude 0, zoom 2) and fits those photos as the Map view's first fit does; with none it stays on the world.
+- **A click on the map** sets the place: the clicked point, its longitude wrapped into −180 to 180, each coordinate rounded to 6 decimals. **A click on another photo's marker** uses that photo's place. A cluster still zooms in.
+- **What is saved.** One `photo_set_info(ids, { location: { lat, lon, name } })`, so it is one undo step (Ctrl+Z), like any typed change. `name` is the country at that point from the bundled outlines (`app_country_at`), as choosing a country in the search does; at sea it is null. A typed place name the photos had is replaced. While it saves, the hint reads "Saving the place…"; on success the dialog closes and the panel follows from `album_changed`. A failure shows its message as a toast and the dialog stays.
+- **Map tiles** follow `maps_online` exactly as the Map view does (see [Loading map tiles](#loading-map-tiles)): the same card while it is unset, the same switch, and no tile layer until the user says yes. Without tiles the markers sit on the plain background and a click still works.
+- **Cancel**, Esc or the dialog's close button closes it and changes nothing.
 
 ## Timeline view
 
@@ -1084,6 +1095,7 @@ Names follow the prefixes in [Architecture](01-architecture.md). Every command a
 | `app_pick_folder` | none | `string \| null` | Shows the native folder dialog. Defined in 08; listed here because this part calls it. |
 | `app_session_save` | `Session` with `selected_id` | nothing | Stores against the open album's folder. A no-op when no album is open. |
 | `app_place_search` | `text` | `CountryMatch[]` = `{ name, lat, lon }[]`, at most 6 | Countries whose name contains the text, in the order [Country search](#how-typed-fields-save) gives; empty text answers `[]`. |
+| `app_country_at` | `lat`, `lon` | `string` or null | The country that holds the point, from the same outlines; null at sea. The [place picker](#the-place-picker) uses it as the place name. |
 | `album_open` | `path`, `options?: { take_lock?, view_only?, restore_backup? }` | `{ status: AlbumStatus, session: Session \| null }` | Closes any open album first. It returns as soon as the database is open and starts the scan in the background. Errors: the shared `not_a_folder` and `folder_unreadable`, and this part's `album_lock_stale` and `album_damaged`, each with a `details` object. |
 | `album_close` | none | nothing | Releases the lock. Drops every token. Like `album_open`, it runs off the main thread, and the two never overlap: an open waits for a close, so the old album's lock is gone before the new one is taken. |
 | `album_status` | none | `AlbumStatus \| null` | Null when no album is open. |

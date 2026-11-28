@@ -38,7 +38,8 @@ describe("the overlay's contents", () => {
   it("lists every row but the development-only ones and those not built yet", () => {
     const listed = sections("browse").flatMap((s) => s.rows.map((r) => r.id));
     expect(listed).toHaveLength(KEYMAP.filter((r) => !r.dev && !NOT_YET.includes(r.id)).length);
-    expect(listed).not.toContain("app.about");
+    expect(listed).toContain("app.about");
+    expect(listed).toContain("app.feedback");
     expect(listed).not.toContain("app.reload");
     expect(listed).not.toContain("app.developer_tools");
   });

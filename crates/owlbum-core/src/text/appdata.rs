@@ -36,3 +36,6 @@ pub fn setting_out_of_range(key: &str) -> String {
 /// What was being done, for an `internal` error when the folder dialog
 /// could not be shown.
 pub const PICKING_FOLDER: &str = "showing the folder dialog";
+
+/// What failed when the browser could not be opened.
+pub const OPENING_ADDRESS: &str = "opening the address in your browser";

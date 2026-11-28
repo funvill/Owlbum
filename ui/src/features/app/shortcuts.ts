@@ -22,11 +22,8 @@ export function toggleShortcuts(): void {
   useShortcutsStore.setState((s) => ({ open: !s.open }));
 }
 
-/**
- * Rows whose action does not exist yet, left out of the overlay: About and
- * Send feedback (F1, F2) come with issue 61.
- */
-export const NOT_YET: readonly KeyId[] = ["app.about", "app.feedback"];
+/** Rows whose action does not exist yet, left out of the overlay. None now. */
+export const NOT_YET: readonly KeyId[] = [];
 
 /** A place the overlay lists, as it names it. */
 export type Where = Exclude<Place, "everywhere">;

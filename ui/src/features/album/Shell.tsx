@@ -1,4 +1,6 @@
 import { useCallback, useEffect } from "react";
+import { AboutDialog } from "../app/AboutDialog";
+import { closeAbout, useAboutOpen } from "../app/aboutOpen";
 import { useShortcutKey, type Where } from "../app/shortcuts";
 import { SettingsDialog } from "../app/SettingsDialog";
 import { closeSettings, useSettingsOpen } from "../app/settingsOpen";
@@ -28,6 +30,7 @@ export function Shell() {
   const viewing = useViewerStore((s) => s.open);
   const view = useGridStore((s) => s.query.view);
   const settingsOpen = useSettingsOpen((s) => s.open);
+  const aboutOpen = useAboutOpen((s) => s.open);
   const here: Where = editing ? "edit" : viewing ? "viewer" : "browse";
   // `?` opens the shortcut overlay from every place (docs/08, "The overlay").
   useShortcutKey(
@@ -54,6 +57,7 @@ export function Shell() {
       <OpenQuestions />
       <ShortcutOverlay here={here} view={view} />
       <SettingsDialog open={settingsOpen} onClose={closeSettings} />
+      <AboutDialog open={aboutOpen} onClose={closeAbout} />
     </div>
   );
 }

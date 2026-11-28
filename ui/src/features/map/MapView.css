@@ -145,3 +145,25 @@
   font-weight: var(--weight-number);
   cursor: pointer;
 }
+
+/* The place picker (docs/04-browsing.md, "The place picker"): the same map
+   in a wide dialog. */
+.ow-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.ow-picker__hint {
+  font: var(--text-sm);
+  color: var(--muted);
+}
+
+.ow-picker__frame {
+  flex: none;
+  height: min(480px, 60vh);
+}
+
+.ow-picker__stage.leaflet-container {
+  cursor: crosshair;
+}

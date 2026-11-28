@@ -7,7 +7,7 @@ import type { KeyId } from "../keys";
 export const keyLabels: Record<KeyId, string> = {
   "app.shortcuts": "Keyboard shortcuts",
   "app.about": "About Owlbum",
-  "app.feedback": "Send feedback",
+  "app.feedback": "Give feedback",
   "app.open_folder": "Open folder",
   "app.full_screen": "Full screen",
   "app.quit": "Quit",

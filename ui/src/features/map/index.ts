@@ -2,3 +2,4 @@
 // photos as markers on a map, in place of the thumbnails.
 export { MapView, resetMapPlace, type MapViewProps } from "./MapView";
 export { diffPoints, samePoint, type PointChange } from "./points";
+export { PickPlaceButton, PlacePicker, pickTargets, type PlacePickerProps } from "./PlacePicker";

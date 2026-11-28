@@ -155,7 +155,7 @@ The menu bar has three menus. `&` marks the mnemonic.
 | Help | `Check &automatically` (checkbox) | none | Toggles `updates.auto`. |
 | Help | `What's &new` | none | Shows the notes for this version. |
 | Help | separator | | |
-| Help | `Send &feedback on GitHub…` | `F2` | Opens the feedback address in the user's browser. |
+| Help | `&Give feedback on GitHub…` | `F2` | Opens the feedback address in the user's browser. |
 | Help | separator | | |
 | Help | `&About Owlbum` | `F1` | Opens the About box. |
 
@@ -168,7 +168,7 @@ Rules:
 - **The menu is rebuilt** when the update state changes, when `updates.auto` changes, and when an album opens or closes.
 - **Menu text** lives in the shell's text module, the Rust counterpart of `ui/src/text/`.
 
-As built (#58, `src-tauri/src/menu.rs`): the items are one table, `menu::ENTRIES`; a shell test fails if a `menu` row of the key table has no item or an item's accelerator has no row. Instead of rebuilding the menu, the shell enables Close folder and Rescan when an album opens or closes and ticks Check automatically when `updates.auto` changes (from the menu or from Settings). The update item is left out until the updater exists (#62). About and Send feedback (F1, F2) are left out until #61 builds them (`menu::LATER`), so their keys stay free; the shell test skips those two rows until then. What's new sends `app_menu`; the page does nothing with it until #63. The `?` beside Keyboard shortcuts is drawn as the item's key column on Windows (text after a tab); Linux shows the label alone. Open folder runs the native dialog on a thread of its own and hands a chosen folder over as `open_folder`. The single-instance plugin (`tauri-plugin-single-instance`) is registered first, and only when `OWLBUM_DATA_DIR` is not set.
+As built (#58, `src-tauri/src/menu.rs`): the items are one table, `menu::ENTRIES`; a shell test fails if a `menu` row of the key table has no item or an item's accelerator has no row. Instead of rebuilding the menu, the shell enables Close folder and Rescan when an album opens or closes and ticks Check automatically when `updates.auto` changes (from the menu or from Settings). The update item is left out until the updater exists (#62). About and Give feedback (F1, F2) came with #61: About sends `app_menu about`; Give feedback is done in Rust, which opens the feedback address itself. What's new sends `app_menu`; the page does nothing with it until #63. The `?` beside Keyboard shortcuts is drawn as the item's key column on Windows (text after a tab); Linux shows the label alone. Open folder runs the native dialog on a thread of its own and hands a chosen folder over as `open_folder`. The single-instance plugin (`tauri-plugin-single-instance`) is registered first, and only when `OWLBUM_DATA_DIR` is not set.
 
 ## Settings dialog
 
@@ -272,7 +272,7 @@ What each action does is owned by the part named in the last column. This table 
 |---|---|---|---|---|---|
 | `app.shortcuts` | everywhere | `?` | Open or close the shortcut overlay | | this part |
 | `app.about` | everywhere | `F1` | About Owlbum | menu | this part |
-| `app.feedback` | everywhere | `F2` | Send feedback on GitHub | menu | this part |
+| `app.feedback` | everywhere | `F2` | Give feedback on GitHub | menu | this part |
 | `app.open_folder` | everywhere | `Ctrl+O` | Open folder | menu | this part |
 | `app.full_screen` | everywhere | `F11` | Toggle full screen | menu | this part |
 | `app.quit` | everywhere | `Ctrl+Q` | Quit | menu | this part |
@@ -333,7 +333,7 @@ A cell that names two ids stands for two rows of the file, one per key. If this 
 | Grid and preview  (where you are)   | Everywhere                 |
 |  ←  →          Previous, next photo |  ?        Keyboard shortcuts|
 |  Home  End     First, last photo    |  F1       About Owlbum      |
-|  Enter  Space  Open the viewer      |  F2       Send feedback     |
+|  Enter  Space  Open the viewer      |  F2       Give feedback     |
 |  S  F          Star or unstar       |  Ctrl+O   Open folder       |
 |  H             Hide or unhide       |  F11      Full screen       |
 |  ↑  ↓          Photo score up, down |  Ctrl+Q   Quit              |
@@ -352,7 +352,7 @@ A cell that names two ids stands for two rows of the file, one per key. If this 
 - Rows whose action is unavailable on this platform (a Linux gap, see the README) are left out.
 - The overlay is read-only. Keys cannot be changed in version 1.
 
-As built (#60, `ui/src/features/app/ShortcutOverlay.tsx`): each row of the table is one line, its keys side by side as caps and its label from `ui/src/text/keys.ts`; rows are not merged into pairs such as "Previous, next photo". Focus starts on the list rather than the close button, so the first Esc closes the overlay. At the owner's request the overlay has a **Settings…** button, which closes it and opens Settings. The rows of About and Send feedback are left out until #61 builds them. No row is left out for a platform yet, because no row is known to be missing on Windows or Linux.
+As built (#60, `ui/src/features/app/ShortcutOverlay.tsx`): each row of the table is one line, its keys side by side as caps and its label from `ui/src/text/keys.ts`; rows are not merged into pairs such as "Previous, next photo". Focus starts on the list rather than the close button, so the first Esc closes the overlay. At the owner's request the overlay has a **Settings…** button, which closes it and opens Settings. About and Give feedback are listed since #61. No row is left out for a platform yet, because no row is known to be missing on Windows or Linux.
 
 ## Updates
 
@@ -497,13 +497,13 @@ Updater artefacts are only built by the release workflow. `bundle.createUpdaterA
 
 ## About box
 
-F1 or Help > About Owlbum opens a page dialog titled `About Owlbum`. Its content comes from `app_about`.
+F1 or Help > About Owlbum opens a page dialog titled `About Owlbum`. Its content comes from `app_about`. The owner's rule (#61): it shows the version and a link to the GitHub repository.
 
 ```text
 +--------------------------------------------------------------+
 | About Owlbum                                             [×] |
 |--------------------------------------------------------------|
-| [logo]  Owlbum 0.1.0                                         |
+| [owl]   Owlbum 0.1.0                                         |
 |         Version 0.1.0 (windows x86_64)                       |
 |                                                              |
 | Look through folders of photos, star the best ones, find     |
@@ -532,6 +532,8 @@ The paragraphs, in order:
 4. "Its thumbnails, settings and models are kept in:" and the app data folder.
 5. The credits: "Built from the open-source project funvill/Owlbum on GitHub, under the MIT License." then the copyright line from `LICENSE`, then "It includes software from other projects, each under its own licence: see "Third-party notices"."
 
+As built (#61, `ui/src/features/app/AboutDialog.tsx`): the logo is the owner's gold owl (see [Visual design](09-visual-design.md)), a 128 px copy at `ui/src/assets/owlbum-icon.png` drawn at 64 px and bundled with the page. Under the credits is the repository's address, `https://github.com/funvill/Owlbum`, drawn as a link; choosing it calls `app_open_repository`, and Rust opens the address in the user's browser. The buttons are **Give feedback** (as F2) and **OK** (focused; Esc also closes). `Check for updates`, `Licence` and `Third-party notices` are not built yet: the updater (#62) and the bundled licence files come later, and the rows below stay the plan for them. The package kind is not shown on Linux yet.
+
 Buttons:
 
 | Button | Action |
@@ -545,18 +547,13 @@ A file that cannot be opened is shown in its folder instead, and the failure is 
 
 ## Feedback
 
-F2 or Help > Send feedback on GitHub… opens this address in the user's own browser:
+F2, Help > Give feedback on GitHub… or the About box's **Give feedback** opens the project's issues page in the user's own browser. This is the owner's decision on #61; it replaces a prefilled new-issue address.
 
 ```text
-https://github.com/funvill/Owlbum/issues/new?title=<title>&body=<body>
+https://github.com/funvill/Owlbum/issues
 ```
 
-| Part | Text before URL encoding |
-|---|---|
-| `title` | `[Owlbum <version>] ` |
-| `body` | `Program: Owlbum <version>\nSystem: <platform> <architecture>\n\nWhat happened, or what would you like?\n` |
-
-Only the version and the platform are filled in. No folder, file name, user name or log line is ever put in the address. The user writes the rest and decides whether to send it.
+Nothing about the computer is put in the address. No folder, file name, user name or log line is ever sent. The user finds or opens an issue there and decides what to write.
 
 ## What's new
 
@@ -1007,14 +1004,14 @@ The events `open_folder` and `update_state` are listed in [Architecture](01-arch
 | `app_update_notice_answer` | `keep_on` | Records the answer to the first-start notice. |
 | `app_update_download` | | Starts the download of the offered version. |
 | `app_update_install` | | Runs the install steps. |
-| `app_about` | → `{ version, platform, arch, package, description, data_dir, licence_name, copyright, has_notices, can_update }` | The About box's content. |
+| `app_about` | → `{ version, platform, arch, package, data_dir, copyright, repository }` | The About box's facts; the page holds the words. `copyright` is the line from `LICENSE`; `repository` is the project's address, shown as the link's text. (Built in #61; `has_notices` and `can_update` come with the licence files and the updater.) |
 | `app_whats_new` | → entries | The running version's notes. |
 | `app_whats_new_seen` | | Records `whats_new.last_seen`. |
 | `app_cache_usage` | → `{ bytes, limit_bytes }` | For Settings. |
 | `app_cache_clear` | → `{ bytes_freed }` | Empties the thumbnail cache. |
 | `app_open_data_folder`, `app_open_log_folder` | | Open a folder in the file manager. |
 | `app_open_licence`, `app_open_notices` | | Open a resource text file. |
-| `app_open_feedback`, `app_open_release_page`, `app_open_release_notes` | the last takes no address, only the offered version held by Rust | Open one fixed address in the user's browser. |
+| `app_open_feedback`, `app_open_repository`, `app_open_release_page`, `app_open_release_notes` | the last takes no address, only the offered version held by Rust | Open one fixed address in the user's browser. `app_open_feedback` and `app_open_repository` are built (#61); the opener is the shell's `Browser` state, which shell tests replace. |
 | `app_copy_details` | | Copies the fatal error's technical block. |
 | `app_restart`, `app_quit` | | Used by the fatal dialog and File > Quit. |
 | `app_log` | `level`, `message` | The page reports an error or warning for the log. Limited to 2,000 characters a line and 100 lines a minute. |

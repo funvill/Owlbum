@@ -11,6 +11,15 @@ the window's title shows the version that is running.
 
 ### Added
 
+- Pick on map, in the Place section of the photo info: a map with the
+  album's other located photos, where a click sets where the photo was
+  taken (or the whole selection's place). Ctrl+Z undoes it. Map tiles still
+  load only after you say yes.
+- F1 or Help > About Owlbum shows the About box, with the owl logo, the
+  version, where Owlbum keeps its data and a link to the project on
+  GitHub.
+- F2 or Help > Give feedback on GitHub opens the project's issues page in
+  your browser.
 - A menu bar: File (Open folder, Close folder, Rescan, Open the data
   folder, Quit), View (Full screen) and Help (Keyboard shortcuts, Check
   automatically, What's new). Ctrl+O opens a folder, Ctrl+W closes it and

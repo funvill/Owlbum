@@ -18,3 +18,5 @@ pub const DEVELOPER_TOOLS: &str = "Toggle &developer tools";
 pub const SHORTCUTS: &str = "&Keyboard shortcuts";
 pub const CHECK_AUTOMATICALLY: &str = "Check &automatically";
 pub const WHATS_NEW: &str = "What's &new";
+pub const FEEDBACK: &str = "&Give feedback on GitHub…";
+pub const ABOUT: &str = "&About Owlbum";

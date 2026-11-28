@@ -100,6 +100,14 @@ export const fakeCountries: CountryMatch[] = [
   { name: "Åland", lat: 60.1565, lon: 19.8697 },
 ];
 
+/** Rough boxes standing in for a few country outlines. */
+const fakeOutlines = [
+  { name: "France", south: 42, north: 51, west: -5, east: 8 },
+  { name: "Canada", south: 49, north: 83, west: -141, east: -53 },
+  { name: "Australia", south: -44, north: -10, west: 113, east: 154 },
+  { name: "Japan", south: 24, north: 46, west: 123, east: 146 },
+];
+
 /** Lower case without accents, as Rust's `info::country` compares names. */
 const fold = (text: string) =>
   text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
@@ -130,6 +138,15 @@ export function placeSearch(
 
 /** The fake backend's `app_` commands. */
 export const appHandlers: AreaHandlers<AppCommands> = {
+  app_about: () => ({
+    version: "0.0.0-fake",
+    platform: "windows",
+    arch: "x86_64",
+    package: "dev",
+    data_dir: "C:\\Users\\sam\\AppData\\Local\\OwlbumData",
+    copyright: "Copyright (c) 2026 Owlbum contributors",
+    repository: "https://github.com/funvill/Owlbum",
+  }),
   // An empty cache at the default limit. A test that needs a size replaces these.
   app_cache_clear: () => ({ bytes_freed: 0 }),
   app_cache_usage: () => ({
@@ -139,10 +156,19 @@ export const appHandlers: AreaHandlers<AppCommands> = {
   // Windows: files are dragged out and copied as files.
   app_capabilities: () => ({ drag_out: true, copy_files: "files" }),
   app_close_ready: () => null,
+  // Four countries by a box around them, enough for page tests; the real
+  // lookup is the bundled outlines in Rust. At sea there is none.
+  app_country_at: ({ lat, lon }) =>
+    fakeOutlines.find(
+      (b) => lat >= b.south && lat <= b.north && lon >= b.west && lon <= b.east,
+    )?.name ?? null,
   app_formats: () =>
     fakeFormats.map((f) => ({ ...f, extensions: [...f.extensions] })),
   // The dialog was cancelled. A test that picks a folder replaces this.
   app_pick_folder: () => null,
+  // Opening the browser does nothing here; tests read the calls.
+  app_open_feedback: () => null,
+  app_open_repository: () => null,
   app_place_search: ({ text }) => placeSearch(fakeCountries, text),
   app_quit: () => null,
   app_recent_list: () => [],

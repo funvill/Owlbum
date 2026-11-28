@@ -43,3 +43,20 @@ export const settingsText = {
   onDay: (day: string, time: string) => `${day} at ${time}`,
   couldNotKeep: (reason: string) => `Couldn't keep the setting: ${reason}`,
 };
+
+/** The About box (docs/08-desktop-and-release.md, "About box"). */
+export const aboutText = {
+  title: "About Owlbum",
+  name: (version: string) => `Owlbum ${version}`,
+  versionLine: (version: string, platform: string, arch: string) => `Version ${version} (${platform} ${arch})`,
+  description:
+    "Look through folders of photos, star the best ones, find things by what is in them, and drag photos into other programs.",
+  network:
+    "Everything stays on this computer. Owlbum uses the network only for OpenStreetMap map tiles, and only after you choose Load maps on the Map tab; to download photo-tagging models from Hugging Face when you ask for one in Settings; and to check GitHub for a new version once a day, unless you turn that off in Help.",
+  dataFolder: "Its thumbnails, settings and models are kept in:",
+  credits: "Built from the open-source project funvill/Owlbum on GitHub, under the MIT License.",
+  repository: "Owlbum on GitHub",
+  feedback: "Give feedback",
+  ok: "OK",
+  loading: "…",
+};

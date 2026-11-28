@@ -169,6 +169,9 @@ pub fn run() {
             app.manage(commands::app::FolderPicker(folder_dialog(
                 app.handle().clone(),
             )));
+            app.manage(commands::app::Browser(Arc::new(|url: &str| {
+                tauri_plugin_opener::open_url(url, None::<&str>).map_err(|e| e.to_string())
+            })));
             app.manage(commands::file::DesktopShell(Arc::new(
                 desktop::NativeDesktop::new(app.handle().clone()),
             )));

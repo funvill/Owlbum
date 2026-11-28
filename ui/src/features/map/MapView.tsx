@@ -2,11 +2,11 @@ import { useEffect, useRef, useState } from "react";
 import { api, isAppError } from "../../api";
 import type { MapPoints } from "../../api/bindings/MapPoints";
 import type { PhotoAt } from "../../api/bindings/PhotoAt";
-import { Button, EmptyState, Tooltip, showToast } from "../../controls";
+import { EmptyState } from "../../controls";
 import { mapText as t } from "../../text/map";
-import { useSettingsStore } from "../app";
 import { gridBlocks, pickById, useBrowseKeys, useGridStore } from "../grid";
 import { PhotoMap } from "./photoMap";
+import { TileControls, useMapTiles } from "./tiles";
 import "./MapView.css";
 
 export interface MapViewProps {
@@ -25,18 +25,6 @@ export function resetMapPlace(): void {
 }
 
 /**
- * Saves `maps_online`. Answers whether the save worked; a failure shows
- * the toast "Couldn't change the map setting.".
- */
-async function saveMapsOnline(on: boolean): Promise<boolean> {
-  const settings = useSettingsStore.getState();
-  await settings.update({ maps_online: on });
-  if (useSettingsStore.getState().error === null) return true;
-  showToast({ kind: "error", message: t.saveFailed });
-  return false;
-}
-
-/**
  * The Map view (docs/04-browsing.md, "Map view"): every photo of the result
  * that has a place, as a marker on a map, in place of the thumbnails. The
  * current photo, the selection and the keys are the grid's: Left, Right,
@@ -48,10 +36,8 @@ export function MapView({ album, onOpen }: MapViewProps) {
   const current = useGridStore((s) => s.current);
   const pending = useGridStore((s) => s.pending);
   const anchor = useGridStore((s) => s.anchor);
-  const mapsOnline = useSettingsStore((s) => (s.settings === null ? undefined : s.settings.maps_online));
-  // Switching off takes effect at once, before the save answers, and stays off if it fails.
-  const [forcedOff, setForcedOff] = useState(false);
-  const tilesOn = mapsOnline === true && !forcedOff;
+  const tiles = useMapTiles();
+  const { tilesOn } = tiles;
   const [answer, setAnswer] = useState<{ token: string; map: MapPoints } | null>(null);
   const [failing, setFailing] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
@@ -148,14 +134,6 @@ export function MapView({ album, onOpen }: MapViewProps) {
     mapRef.current?.setTiles(tilesOn);
   }, [tilesOn]);
 
-  const turnOn = async () => {
-    if (await saveMapsOnline(true)) setForcedOff(false);
-  };
-  const turnOff = () => {
-    setForcedOff(true);
-    void saveMapsOnline(false);
-  };
-
   // The last answer stays until the next one arrives, so nothing flashes.
   const map = answer?.map ?? null;
   return (
@@ -168,31 +146,7 @@ export function MapView({ album, onOpen }: MapViewProps) {
             <EmptyState heading={t.empty} />
           </div>
         )}
-        {mapsOnline === null && (
-          <div className="ow-map__consent" role="group" aria-label={t.consent.load}>
-            <p>{t.consent.text}</p>
-            <div className="ow-map__consent-buttons">
-              <Button kind="primary" onClick={() => void turnOn()}>
-                {t.consent.load}
-              </Button>
-              <Button onClick={() => void saveMapsOnline(false)}>{t.consent.notNow}</Button>
-            </div>
-          </div>
-        )}
-        {(mapsOnline === true || mapsOnline === false) && (
-          <div className="ow-map__toggle">
-            <Tooltip text={tilesOn ? t.toggle.onlineTip : t.toggle.offlineTip}>
-              <Button size="sm" onClick={tilesOn ? turnOff : () => void turnOn()}>
-                {tilesOn ? t.toggle.online : t.toggle.offline}
-              </Button>
-            </Tooltip>
-          </div>
-        )}
-        {tilesOn && failing && (
-          <p className="ow-map__offline" role="status">
-            {t.offline}
-          </p>
-        )}
+        <TileControls tiles={tiles} failing={failing} />
       </div>
     </div>
   );

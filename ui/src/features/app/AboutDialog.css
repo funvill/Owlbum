@@ -1,0 +1,41 @@
+/* The About box (docs/08-desktop-and-release.md, "About box"). */
+
+.ow-about {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.ow-about__head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-4);
+}
+
+.ow-about__name {
+  font: var(--text-xl);
+  letter-spacing: var(--tracking-heading);
+}
+
+.ow-about__version,
+.ow-about__muted {
+  font: var(--text-sm);
+  color: var(--muted);
+}
+
+.ow-about__folder {
+  font: var(--text-sm);
+  overflow-wrap: anywhere;
+  user-select: text;
+}
+
+.ow-about__link {
+  align-self: flex-start;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--accent);
+  font: var(--text-md);
+  text-decoration: underline;
+  cursor: pointer;
+}

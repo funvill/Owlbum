@@ -5,7 +5,7 @@ default-members = ["crates/owlbum-core", "crates/owlbum-fixtures", "src-tauri"]
 
 [workspace.package]
 # The one source of the program's version (docs/08-desktop-and-release.md).
-version = "0.1.2"
+version = "0.1.3"
 edition = "2024"
 rust-version = "1.100"
 license = "MIT"

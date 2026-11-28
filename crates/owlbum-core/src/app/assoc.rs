@@ -143,6 +143,55 @@ pub fn unregister(reg: &dyn Registry, exe: &Path) -> Result<(), String> {
     Ok(())
 }
 
+/// The installer's no-window modes (issue 193): the NSIS installer runs
+/// `owlbum --associate-pictures` when its unticked-by-default checkbox
+/// was ticked, and the uninstaller runs `owlbum --forget-pictures`, so the
+/// entries are written and removed by the same code as Settings'.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum InstallerMode {
+    /// [`register`], then exit.
+    Associate,
+    /// [`unregister`], then exit.
+    Forget,
+}
+
+/// The installer's argument for [`InstallerMode::Associate`].
+pub const ASSOCIATE_ARG: &str = "--associate-pictures";
+/// The uninstaller's argument for [`InstallerMode::Forget`].
+pub const FORGET_ARG: &str = "--forget-pictures";
+
+/// The installer mode a command line asks for: [`ASSOCIATE_ARG`] or
+/// [`FORGET_ARG`] as the first argument after the program's own name.
+/// Anything else starts the program as usual.
+pub fn installer_mode<I, S>(args: I) -> Option<InstallerMode>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
+    let first = args.into_iter().nth(1)?;
+    match first.as_ref().to_str()? {
+        ASSOCIATE_ARG => Some(InstallerMode::Associate),
+        FORGET_ARG => Some(InstallerMode::Forget),
+        _ => None,
+    }
+}
+
+/// Runs an installer mode for the program at `exe`.
+///
+/// # Errors
+///
+/// As [`register`] and [`unregister`].
+pub fn run_installer_mode(
+    mode: InstallerMode,
+    reg: &dyn Registry,
+    exe: &Path,
+) -> Result<(), String> {
+    match mode {
+        InstallerMode::Associate => register(reg, exe),
+        InstallerMode::Forget => unregister(reg, exe),
+    }
+}
+
 #[cfg(test)]
 pub(crate) mod tests {
     use super::*;
@@ -272,5 +321,34 @@ pub(crate) mod tests {
         let reg = FakeRegistry::default();
         unregister(&reg, exe()).unwrap();
         assert!(reg.keys.lock().unwrap().is_empty());
+    }
+
+    #[test]
+    fn the_installer_modes_are_read_from_the_first_argument_only() {
+        let mode = |args: &[&str]| installer_mode(args.iter().copied());
+        assert_eq!(
+            mode(&["owlbum.exe", "--associate-pictures"]),
+            Some(InstallerMode::Associate)
+        );
+        assert_eq!(
+            mode(&["owlbum.exe", "--forget-pictures"]),
+            Some(InstallerMode::Forget)
+        );
+        assert_eq!(mode(&["owlbum.exe"]), None);
+        assert_eq!(mode(&["owlbum.exe", "a.jpg"]), None);
+        // A picture named like the flag, after the program's first
+        // argument, still opens as a picture.
+        assert_eq!(mode(&["owlbum.exe", "x.jpg", "--forget-pictures"]), None);
+        assert_eq!(mode(&["owlbum.exe", "--associate"]), None);
+    }
+
+    #[test]
+    fn the_installer_modes_register_and_unregister() {
+        let reg = FakeRegistry::default();
+        run_installer_mode(InstallerMode::Associate, &reg, exe()).unwrap();
+        assert!(is_registered(&reg, exe()));
+        run_installer_mode(InstallerMode::Forget, &reg, exe()).unwrap();
+        assert!(!is_registered(&reg, exe()));
+        assert!(reg.keys.lock().unwrap().values().all(BTreeMap::is_empty));
     }
 }

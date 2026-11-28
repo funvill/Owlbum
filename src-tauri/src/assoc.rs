@@ -17,6 +17,22 @@ pub struct FileTypes {
     pub exe: PathBuf,
 }
 
+/// The installer's no-window modes (`--associate-pictures`,
+/// `--forget-pictures`, issue 193): when the command line asks for one,
+/// does it on the current user's registry for this copy of the program and
+/// exits, before anything else starts (no window, no app data, no log).
+/// The exit code is 0 when it worked and 1 when not; the installer does not
+/// fail on it. Elsewhere than Windows it returns and the program starts.
+pub fn run_installer_mode() {
+    #[cfg(windows)]
+    if let Some(mode) = owlbum_core::app::assoc::installer_mode(std::env::args_os()) {
+        let done = std::env::current_exe()
+            .map_err(|e| e.to_string())
+            .and_then(|exe| owlbum_core::app::assoc::run_installer_mode(mode, &CurrentUser, &exe));
+        std::process::exit(i32::from(done.is_err()));
+    }
+}
+
 /// `HKEY_CURRENT_USER`. Nothing here needs administrator rights.
 #[cfg(windows)]
 pub struct CurrentUser;

@@ -416,7 +416,10 @@ fn the_real_updater_reads_the_test_feed() {
     let url = feed(vec![
         (200, release("99.0.0")),
         (200, release("0.0.1")),
+        // Each "no release" is asked again once, to read its status.
         (404, "Not Found".into()),
+        (404, "Not Found".into()),
+        (500, "{\"oops\": 1}".into()),
         (500, "{\"oops\": 1}".into()),
     ]);
     let source = real_source(&url);
@@ -429,7 +432,24 @@ fn the_real_updater_reads_the_test_feed() {
     assert_eq!(source.check(), Ok(None), "404: nothing published yet");
     assert_eq!(
         source.check(),
-        Ok(None),
-        "a server error reads as nothing published"
+        Err("The update server answered HTTP 500.".into()),
+        "a server error is a failed check, not up to date"
     );
+}
+
+#[test]
+fn an_install_that_failed_is_said_at_the_next_start() {
+    let f = fixture();
+    owlbum_core::app::update::record_install_failed(f.data.dir(), "the installer would not start");
+    let seen = f.collect("update_message");
+    invoke(&f.window, "app_startup", json!({})).unwrap();
+    assert_eq!(
+        messages(&seen),
+        [UpdateMessage::InstallFailed {
+            reason: "the installer would not start".into()
+        }]
+    );
+    // Once only.
+    invoke(&f.window, "app_startup", json!({})).unwrap();
+    assert_eq!(messages(&seen).len(), 1);
 }

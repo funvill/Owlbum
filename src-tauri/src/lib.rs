@@ -110,6 +110,8 @@ pub fn is_dev_build(debug_assertions: bool, identifier: &str) -> bool {
 /// which ends the program.
 pub fn run() {
     use owlbum_core::app::fatal::Fatal;
+    // The installer's and uninstaller's picture registration: no window.
+    assoc::run_installer_mode();
     let context = tauri::generate_context!();
     let dev = is_dev_build(cfg!(debug_assertions), &context.config().identifier);
     let package = owlbum_core::app::package_kind(dev, std::env::var_os("APPIMAGE").is_some());

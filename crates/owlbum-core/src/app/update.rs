@@ -149,6 +149,46 @@ pub fn is_newer(latest: &str, current: &str) -> bool {
     super::whats_new::compare(latest, current) == std::cmp::Ordering::Greater
 }
 
+/// The taskbar's progress for a state (issue 178): the download's
+/// percentage while `downloading`, none otherwise (the bar is cleared).
+pub fn taskbar_percent(state: &UpdateState) -> Option<u8> {
+    (state.state == UpdateStateKind::Downloading).then(|| state.percent.unwrap_or(0).min(100))
+}
+
+/// What the feed answered when the updater found no release there, asked
+/// again (issue 178): the plugin reports every answer that is not a
+/// success as "no release". 404 (and 410) means nothing is published yet,
+/// so up to date; any other failure status is a failed check. A success
+/// now means the feed changed in between: up to date until the next check.
+///
+/// # Errors
+///
+/// The words of a failed check for any other status.
+pub fn feed_status(status: u16) -> Result<(), String> {
+    match status {
+        200..=299 | 404 | 410 => Ok(()),
+        _ => Err(format!("The update server answered HTTP {status}.")),
+    }
+}
+
+/// The file in the app data folder that tells the next start an install
+/// failed (issue 178). It holds the reason, one line.
+pub const INSTALL_FAILED_FILE: &str = "update-install-failed.txt";
+
+/// Records that the install failed, for the copy that starts next. Best
+/// effort: the log has the reason too.
+pub fn record_install_failed(data_dir: &std::path::Path, reason: &str) {
+    let _ = std::fs::write(data_dir.join(INSTALL_FAILED_FILE), self::reason(reason));
+}
+
+/// Takes the failed install's reason recorded by the copy before, once.
+pub fn take_install_failed(data_dir: &std::path::Path) -> Option<String> {
+    let path = data_dir.join(INSTALL_FAILED_FILE);
+    let text = std::fs::read_to_string(&path).ok()?;
+    let _ = std::fs::remove_file(&path);
+    Some(reason(&text))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -224,5 +264,44 @@ mod tests {
             release_notes_url("0.2.0"),
             "https://github.com/funvill/Owlbum/releases/tag/v0.2.0"
         );
+    }
+
+    #[test]
+    fn the_taskbar_shows_only_a_download() {
+        let at = |kind, percent| UpdateState {
+            state: kind,
+            version: Some("0.2.0".into()),
+            percent,
+        };
+        assert_eq!(taskbar_percent(&at(UpdateStateKind::Downloading, Some(42))), Some(42));
+        assert_eq!(taskbar_percent(&at(UpdateStateKind::Downloading, None)), Some(0));
+        assert_eq!(taskbar_percent(&at(UpdateStateKind::Ready, Some(100))), None);
+        assert_eq!(taskbar_percent(&at(UpdateStateKind::Available, None)), None);
+    }
+
+    #[test]
+    fn only_404_reads_as_nothing_published() {
+        assert_eq!(feed_status(404), Ok(()));
+        assert_eq!(feed_status(410), Ok(()));
+        assert_eq!(feed_status(200), Ok(()));
+        assert_eq!(
+            feed_status(500),
+            Err("The update server answered HTTP 500.".to_owned())
+        );
+        assert!(feed_status(403).is_err());
+        assert!(feed_status(503).is_err());
+    }
+
+    #[test]
+    fn a_failed_install_is_told_to_the_next_start_once() {
+        let tmp = tempfile::tempdir().unwrap();
+        assert_eq!(take_install_failed(tmp.path()), None);
+        record_install_failed(tmp.path(), "the installer could not start
+more");
+        assert_eq!(
+            take_install_failed(tmp.path()).as_deref(),
+            Some("the installer could not start")
+        );
+        assert_eq!(take_install_failed(tmp.path()), None);
     }
 }

@@ -96,12 +96,35 @@ impl Updates {
     }
 }
 
-/// Moves to a new state: kept, sent to the page and shown in Help.
+/// Moves to a new state: kept, sent to the page, and shown on the
+/// taskbar while it downloads.
 fn set<R: Runtime>(app: &AppHandle<R>, new: UpdateState) {
     if let Some(u) = app.try_state::<Updates>() {
         u.lock().state = new.clone();
     }
+    taskbar(app, &new);
     let _ = crate::events::emit(app, &new);
+}
+
+/// The download's progress on the window's taskbar button (issue 178);
+/// cleared in every other state. Best effort: a window that is gone, or a
+/// desktop without the bar, shows nothing.
+fn taskbar<R: Runtime>(app: &AppHandle<R>, state: &UpdateState) {
+    use tauri::window::{ProgressBarState, ProgressBarStatus};
+    let Some(window) = app.get_webview_window("main") else {
+        return;
+    };
+    let bar = match rules::taskbar_percent(state) {
+        Some(percent) => ProgressBarState {
+            status: Some(ProgressBarStatus::Normal),
+            progress: Some(u64::from(percent)),
+        },
+        None => ProgressBarState {
+            status: Some(ProgressBarStatus::None),
+            progress: None,
+        },
+    };
+    let _ = window.set_progress_bar(bar);
 }
 
 fn say<R: Runtime>(app: &AppHandle<R>, message: UpdateMessage) {
@@ -311,7 +334,8 @@ pub fn called_off<R: Runtime>(app: &AppHandle<R>) {
 }
 
 /// The closing steps have run (the album is closed): install. If it fails,
-/// the current version starts again, and the log says why.
+/// the current version starts again, the log says why, and the new start
+/// shows "Install failed" ([`report_failed_install`]).
 pub fn after_close<R: Runtime>(app: &AppHandle<R>) {
     let Some(source) = app.try_state::<Updates>().and_then(|u| u.source()) else {
         app.exit(0);
@@ -321,8 +345,23 @@ pub fn after_close<R: Runtime>(app: &AppHandle<R>) {
         Ok(()) => app.exit(0),
         Err(e) => {
             tracing::error!(target: "update", "the install failed: {e}; starting this version again");
+            if let Some(data) = app.try_state::<AppData>() {
+                rules::record_install_failed(data.dir(), &e);
+            }
             app.restart();
         }
+    }
+}
+
+/// At `app_startup`: an install the copy before could not run is said now
+/// ("Install failed"), once.
+pub fn report_failed_install<R: Runtime>(app: &AppHandle<R>) {
+    let Some(data) = app.try_state::<AppData>() else {
+        return;
+    };
+    if let Some(reason) = rules::take_install_failed(data.dir()) {
+        tracing::info!(target: "update", "telling the page the last install failed: {reason}");
+        say(app, UpdateMessage::InstallFailed { reason });
     }
 }
 
@@ -420,8 +459,12 @@ impl<R: Runtime> UpdateSource for PluginSource<R> {
                 *self.offered.lock().unwrap_or_else(PoisonError::into_inner) = Some(update);
                 Ok(Some(version))
             }
-            // Nothing published yet: the feed answered 404.
-            Ok(None) | Err(tauri_plugin_updater::Error::ReleaseNotFound) => Ok(None),
+            Ok(None) => Ok(None),
+            // The plugin says this for every answer that is not a success:
+            // asked again, only 404 means nothing is published yet.
+            Err(tauri_plugin_updater::Error::ReleaseNotFound) => {
+                tauri::async_runtime::block_on(feed_status(&self.feed)).map(|()| None)
+            }
             Err(e) => Err(e.to_string()),
         }
     }
@@ -476,6 +519,22 @@ impl<R: Runtime> UpdateSource for PluginSource<R> {
             .ok_or("the downloaded update is gone.")?;
         update.install(bytes).map_err(|e| e.to_string())
     }
+}
+
+/// What the feed answers now, by its status alone (a GET, redirects
+/// followed, as the plugin asks). Only after the plugin found no release.
+async fn feed_status(feed: &tauri::Url) -> Result<(), String> {
+    let client = reqwest::Client::builder()
+        .user_agent(concat!("owlbum/", env!("CARGO_PKG_VERSION")))
+        .timeout(std::time::Duration::from_secs(30))
+        .build()
+        .map_err(|e| e.to_string())?;
+    let response = client
+        .get(feed.clone())
+        .send()
+        .await
+        .map_err(|e| e.to_string())?;
+    rules::feed_status(response.status().as_u16())
 }
 
 /// The public key in `plugins.updater.pubkey` of the configuration, or

@@ -11,6 +11,13 @@ the window's title shows the version that is running.
 
 ### Added
 
+- The Windows installer offers "Open pictures with Owlbum" as a
+  checkbox on its first page, unticked unless you tick it. Uninstalling
+  Owlbum removes its "Open with" entries for pictures.
+- While an update downloads, Owlbum's taskbar button shows the progress.
+- If an update could not be installed, Owlbum says "Install failed"
+  with the reason when it starts again, instead of only writing it to
+  the log.
 - HEIC, HEIF and AVIF photos show like any other photo on Windows when
   the free Microsoft Store extensions are installed (HEIF Image
   Extensions, plus HEVC Video Extensions from Device Manufacturer for
@@ -32,6 +39,8 @@ the window's title shows the version that is running.
 
 ### Changed
 
+- Checking for updates when the update server has a problem now says
+  the check failed, instead of saying Owlbum is up to date.
 - Moving photos to the Recycle Bin or Trash now asks in Owlbum's own
   dialog, where Cancel is the default button: Enter and Esc both keep
   the photos.

@@ -234,7 +234,10 @@ On Windows the folder is deliberately not `%LOCALAPPDATA%\Owlbum`, because a per
   models/<model id>/…      downloaded tagging models, their .part files and a verified.json marker
   webview/                 the webview's own data
   logs/owlbum.log          and owlbum.previous.log; rotated at 2,000,000 bytes when first opened in a run
+  update-install-failed.txt  only after an update failed to install: its reason, read and deleted at the next start
 ```
+
+`app.sqlite` also marks the folder as Owlbum's app data: the walker skips any folder that holds it, so an app data folder placed inside an album is never scanned (#215).
 
 If the app data folder cannot be written, logs go to a folder in the system temp directory. A damaged `app.sqlite` (not a database, or failing `PRAGMA quick_check`) is renamed `app.damaged-<timestamp>.sqlite` (the UTC time as `YYYYMMDD-HHMMSS`, with `-2`, `-3`, … if taken) and a new one is made; only preferences and the recent list are lost. Any other failure to open it (the folder cannot be written, the file is busy) leaves the file alone and is fatal at start.
 

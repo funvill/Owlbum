@@ -673,6 +673,8 @@ command! {
             crate::fatal::page_started();
             crate::show_window(&app);
             crate::update::start_quiet(&app);
+            // An install the copy before could not run (issue 178).
+            crate::update::report_failed_install(&app);
             Ok(Startup {
                 version: app::version().version,
                 platform: std::env::consts::OS.to_owned(),

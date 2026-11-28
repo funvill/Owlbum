@@ -3755,6 +3755,7 @@ dependencies = [
  "muda",
  "owlbum-core",
  "owlbum-fixtures",
+ "reqwest",
  "rfd",
  "serde",
  "serde_json",

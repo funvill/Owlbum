@@ -39,6 +39,9 @@ tauri-plugin-single-instance = "2"
 # "Updates"), driven only from Rust; nothing is granted to the page. It
 # verifies every download with the public key in tauri.conf.json.
 tauri-plugin-updater = "2"
+# Only to tell a 404 update feed from a server error after the updater's
+# check (issue 178): the version the updater plugin uses, with its TLS.
+reqwest = { version = "0.13", default-features = false }
 # The native fatal error box (docs/08, "The fatal error dialog"), shown
 # when Tauri cannot be trusted. The version and features the dialog
 # plugin already uses.

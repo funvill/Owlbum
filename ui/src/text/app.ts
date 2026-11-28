@@ -31,6 +31,8 @@ export const settingsText = {
   clear: "Clear",
   cleared: (size: string) => `Cleared ${size} of thumbnails.`,
   editTarget: "When I edit a photo",
+  /** `save_all.ask` (owner's feedback, issue 209). */
+  saveAllAsk: "Ask before Save all overwrites the photo files",
   editAlbum: "Keep the edit in the album",
   editAlbumNote: "Done is the save. The photo file is never touched.",
   editFile: "Save edits into the photo file",

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import L from "leaflet";
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi, type MockInstance } from "vitest";
@@ -109,6 +109,17 @@ describe("the place picker", () => {
     await waitFor(() => expect(useToasts.getState().toasts).toHaveLength(1));
     expect(closed).toBe(false);
     expect(fake.calls.find((c) => c.command === "app_country_at")?.args).toEqual({ lat: 0, lon: -30 });
+  });
+
+  it("fills the window from its full-screen button; Esc then leaves full screen, not the picker", async () => {
+    const onClose = vi.fn();
+    await openPicker([1], onClose);
+    fireEvent.click(screen.getByRole("button", { name: mapText.fullScreen }));
+    const frame = () => document.querySelector(".ow-picker__frame");
+    expect(frame()).toHaveClass("ow-map__frame--full");
+    fireEvent.keyDown(screen.getByRole("dialog"), { key: "Escape" });
+    expect(frame()).not.toHaveClass("ow-map__frame--full");
+    expect(onClose).not.toHaveBeenCalled();
   });
 
   it("asks before loading map tiles", async () => {

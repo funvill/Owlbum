@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, render, screen, waitFor, within } from "@testing-library/react";
+import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setApi } from "../../../api";
 import type { InfoPatch } from "../../../api/bindings/InfoPatch";
@@ -48,12 +48,15 @@ function withDetail(changes: Partial<PhotoDetail>): Partial<FakeHandlers> {
 }
 
 describe("typed fields", () => {
-  it("saves the description on blur, trimmed, and shows Saved for 1,800 ms", async () => {
+  it("saves the notes on blur, trimmed, and shows Saved for 1,800 ms", async () => {
     const user = userEvent.setup();
     const { fake } = setup({ id: 1 });
-    const box = await screen.findByRole("textbox", { name: "Description" });
-    await user.type(box, "  At the tower {Enter}");
-    expect(patches(fake)).toEqual([{ ids: [1], patch: { description: "At the tower" } }]);
+    // Description was folded into Notes (owner's feedback, issue 208).
+    expect(screen.queryByRole("textbox", { name: "Description" })).toBeNull();
+    const box = await screen.findByRole("textbox", { name: "Notes" });
+    await user.type(box, "  At the tower ");
+    await user.tab();
+    expect(patches(fake)).toEqual([{ ids: [1], patch: { notes: "At the tower" } }]);
     const status = await screen.findByText("Saved");
     expect(status).toHaveAttribute("role", "status");
     await waitFor(() => expect(screen.queryByText("Saved")).toBeNull(), {
@@ -93,8 +96,9 @@ describe("typed fields", () => {
         },
       },
     );
-    const box = await screen.findByRole("textbox", { name: "Description" });
-    await user.type(box, "Kept{Enter}");
+    const box = await screen.findByRole("textbox", { name: "Notes" });
+    await user.type(box, "Kept");
+    await user.tab();
     await waitFor(() => expect(useToasts.getState().toasts).toHaveLength(1));
     expect(useToasts.getState().toasts[0]).toMatchObject({ kind: "error" });
     expect(await screen.findByText("Something went wrong while saving to the album database.")).toBeInTheDocument();
@@ -121,11 +125,11 @@ describe("typed fields", () => {
   it("saves changed text once when the photo changes without a blur", async () => {
     const user = userEvent.setup();
     const { fake, show } = setup({ id: 1 });
-    const box = await screen.findByRole("textbox", { name: "Description" });
+    const box = await screen.findByRole("textbox", { name: "Notes" });
     await user.type(box, "Unsaved");
     show({ id: 2 });
     await screen.findByText(/IMG_0002\.jpg$/);
-    expect(patches(fake)).toEqual([{ ids: [1], patch: { description: "Unsaved" } }]);
+    expect(patches(fake)).toEqual([{ ids: [1], patch: { notes: "Unsaved" } }]);
   });
 
   it("does not send an invalid date when leaving, and shows the date message on blur", async () => {
@@ -230,24 +234,25 @@ describe("typed fields", () => {
     expect(patches(fake).at(-1)?.patch).toEqual({ people: ["Bob", "Émile"] });
   });
 
-  it("saves the location group when focus leaves it, with a message for bad input", async () => {
+  it("saves the place name on Enter, keeping the place's coordinates", async () => {
     const user = userEvent.setup();
     const { fake } = setup({ id: 1 });
-    const group = await screen.findByRole("group", { name: "Location" });
-    const lat = within(group).getByRole("textbox", { name: "Latitude" });
-    const name = within(group).getByRole("textbox", { name: "Place name" });
-    await user.clear(lat);
-    await user.type(lat, "abc");
-    await user.click(name);
-    expect(patches(fake)).toEqual([]);
-    await user.click(screen.getByRole("textbox", { name: "Notes" }));
-    expect(await screen.findByText("Latitude must be a number.")).toBeInTheDocument();
-    await user.clear(lat);
-    await user.type(lat, "10,5");
+    const name = await screen.findByRole("textbox", { name: "Place name" });
+    expect(screen.queryByRole("textbox", { name: "Latitude" })).toBeNull();
     await user.type(name, "Spot{Enter}");
     expect(patches(fake).at(-1)?.patch).toEqual({
-      location: { lat: 10.5, lon: 2.29448, name: "Spot" },
+      location: { lat: 48.85837, lon: 2.29448, name: "Spot" },
     });
+  });
+
+  it("sets the date and time from the picker", async () => {
+    const { fake } = setup({ id: 1 });
+    const picker = await screen.findByLabelText("Pick the date and time", { selector: "input" });
+    expect((picker as HTMLInputElement).value).toMatch(/^2024-06-12T14:03/);
+    expect(screen.getByRole("button", { name: "Pick the date and time" })).toBeInTheDocument();
+    fireEvent.change(picker, { target: { value: "2021-05-05T08:00" } });
+    await waitFor(() => expect(patches(fake).map((p) => p.patch)).toEqual([{ date_override: "2021-05-05T08:00:00" }]));
+    expect(screen.getByRole("textbox", { name: "Date and time taken" })).toHaveValue("2021-05-05 08:00");
   });
 
   it("disables every field in a view-only album", async () => {
@@ -264,14 +269,15 @@ describe("typed fields", () => {
         },
       }),
     );
-    await screen.findByRole("textbox", { name: "Description" });
+    await screen.findByRole("textbox", { name: "Notes" });
     const panel = screen.getByRole("complementary", { name: "Details" });
     const controls = [
       ...within(panel).getAllByRole("textbox"),
       ...within(panel).getAllByRole("combobox"),
       screen.getByRole("button", { name: "Use the camera's date" }),
     ];
-    expect(controls.length).toBeGreaterThan(6);
+    expect(controls.length).toBeGreaterThanOrEqual(5);
+    expect(screen.getByRole("button", { name: "Pick the date and time" })).toHaveAttribute("aria-disabled", "true");
     for (const c of controls) expect(c).toBeDisabled();
   });
 });

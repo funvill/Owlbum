@@ -65,6 +65,11 @@ maps_online: boolean | null,
  */
 edit_target: EditTarget, 
 /**
+ * Save all asks before it overwrites the photo files (false once the
+ * user ticked "Don't ask again, always overwrite").
+ */
+"save_all.ask": boolean, 
+/**
  * Reopen the last album at start.
  */
 reopen_last: boolean, 

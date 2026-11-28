@@ -4,6 +4,11 @@ import { useEffect, useRef, useState, type KeyboardEvent, type PointerEvent } fr
 export const SPLITTER_STEP = 16;
 /** A width changed by keys is saved this long after the last key. */
 export const SPLITTER_SAVE_MS = 500;
+/**
+ * A drag that goes this far past the minimum hides the panel when it is
+ * let go (owner's feedback, issue 207), for splitters that can hide theirs.
+ */
+export const SPLITTER_COLLAPSE = 48;
 
 export interface SplitterProps {
   /** The accessible name: "Resize thumbnail column". */
@@ -21,6 +26,11 @@ export interface SplitterProps {
   /** The default width, put back by a double-click. */
   reset: number;
   /**
+   * Hides the panel: a drag let go more than `SPLITTER_COLLAPSE` past the
+   * minimum calls this instead of `onSave`, so the stored width is kept.
+   */
+  onCollapse?(): void;
+  /**
    * A row splitter over the bottom strip: it sets a height, moves with the
    * pointer's height, and Up and Down move it (`dir` +1 when moving down
    * makes it bigger).
@@ -34,11 +44,24 @@ const clamp = (x: number, lo: number, hi: number) => Math.round(Math.min(hi, Mat
  * A 6 px column splitter (docs/04-browsing.md, "Splitters"): a focusable
  * `separator` that a drag, Left and Right (16 px), Home and End move, and a
  * double-click puts back to its default. Across, it is a row splitter that
- * Up and Down move.
+ * Up and Down move. A splitter given `onCollapse` hides its panel when a
+ * drag is let go well past the minimum.
  */
-export function Splitter({ label, value, min, max, dir, onMove, onSave, reset, across = false }: SplitterProps) {
-  const drag = useRef<{ x: number; start: number; width: number } | null>(null);
+export function Splitter({
+  label,
+  value,
+  min,
+  max,
+  dir,
+  onMove,
+  onSave,
+  reset,
+  onCollapse,
+  across = false,
+}: SplitterProps) {
+  const drag = useRef<{ x: number; start: number; width: number; collapse: boolean } | null>(null);
   const [dragging, setDragging] = useState(false);
+  const [collapsing, setCollapsing] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const pendingKeys = useRef<number | null>(null);
   const save = useRef(onSave);
@@ -59,21 +82,26 @@ export function Splitter({ label, value, min, max, dir, onMove, onSave, reset, a
     if (d === null) return;
     drag.current = null;
     setDragging(false);
-    onSave(d.width);
+    setCollapsing(false);
+    if (d.collapse && onCollapse !== undefined) onCollapse();
+    else onSave(d.width);
   };
 
   const onPointerDown = (e: PointerEvent<HTMLDivElement>) => {
     if (e.button !== 0) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    drag.current = { x: across ? e.clientY : e.clientX, start: value, width: value };
+    drag.current = { x: across ? e.clientY : e.clientX, start: value, width: value, collapse: false };
     setDragging(true);
   };
 
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const d = drag.current;
     if (d === null) return;
-    d.width = clamp(d.start + dir * ((across ? e.clientY : e.clientX) - d.x), min, max);
+    const raw = d.start + dir * ((across ? e.clientY : e.clientX) - d.x);
+    d.width = clamp(raw, min, max);
+    d.collapse = onCollapse !== undefined && raw < min - SPLITTER_COLLAPSE;
+    setCollapsing(d.collapse);
     onMove(d.width);
   };
 
@@ -105,7 +133,7 @@ export function Splitter({ label, value, min, max, dir, onMove, onSave, reset, a
       aria-valuemin={min}
       aria-valuemax={Number.isFinite(max) ? max : undefined}
       tabIndex={0}
-      className={`ow-splitter${across ? " ow-splitter--across" : ""}${dragging ? " ow-splitter--dragging" : ""}`}
+      className={`ow-splitter${across ? " ow-splitter--across" : ""}${dragging ? " ow-splitter--dragging" : ""}${collapsing ? " ow-splitter--collapsing" : ""}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={end}

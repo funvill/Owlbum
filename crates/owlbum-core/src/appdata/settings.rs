@@ -136,6 +136,10 @@ pub struct Settings {
     pub maps_online: Option<bool>,
     /// Where an edit ends up.
     pub edit_target: EditTarget,
+    /// Save all asks before it overwrites the photo files (false once the
+    /// user ticked "Don't ask again, always overwrite").
+    #[serde(rename = "save_all.ask")]
+    pub save_all_ask: bool,
     /// Reopen the last album at start.
     pub reopen_last: bool,
     /// Check for updates once a day.
@@ -179,6 +183,7 @@ impl Default for Settings {
             stack_similar: true,
             maps_online: None,
             edit_target: EditTarget::Album,
+            save_all_ask: true,
             reopen_last: true,
             updates_auto: true,
             updates_last_check: None,
@@ -216,6 +221,7 @@ pub const KEYS: &[(&str, Check)] = &[
     ("stack_similar", Value::is_boolean),
     ("maps_online", |v| v.is_null() || v.is_boolean()),
     ("edit_target", |v| one_of(v, &["album", "file"])),
+    ("save_all.ask", Value::is_boolean),
     ("reopen_last", Value::is_boolean),
     ("updates.auto", Value::is_boolean),
     ("updates.last_check", |v| {
@@ -365,6 +371,7 @@ mod tests {
                 "stack_similar": true,
                 "maps_online": null,
                 "edit_target": "album",
+                "save_all.ask": true,
                 "reopen_last": true,
                 "updates.auto": true,
                 "updates.last_check": null,
@@ -414,6 +421,7 @@ mod tests {
                 "timeline_unit": "month",
                 "maps_online": false,
                 "edit_target": "file",
+                "save_all.ask": false,
                 "tagging.describe": "florence-2-base",
                 "cache.limit_gb": 1000,
                 "window": { "x": -1920, "y": 10, "width": 1200, "height": 800, "maximised": true },
@@ -434,6 +442,7 @@ mod tests {
         assert_eq!(s.timeline_unit, Some(SettingsTimelineUnit::Month));
         assert_eq!(s.maps_online, Some(false));
         assert_eq!(s.edit_target, EditTarget::File);
+        assert!(!s.save_all_ask);
         assert_eq!(s.tagging_describe.as_deref(), Some("florence-2-base"));
         assert_eq!(s.cache_limit_gb, 1000);
         assert_eq!(

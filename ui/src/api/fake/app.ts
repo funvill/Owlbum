@@ -20,6 +20,7 @@ export const defaultSettings: Settings = {
   stack_similar: true,
   maps_online: null,
   edit_target: "album",
+  "save_all.ask": true,
   reopen_last: true,
   "updates.auto": true,
   "updates.last_check": null,

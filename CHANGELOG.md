@@ -25,6 +25,17 @@ the window's title shows the version that is running.
 - Pointing at the tagging bar says what it is doing, which models it uses,
   how far it has got and about how long is left, or why it is paused or
   stopped. Screen readers read the same words.
+- Dragging a side panel or the bottom strip well past its smallest size
+  hides it. A hidden panel has a small button at the edge of the photo
+  where it was, to bring it back at its old size.
+- The map has a Full screen button: the map fills the window, and Esc or
+  the button again puts it back. The place picker's map has one too.
+- The date and time in the details panel has a calendar button that opens
+  a date and time picker; typing still works.
+- Save all is in the top bar whenever any photo has an edit, whichever
+  "When I edit a photo" choice is set. It asks first, because it
+  overwrites the photo files, with a "Don't ask again, always overwrite"
+  box; Settings can turn the question back on.
 
 ### Changed
 
@@ -33,9 +44,23 @@ the window's title shows the version that is running.
   sit just below the search box. The Owlbum name by the search box is gone.
 - There is no menu bar and no Tidy button any more: both moved into the
   More menu. Check automatically for updates is in Settings.
+- The details panel's Place section has only the Place name box; the
+  Coordinates and Country are shown as labels, and Pick on map sets the
+  place. The country search and the Latitude and Longitude boxes are gone.
+- Description and Notes are one box, Notes. A description you typed
+  before is kept: opening the album moves it into the notes once, above
+  what the notes held. The description the tagging model writes is apart
+  and stays.
+- Keywords and objects share one row of chips in What's in it.
+- Long EXIF names are cut short with "…" (the full name shows on
+  pointing) and never run over their values.
 
 ### Fixed
 
+- Pressing T or I now shows or hides the thumbnails or the details panel
+  once; before, the menu bar answered the key too and undid it.
+- Resizing the thumbnails no longer makes them shake: the grid keeps room
+  for its scrollbar, so a width settles.
 - Quitting no longer leaves Owlbum running in the background when
   closing the album gets stuck: it exits after 5 seconds, and the log
   says so.

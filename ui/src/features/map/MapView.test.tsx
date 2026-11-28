@@ -71,6 +71,21 @@ async function openMap() {
 }
 
 describe("the map view", () => {
+  it("fills the window from its full-screen button, and Esc or the button puts it back", async () => {
+    await openMap();
+    const frame = () => document.querySelector(".ow-map__frame");
+    expect(frame()).not.toHaveClass("ow-map__frame--full");
+    fireEvent.click(screen.getByRole("button", { name: mapText.fullScreen }));
+    expect(frame()).toHaveClass("ow-map__frame--full");
+    fireEvent.keyDown(window, { key: "Escape" });
+    expect(frame()).not.toHaveClass("ow-map__frame--full");
+    fireEvent.click(screen.getByRole("button", { name: mapText.fullScreen }));
+    const leave = screen.getByRole("button", { name: mapText.exitFullScreen });
+    expect(leave).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(leave);
+    expect(frame()).not.toHaveClass("ow-map__frame--full");
+  });
+
   it("is chosen in the view switch and saved as the view", async () => {
     render(<ViewBar />);
     await grid().start();

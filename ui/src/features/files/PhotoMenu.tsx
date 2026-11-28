@@ -8,7 +8,8 @@ import { useAlbumStore, viewOnlyReason } from "../album";
 import { BLOCK, copyOnlyLabel, gridBlocks, useGridStore } from "../grid";
 import { turn } from "../edit/turn";
 import { isEditing, notEditable, openEdit } from "../edit/mode";
-import { refreshEditStatus, revertToOriginal, saveAll, saveAs, saveToFile, saving, useSaveStore } from "../edit/save";
+import { askSaveAll } from "../edit/SaveAllButton";
+import { refreshEditStatus, revertToOriginal, saveAs, saveToFile, saving, useSaveStore } from "../edit/save";
 import { useSettingsStore } from "../app/settings";
 import { useViewerStore } from "../viewer/store";
 import { editText } from "../../text/edit";
@@ -115,7 +116,7 @@ export function PhotoMenu({ at, photoId, onClose }: PhotoMenuProps) {
                 icon: "check" as const,
                 tooltip: editText.saveAllTooltip,
                 disabledReason: blocked ?? busyReason,
-                onSelect: () => void saveAll(),
+                onSelect: askSaveAll,
               },
             ]
           : []),

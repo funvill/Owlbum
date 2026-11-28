@@ -1,10 +1,14 @@
 /* docs/04-browsing.md, "The grid" and "Tiles"; docs/09-visual-design.md, "Badges on tiles". */
 
+/* The scrollbar's room is always kept (owner's feedback, issue 207): the
+   column count follows the box's width, so a scrollbar that came and went
+   with the row count would change the width again, and the tiles shook. */
 .ow-grid {
   position: relative;
   height: 100%;
   overflow-x: hidden;
   overflow-y: auto;
+  scrollbar-gutter: stable;
   background: var(--stage);
   overscroll-behavior: contain;
 }
@@ -52,9 +56,12 @@
 /* The bottom strip (docs/04-browsing.md, "Hiding and moving the panels"):
    the grid on its side. Each row is a column of one or two tiles and the
    box scrolls sideways. */
+/* Across, the strip's height sets the row count, so its scrollbar is always
+   there for the same reason. */
 .ow-grid--across {
-  overflow-x: auto;
+  overflow-x: scroll;
   overflow-y: hidden;
+  scrollbar-gutter: auto;
 }
 
 .ow-grid--across .ow-grid__content {

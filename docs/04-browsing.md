@@ -320,6 +320,8 @@ Each splitter is a `role=separator` with `aria-orientation=vertical`, 6px wide, 
 - **Keys.** With focus on a splitter, Left and Right move it by 16px. Home and End set the minimum and maximum.
 - **Saving.** On pointer-up, on lost capture, or 500 ms after the last key, the width is saved with `app_settings_set` under `panel.grid_width` or `panel.details_width`.
 - **Double-click** puts the default width back (420 or 340).
+- **Dragging past the minimum hides the panel** (owner's feedback, #207). A drag that goes more than 48 px past the minimum (`SPLITTER_COLLAPSE`) shows the splitter in `--muted`, and letting go there hides the panel (`panel.grid_shown` or `panel.details_shown` false) instead of saving a width; the stored width is kept for when it shows again. The bottom strip's splitter does the same. Keys stop at the minimum and never hide.
+- **The width settles** (#207). The grid keeps its scrollbar's room at all times (`scrollbar-gutter: stable`; the bottom strip's sideways scrollbar is always there): its column count follows its width, so a scrollbar that came and went with the row count changed the width again and the tiles shook.
 
 ### Hiding and moving the panels
 
@@ -335,6 +337,7 @@ Owner's feedback on 0.1.3 (#185). The thumbnails and the details panel can each 
 - **The bottom strip.** As wide as the window, under the preview and the details column, with the view switch on top. It is the same grid turned on its side: its rows run down the strip (one or two tiles, as its height allows) and it scrolls sideways; the mouse wheel scrolls it sideways too. Its height is `panel.strip_height` (default 200, at least 120, and at most what leaves the preview 200 px above it), set by a row splitter over it ("Resize thumbnail strip": drag, Up and Down by 16 px, Home and End, double-click for 200), saved like the column splitters. In the timeline each heading reads upwards in its own narrow column; the month rail is not shown in the strip. The map, when it is the view, fills the strip.
 - **Hidden thumbnails** stay in the page, out of sight, so the review keys, the current photo, the selection, the rows the preview needs and the store keep working: Left and Right still step through the result. When they show again the current photo is brought into view. A hidden column has no splitter, and the preview takes its room (the column widths below count only the columns in the row).
 - **A hidden details panel** is not drawn; the preview still reads the photo's details it needs.
+- **Bringing a hidden panel back** (owner's feedback, #207). While a panel is hidden, a small button sits on the preview's edge where it was: a `chevron-right` button at the middle of the left edge ("Show thumbnails"), or a `chevron-up` one at the middle of the bottom edge when the thumbnails sit along the bottom, and a `chevron-left` one at the middle of the right edge ("Show details panel"). Each shows its panel, as T and I do; T and I toggle exactly once per press (the native menu that also answered them is gone, #197).
 - F6 skips a hidden region.
 
 ### View switch
@@ -709,21 +712,18 @@ The panel shows the current photo. With no current photo the column is an empty 
 | v Histogram   [80px chart]            |
 |   Shadows clipped 0.4 %  Highlights clipped 2.3 %
 | v Place                               |
-|   Country     France                  |
+|   PLACE NAME                  Saved   |
+|   [__________]                        |
 |   Coordinates 48.85837, 2.29448       |
+|   Country     France                  |
 |   [map-pin Pick on map] [map Show on map]
-|   LOCATION                    Saved   |
-|   [Search for a country…]             |
-|   Latitude [____]  Longitude [____]   |
-|   Place name [__________]             |
 | v People                              |
 |   (Ann x) (Bob x)                     |
 |   [Add a name, press Enter]           |
 | v Date and time                       |
-|   [2024-06-12 14:03:00  ]             |
+|   [2024-06-12 14:03:00  ] [calendar]  |
 |   Use the camera's date               |
-| v Description and notes               |
-|   DESCRIPTION [__________]            |
+| v Notes                               |
 |   NOTES [text area, 4 rows]           |
 | v EXIF                                |
 |   Make        Owlbum                  |
@@ -749,11 +749,11 @@ Each section has a header button with a chevron (down when open, right when fold
 | `whatsinit` | What's in it | Defined in [Tagging](07-tagging.md). |
 | `camera` | Camera | The camera rows below. |
 | `histogram` | Histogram | See [Histogram](#histogram). Not shown for videos. |
-| `place` | Place | Country and Coordinates rows when the photo has a place, then the Location field. |
+| `place` | Place | The Place name box, then the Coordinates and Country rows as labels ("None" when there is no place or no country), then Pick on map and Show on map (owner's feedback, #208: the Location search and the Latitude and Longitude boxes were taken out; Pick on map sets the coordinates). |
 | `people` | People | The People field. |
 | `date` | Date and time | The Date and time field. |
-| `notes` | Description and notes | The Description and Notes fields. |
-| `exif` | EXIF | Every EXIF tag the file carries, in file order, one row each: the tag's EXIF name (tooltip: its group, `Image`, `Exif`, `GPS` or `Interop`) and its value as text. Read with `photo_exif(id)` while the section is open; "No EXIF data in this file" when there are none, "The EXIF data could not be read." when the read fails. See [EXIF section](#exif-section). |
+| `notes` | Notes | The Notes field. The typed Description was folded into Notes (owner's feedback, #208; album migration 2, see [Data](02-data.md#schema)). |
+| `exif` | EXIF | Every EXIF tag the file carries, in file order, one row each: the tag's EXIF name (tooltip: the name and its group, `Image`, `Exif`, `GPS` or `Interop`) and its value as text. The name column is 120 px; a longer name is clipped with an ellipsis and never runs over its value, and the column gap always stays between them (#208). Read with `photo_exif(id)` while the section is open; "No EXIF data in this file" when there are none, "The EXIF data could not be read." when the read fails. See [EXIF section](#exif-section). |
 
 ### Facts
 
@@ -807,11 +807,10 @@ Every typed change goes through `photo_set_info([id], patch)`. A null in the pat
 
 | Field | Control | When it saves | What is sent |
 |---|---|---|---|
-| Description | One-line text box, label "Description" | On blur. Enter blurs. | `{ description }`: the text with leading and trailing spaces removed, or null when that is empty. Not sent when unchanged or already on its way. |
-| Notes | Text area, 4 rows, resizable downwards, label "Notes" | On blur. Enter adds a line. | `{ notes }`: the same rule. |
+| Notes | Text area, 4 rows, resizable downwards, label "Notes" | On blur. Enter adds a line. | `{ notes }`: the text with leading and trailing spaces removed, or null when that is empty. Not sent when unchanged or already on its way. (The Description box was folded into Notes, #208; `photo_set_info` still takes `description`, which the page no longer sends.) |
 | People | Chips, plus a text box with the placeholder "Add a name, press Enter" and suggestions | Enter, a comma (also inside pasted text), or blur with text in the box adds a name. A chip's **x** removes one. Backspace in an empty box removes the last chip. | `{ people }`: the whole list, or null when empty. |
-| Date and time | One-line text box, label "Date and time taken" | On blur or Enter. | `{ date_override }`; see the rules below. |
-| Location | A group: "Search for a country…", Latitude, Longitude, Place name. The **Pick on map** button above it opens the [place picker](#the-place-picker). | When focus leaves the whole group, or Enter in any of its boxes. | `{ location: { lat, lon, name } }` or `{ location: null }`; see the rules below. |
+| Date and time | One-line text box, label "Date and time taken", and a `calendar` button "Pick the date and time" that opens the browser's date and time picker (#208) | On blur or Enter; a picked date and time at once. | `{ date_override }`; see the rules below. |
+| Place name | One-line text box, label "Place name". Off, with the tooltip "Pick the place on the map first", while the photo has no coordinates. The **Pick on map** button opens the [place picker](#the-place-picker). | On blur or Enter. | `{ location: { lat, lon, name } }` with the photo's current coordinates, or `{ location: null }`; see the rules below. |
 
 **People rules.**
 
@@ -819,7 +818,7 @@ Every typed change goes through `photo_set_info([id], patch)`. A null in the pat
 - Names are compared ignoring case. A name already on the photo is not added twice. When a name matches a person already known in the album, the album's spelling is used (first spelling wins, as [Data](02-data.md) says).
 - Suggestions come from `album_people`, which [Organising](05-organising.md#people-suggestions) defines together with the rules: names already on the photo are left out, typing narrows the list to names with a word that starts with the typed text (ignoring case and accents), at most 8 are shown, most used first.
 
-**Date rules.** The box shows the effective date as `YYYY-MM-DD HH:MM:SS`, or is empty with the placeholder "YYYY-MM-DD HH:MM" when the photo has no date. A plain text box is used, because the browser's own date control is not dependable on every platform Owlbum runs on.
+**Date rules.** The box shows the effective date as `YYYY-MM-DD HH:MM:SS`, or is empty with the placeholder "YYYY-MM-DD HH:MM" when the photo has no date. The text box stays the way to type a date; beside it the `calendar` button opens the browser's date and time picker (an `<input type="datetime-local">` kept out of sight, opened with `showPicker()`), and a date picked there is put in the box and saved at once by the same rules (owner's feedback, #208).
 
 | What was typed | Result |
 |---|---|
@@ -832,7 +831,7 @@ Every typed change goes through `photo_set_info([id], patch)`. A null in the pat
 
 No time zone is ever applied. When a typed date exists, a link **Use the camera's date** under the box sends `{ date_override: null }`. When the file has no date of its own to go back to, the link reads **Clear the date** instead.
 
-**Location rules.** The boxes start from the effective place (the typed one, else the camera's GPS) and the typed place name. They are reset whenever those change and the group holds nothing unsaved.
+**Location rules.** Since #208 only Place name is typed; the coordinates are the photo's effective place, set by Pick on map, and the rules below are applied to them and the typed name (so of the errors only the name one can still arise, and the box is off while there are no coordinates). The boxes start from the effective place (the typed one, else the camera's GPS) and the typed place name. They are reset whenever those change and the group holds nothing unsaved.
 
 | What is in the boxes | Result |
 |---|---|
@@ -848,7 +847,7 @@ No time zone is ever applied. When a typed date exists, a link **Use the camera'
 
 Each coordinate has spaces removed from its ends; an empty box counts as absent. A decimal comma is accepted. Only the first error is shown, under the group.
 
-**Country search.** Typing in "Search for a country…" lists up to 6 countries whose name contains the text, ignoring case and accents (`app_place_search`): names that start with the text first, then names with a word that starts with it, then the rest, each group in name order. Up and Down move through the list, Enter or a click chooses, Esc closes it. The Country row and this search both use the Natural Earth country outlines that [Architecture](01-architecture.md#dependencies-chosen) bundles, with a point-in-outline lookup in Rust; nothing is fetched. Choosing one puts its name in Place name. If the latitude and longitude boxes are empty, it also fills them with the country's central point (Natural Earth's label point, or a point on the largest island when that lies at sea). Then the group saves.
+**Country search.** Taken out of the details panel on the owner's feedback (#208); the component and `app_place_search` remain, unused by the panel. Typing in "Search for a country…" lists up to 6 countries whose name contains the text, ignoring case and accents (`app_place_search`): names that start with the text first, then names with a word that starts with it, then the rest, each group in name order. Up and Down move through the list, Enter or a click chooses, Esc closes it. The Country row and this search both use the Natural Earth country outlines that [Architecture](01-architecture.md#dependencies-chosen) bundles, with a point-in-outline lookup in Rust; nothing is fetched. Choosing one puts its name in Place name. If the latitude and longitude boxes are empty, it also fills them with the country's central point (Natural Earth's label point, or a point on the largest island when that lies at sea). Then the group saves.
 
 **Which country.** Every Natural Earth admin-0 feature counts as a country, under its English name, so dependencies and territories (Greenland, Puerto Rico, Hong Kong) have their own. Where outlines overlap, the smaller one wins. Disputed areas follow Natural Earth's default view, the side that administers an area on the ground: Crimea is in Russia, each side of the Kashmir Line of Control is in India or Pakistan and Aksai Chin in China, Laayoune is in Morocco; areas Natural Earth draws on their own keep their own name (Western Sahara east of the berm, Kosovo, Northern Cyprus, Somaliland, Taiwan, Palestine, Siachen Glacier). Owlbum takes no position on any dispute.
 
@@ -861,7 +860,7 @@ Each coordinate has spaces removed from its ends; an empty box counts as absent.
 
 ### The place picker
 
-At the owner's request (#169), the Place section has a **Pick on map** button (small, map-pin icon, tooltip "Choose where the photo was taken on a map") above the Location group. It is disabled, with the view-only reason as its tooltip, in a view-only album. It opens a wide dialog titled "Where was this photo taken?" (or "Where were these N photos taken?") holding a map 480 px high (at most 60 % of the window's height), with the hint "Click the map where the photo was taken, or click another photo to use its place." above it and **Cancel** below.
+At the owner's request (#169), the Place section has a **Pick on map** button (small, map-pin icon, tooltip "Choose where the photo was taken on a map") under the Coordinates and Country rows. It is disabled, with the view-only reason as its tooltip, in a view-only album. It opens a wide dialog titled "Where was this photo taken?" (or "Where were these N photos taken?") holding a map 480 px high (at most 60 % of the window's height), with the hint "Click the map where the photo was taken, or click another photo to use its place." above it and **Cancel** below.
 
 - **Which photos.** When the photo the panel shows is the grid's current photo and several photos are selected, the whole selection; otherwise that photo alone.
 - **The map** is the Map view's (`ui/src/features/map/photoMap.ts`): the same markers, clusters, zoom and tile layer. It holds every located photo of the album other than the ones being changed, from a query of its own with no filter, no search and no stacks, so a filter on the grid does not hide them. It starts on the world view (latitude 20, longitude 0, zoom 2) and fits those photos as the Map view's first fit does; with none it stays on the world.
@@ -940,6 +939,8 @@ A narrow column (44px) down the right edge of the timeline, beside the scroll bo
 ## Map view
 
 The **Map** button replaces the thumbnails with a map. The preview and the details panel stay.
+
+**Full screen** (owner's feedback, #210). A `full-screen` button ("Full screen") sits over the map's bottom right corner, above the attribution. It makes the map cover the whole window, over the bars; the button again ("Leave full screen", `exit-full-screen`, pressed) or Esc puts it back. Esc goes to an open menu or another dialog first. The map covers the window with CSS rather than the browser's Fullscreen API, so the photo menu, the viewer, dialogs and toasts, which are drawn outside the map, still show over it; F11 makes the window itself full screen. The place picker's map has the same button; there Esc leaves full screen first and closes the picker only after.
 
 ```text
 +--------------------------------------------+

@@ -79,12 +79,22 @@ function useColumns(inRow: InRow) {
       return rest;
     });
   }, []);
+  // A splitter let go past its minimum hides its panel; the stored width stays for next time.
+  const collapse = useCallback(async (key: Width, hide: () => Promise<void>) => {
+    setMoving((m) => {
+      const rest = { ...m };
+      delete rest[key];
+      return rest;
+    });
+    await hide();
+  }, []);
   return {
     ref,
     columns: columnWidths(room?.width ?? null, grid, details, inRow),
     strip: stripHeight(room?.height ?? null, strip),
     move,
     save,
+    collapse,
   };
 }
 
@@ -115,6 +125,40 @@ function PanelButtons({ panels }: { panels: Panels }) {
 }
 
 /**
+ * The buttons that bring a hidden panel back, at the preview's edge on the
+ * side where the panel was (owner's feedback, issue 207): the left edge or
+ * the bottom edge for the thumbnails, the right edge for the details.
+ */
+function EdgeButtons({ panels }: { panels: Panels }) {
+  return (
+    <>
+      {!panels.grid && (
+        <div
+          className={`ow-review__edge ow-review__edge--${panels.place === "bottom" ? "bottom" : "left"}`}
+        >
+          <IconButton
+            icon={panels.place === "bottom" ? "chevron-up" : "chevron-right"}
+            label={albumText.showThumbnails}
+            shortcut={primaryKey("browse.toggle_grid")}
+            onClick={() => void toggleGrid()}
+          />
+        </div>
+      )}
+      {!panels.details && (
+        <div className="ow-review__edge ow-review__edge--right">
+          <IconButton
+            icon="chevron-left"
+            label={albumText.showDetails}
+            shortcut={primaryKey("browse.toggle_details")}
+            onClick={() => void toggleDetails()}
+          />
+        </div>
+      )}
+    </>
+  );
+}
+
+/**
  * The review screen (docs/04-browsing.md, "Review screen"): the thumbnail
  * column, the preview and the details column, with a splitter between each
  * two. The column widths are the stored settings `panel.grid_width` and
@@ -123,7 +167,9 @@ function PanelButtons({ panels }: { panels: Panels }) {
  * in a strip along the bottom instead (`panel.grid_shown`,
  * `panel.details_shown`, `panel.grid_place`, `panel.strip_height`). Hidden
  * thumbnails stay mounted, so their keys, the rows they ask for and the
- * selection go on working; a hidden details panel is not drawn.
+ * selection go on working; a hidden details panel is not drawn. A panel
+ * dragged well past its minimum hides, and a hidden panel has a button at
+ * the preview's edge that brings it back.
  *
  * The preview and the details panel show the page's one current photo,
  * which the grid store holds and every `query_run` settles, so they can
@@ -172,7 +218,7 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
   usePanelKeys();
   const panels = usePanels();
   const bottom = panels.place === "bottom";
-  const { ref, columns, strip, move, save } = useColumns({ grid: panels.grid && !bottom, details: panels.details });
+  const { ref, columns, strip, move, save, collapse } = useColumns({ grid: panels.grid && !bottom, details: panels.details });
 
   const photos = (
     <div
@@ -210,6 +256,7 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
           reset={GRID_DEFAULT}
           onMove={(w) => move("panel.grid_width", w)}
           onSave={(w) => void save("panel.grid_width", w)}
+          onCollapse={() => void collapse("panel.grid_width", toggleGrid)}
         />
       )}
       <div className="ow-review__preview" data-region="preview">
@@ -220,6 +267,7 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
           onPress={(at, e) => pressPhoto(at.id, e)}
         />
         <PanelButtons panels={panels} />
+        <EdgeButtons panels={panels} />
       </div>
       {panels.details && (
         <>
@@ -232,6 +280,7 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
             reset={DETAILS_DEFAULT}
             onMove={(w) => move("panel.details_width", w)}
             onSave={(w) => void save("panel.details_width", w)}
+            onCollapse={() => void collapse("panel.details_width", toggleDetails)}
           />
           <div className="ow-review__details" style={{ width: columns.details }} data-region="details">
             <DetailsPanel current={shown} onNotFound={notFound} shared={detail} />
@@ -261,6 +310,7 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
               reset={STRIP_DEFAULT}
               onMove={(h) => move("panel.strip_height", h)}
               onSave={(h) => void save("panel.strip_height", h)}
+              onCollapse={() => void collapse("panel.strip_height", toggleGrid)}
             />
           )}
           {photos}

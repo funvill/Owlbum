@@ -192,6 +192,34 @@
   background: var(--panel);
 }
 
+/* A hidden panel's button, at the preview's edge where the panel was
+   (owner's feedback, issue 207). */
+.ow-review__edge {
+  position: absolute;
+  z-index: var(--z-raised);
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+
+.ow-review__edge--left {
+  left: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.ow-review__edge--right {
+  right: var(--space-2);
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.ow-review__edge--bottom {
+  bottom: var(--space-2);
+  left: 50%;
+  transform: translateX(-50%);
+}
+
 /* docs/04-browsing.md, "Splitters"; docs/09-visual-design.md. */
 .ow-splitter {
   flex: none;
@@ -212,6 +240,11 @@
 .ow-splitter:focus-visible,
 .ow-splitter--dragging {
   background: var(--accent);
+}
+
+/* Let go here and the panel hides. */
+.ow-splitter--collapsing {
+  background: var(--muted);
 }
 
 .ow-splitter--dragging {

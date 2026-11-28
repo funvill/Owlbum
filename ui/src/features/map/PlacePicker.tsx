@@ -9,6 +9,7 @@ import { Button, Dialog, showToast } from "../../controls";
 import { mapText } from "../../text/map";
 import { useGridStore } from "../grid";
 import { PhotoMap } from "./photoMap";
+import { FullScreenButton, useFullScreen } from "./FullScreen";
 import { TileControls, useMapTiles } from "./tiles";
 import "./MapView.css";
 
@@ -95,6 +96,8 @@ export function PlacePicker({ open, ids, onClose }: PlacePickerProps) {
 
 function PickerMap({ ids, onDone }: { ids: readonly number[]; onDone(): void }) {
   const stageRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const full = useFullScreen(frameRef);
   const mapRef = useRef<PhotoMap | null>(null);
   const tiles = useMapTiles();
   const [failing, setFailing] = useState(false);
@@ -178,9 +181,13 @@ function PickerMap({ ids, onDone }: { ids: readonly number[]; onDone(): void }) 
       <p className="ow-picker__hint" role="status">
         {saving ? t.saving : t.hint}
       </p>
-      <div className="ow-map__frame ow-picker__frame">
+      <div
+        ref={frameRef}
+        className={full.full ? "ow-map__frame ow-picker__frame ow-map__frame--full" : "ow-map__frame ow-picker__frame"}
+      >
         <div ref={stageRef} className="ow-map__stage ow-picker__stage" role="region" aria-label={t.region} />
         <TileControls tiles={tiles} failing={failing} />
+        <FullScreenButton full={full.full} onToggle={full.toggle} />
       </div>
     </div>
   );

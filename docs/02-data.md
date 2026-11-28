@@ -72,6 +72,11 @@ The checks run in this order, and a view-only open writes nothing in the album f
 
 `PRAGMA user_version` holds the schema version, starting at 1. Migrations are numbered SQL scripts (`crates/owlbum-core/src/album/migrations/`) compiled into the program and run in a transaction on open; a file at version 0 is treated as new. A database with a version newer than the program knows opens view-only with the message "This album was last used by a newer Owlbum."
 
+| Version | Script | What it does |
+|---|---|---|
+| 1 | `0001_initial.sql` | The schema below. |
+| 2 | `0002_notes_take_description.sql` | Owner's feedback, #208: the typed Description and Notes became one field, Notes. Each photo's non-blank typed `description` is folded into `notes` once (the description, a blank line, then the notes; or the description alone), `description` is set to NULL, and those photos' `search` entries are written again. The `description` column stays, always NULL from then on; the model's description in `tags` is untouched. Like every migration it runs after the day's backup copy, so the old values are in that backup. |
+
 ```sql
 CREATE TABLE meta (
   key   TEXT PRIMARY KEY,
@@ -118,7 +123,7 @@ CREATE TABLE photos (
   loc_lat       REAL,                   -- overrides GPS when both are set
   loc_lon       REAL,
   loc_name      TEXT,
-  description   TEXT,
+  description   TEXT,                   -- unused since version 2 (folded into notes, #208)
   notes         TEXT,
   edit          TEXT,                   -- JSON PhotoEdit applied when the photo is shown; NULL for none
   info_updated_at INTEGER               -- ms since the epoch, last change to typed info
@@ -272,7 +277,8 @@ Settings keys (each has a default in code; an unknown key is ignored and kept). 
 | `timeline_unit` | unset | `day` or `month`, once the user has picked one. |
 | `stack_similar` | true | |
 | `maps_online` | unset | The answer to "Load maps from the internet?". |
-| `edit_target` | `album` | Where an edit ends up: `album` (kept in the database; the file is never touched) or `file` (Save writes it into the photo file). |
+| `edit_target` | `album` | Where an edit ends up: `album` (kept in the database; the file is never touched until Save all, #209) or `file` (Save writes it into the photo file). |
+| `save_all.ask` | true | Save all asks "Save N edits into their photo files?" before it overwrites the files (#209). Set false by the question's "Don't ask again, always overwrite"; Settings > General > "Ask before Save all overwrites the photo files" turns it back on. |
 | `reopen_last` | true | Reopen the last album at start. |
 | `updates.auto` | true | Check for updates once a day. |
 | `updates.last_check` | null | Milliseconds since the epoch. |

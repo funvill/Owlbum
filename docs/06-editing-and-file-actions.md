@@ -461,7 +461,7 @@ Every edit is kept in the album database the moment it is made. It survives clos
 | Meaning | Keep the edit in the album. The file is never changed. | Edits are meant to be written into the photo files. |
 | After Done | Finished: Done is the save. The photo is "Edited". There is nothing more to save. | The photo is "Edited · not saved" until **Save**. |
 | **Save** | Not offered. | Writes the edit into the file. The original goes to the Recycle Bin or Trash. |
-| **Save all (N)** | Not offered. | Saves every photo in the album that has an edit. |
+| **Save all (N)** | In the top bar while any photo has an edit (#209): writes every edit into its file, after the question. | Saves every photo in the album that has an edit, after the question. |
 | **Save as…** | Offered: writes an edited copy. | Offered. |
 | **Revert to original** | Offered: removes the edit. | Offered: removes the edit that is not saved yet. |
 | Other programs see | The unedited file. | The unedited file until Save, then the edited one. |
@@ -551,7 +551,9 @@ On every writable open, each save record is settled before the scan starts:
 
 ### Save all
 
-`edit_save_all()` saves every photo with an edit, in album order (by path, as built), one after another. It is offered only in `file` mode; in `album` mode it answers `not_supported`. Besides the photo menu, the top bar shows **Save all (N)** in `file` mode while any photo has an edit (N is `edited` from `edit_status`); while a save runs that button shows "Saving 2 of 5…" (or "Saving…") and is disabled.
+`edit_save_all()` saves every photo with an edit, in album order (by path, as built), one after another. Owner's feedback, #209: it works in either `edit_target` mode (it used to answer `not_supported` in `album` mode), and the top bar shows **Save all (N)** whenever any photo has an edit (N is `edited` from `edit_status`), in either mode; the photo menu keeps its Save all in `file` mode. While a save runs that button shows "Saving 2 of 5…" (or "Saving…") and is disabled.
+
+**The question.** Clicking Save all (top bar or photo menu) first asks, in a small dialog titled "Save N edits into their photo files?" ("Save the edit into its photo file?" for one): "The photo files will be overwritten with the edits. The originals go to the <bin>.", a checkbox **Don't ask again, always overwrite**, and **Cancel** and **Yes** (the default). Cancel does nothing. Yes saves; with the box ticked it first sets `save_all.ask` to false, and from then on Save all saves without asking. Settings > General > "Ask before Save all overwrites the photo files" turns the question back on.
 
 - Copy-only photos are skipped. Photos already being saved are left to that save.
 - `edit_save_progress { done, total, current }` is emitted as each photo starts and once at the end: `done` photos are finished out of `total`, and `current` is the file name of the photo being saved, or null at the end. Failures are in the command's reply, not in the event. The page shows the count in the place of the Save all button.

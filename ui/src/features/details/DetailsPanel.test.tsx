@@ -108,7 +108,7 @@ describe("DetailsPanel", () => {
       "Place",
       "People",
       "Date and time",
-      "Description and notes",
+      "Notes",
       "EXIF",
     ]);
     expect(await seriousFindings(document.body)).toEqual([]);
@@ -159,8 +159,8 @@ describe("DetailsPanel", () => {
 
   it("reads the details again on album_changed for a newer revision only", async () => {
     let revision = 5;
-    let description: string | null = null;
-    const { fake } = setup({ id: 3 }, { photo_detail: ({ id }) => fakeDetail(id, { revision, description }) });
+    let notes: string | null = null;
+    const { fake } = setup({ id: 3 }, { photo_detail: ({ id }) => fakeDetail(id, { revision, notes }) });
     await screen.findByText("Taken");
     expect(calls(fake, "photo_detail")).toHaveLength(1);
 
@@ -168,7 +168,7 @@ describe("DetailsPanel", () => {
     expect(calls(fake, "photo_detail")).toHaveLength(1);
 
     revision = 6;
-    description = "Sunset over the lake";
+    notes = "Sunset over the lake";
     await act(async () => fake.emit("album_changed", { revision: 6, reason: "info", rekeyed: [] }));
     await screen.findByDisplayValue("Sunset over the lake");
     expect(calls(fake, "photo_detail")).toHaveLength(2);
@@ -389,7 +389,7 @@ describe("DetailsPanel", () => {
     expect(screen.queryByRole("button", { name: "Show on map" })).not.toBeInTheDocument();
   });
 
-  it("leaves out the Country and Coordinates rows for a photo with no place", async () => {
+  it("shows None for Country and Coordinates, and no Place name box to type in, for a photo with no place", async () => {
     setup(
       { id: 5 },
       {
@@ -398,12 +398,16 @@ describe("DetailsPanel", () => {
       },
     );
     await screen.findByText("Taken");
-    expect(row("Country")).toBeNull();
-    expect(row("Coordinates")).toBeNull();
+    expect(row("Country")).toBe("None");
+    expect(row("Coordinates")).toBe("None");
     expect(section("Place")).toBeInTheDocument();
+    // Only Place name is typed; the place itself comes from Pick on map.
+    expect(screen.getByRole("textbox", { name: "Place name" })).toBeDisabled();
+    expect(screen.queryByRole("textbox", { name: "Latitude" })).toBeNull();
+    expect(screen.queryByRole("group", { name: "Location" })).toBeNull();
   });
 
-  it("leaves out Country but keeps Coordinates at sea", async () => {
+  it("shows no Country but the Coordinates at sea", async () => {
     setup(
       { id: 5 },
       {
@@ -412,7 +416,7 @@ describe("DetailsPanel", () => {
       },
     );
     await screen.findByText("Taken");
-    expect(row("Country")).toBeNull();
+    expect(row("Country")).toBe("None");
     expect(row("Coordinates")).toBe("30.00000, -40.00000");
   });
 
@@ -434,13 +438,14 @@ describe("DetailsPanel", () => {
     await screen.findByText("This album is view-only, so nothing here can be changed.");
   });
 
-  it("shows people, description and notes in their fields", async () => {
+  it("shows people and notes in their fields, with no Description box", async () => {
     setup(
       { id: 1 },
-      { photo_detail: ({ id }) => fakeDetail(id, { people: ["Ann", "Bob"], description: "Tower", notes: null }) },
+      { photo_detail: ({ id }) => fakeDetail(id, { people: ["Ann", "Bob"], notes: "Tower" }) },
     );
     await screen.findByText("Ann");
     expect(screen.getByText("Bob")).toBeInTheDocument();
-    expect(screen.getByRole("textbox", { name: "Description" })).toHaveValue("Tower");
+    expect(screen.getByRole("textbox", { name: "Notes" })).toHaveValue("Tower");
+    expect(screen.queryByRole("textbox", { name: "Description" })).toBeNull();
   });
 });

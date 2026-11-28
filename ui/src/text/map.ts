@@ -10,6 +10,9 @@ export const mapText = {
   region: "Map of the photos",
   /** The note above the map, shown only when some photos have no place. */
   unlocated: (n: number) => (n === 1 ? "1 photo has no location" : `${group(n)} photos have no location`),
+  /** The full-screen button over the map (owner's feedback, issue 210). */
+  fullScreen: "Full screen",
+  exitFullScreen: "Leave full screen",
   /** The empty state when no photo of the result has a place (docs/09-visual-design.md, "Empty states"). */
   empty: "No photos with a location",
   /** The first-use card (docs/04-browsing.md, "Loading map tiles"). */

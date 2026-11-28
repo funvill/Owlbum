@@ -148,7 +148,3 @@ pub const CLOSE_DETAIL: &str = "The edits are kept in the album and will be here
 pub const CLOSE_ANYWAY: &str = "Close anyway";
 /// The close question's safe button.
 pub const GO_BACK: &str = "Go back";
-
-/// `edit_save_all` in `album` mode, where nothing waits to be saved.
-pub const SAVE_ALL_ALBUM_MODE: &str =
-    "Save all is only offered when edits are saved into the photo files.";

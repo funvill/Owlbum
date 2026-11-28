@@ -47,6 +47,8 @@ export const albumText = {
   panels: "Panels",
   thumbnails: "Thumbnails",
   details: "Details panel",
+  showThumbnails: "Show thumbnails",
+  showDetails: "Show details panel",
 
   // Top bar
   showWholeAlbum: "Show whole album",

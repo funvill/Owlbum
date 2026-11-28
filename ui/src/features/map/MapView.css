@@ -167,3 +167,23 @@
 .ow-picker__stage.leaflet-container {
   cursor: crosshair;
 }
+
+/* Full screen (owner's feedback, issue 210): the map covers the window, over
+   the bars, under the viewer, dialogs, menus and toasts. In the place
+   picker it covers the window over its dialog. */
+.ow-map__frame--full {
+  position: fixed;
+  inset: 0;
+  height: auto;
+  z-index: var(--z-popover);
+}
+
+.ow-map__full {
+  position: absolute;
+  z-index: var(--z-popover);
+  right: 10px;
+  bottom: 24px;
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}

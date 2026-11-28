@@ -257,13 +257,11 @@ command! {
 
 command! {
     /// Saves every photo with an edit into its file, in path order, in
-    /// `file` mode only. Copy-only photos are skipped and counted. Stops
-    /// after the current photo when the album closes or the program quits.
-    /// Errors: `view_only`, `no_album`, `not_supported` in `album` mode.
+    /// either `edit_target` mode (owner's feedback, issue 209). Copy-only
+    /// photos are skipped and counted. Stops after the current photo when
+    /// the album closes or the program quits. Errors: `view_only`,
+    /// `no_album`.
     pub async fn edit_save_all<R: Runtime>(; app: AppHandle<R>) -> SavedEdits {
-        if edit_target(&app) != EditTarget::File {
-            return Err(AppError::new(ErrorCode::NotSupported, text::edit::SAVE_ALL_ALBUM_MODE));
-        }
         run_save(app, Box::new(|album, env, progress| save::save_all(album, env, progress))).await
     }
 }

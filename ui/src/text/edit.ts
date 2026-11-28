@@ -64,6 +64,13 @@ export const editText = {
   saveAsTooltip: "Save the edited photo as a new file; this one stays as it is",
   saveAll: (n: number) => `Save all (${n})`,
   saveAllTooltip: "Save every edit into its photo file",
+  /** The question before Save all (owner's feedback, issue 209). */
+  saveAllAskTitle: (n: number) => (n === 1 ? "Save the edit into its photo file?" : `Save ${n} edits into their photo files?`),
+  saveAllAskText: (bin: string) =>
+    `The photo files will be overwritten with the edits. The originals go to the ${bin}.`,
+  saveAllAskNever: "Don't ask again, always overwrite",
+  saveAllAskYes: "Yes",
+  saveAllAskCancel: "Cancel",
   revert: "Revert to original",
   revertTooltip: "Remove the edit and show the photo as it is in the file",
   saving: "Saving…",

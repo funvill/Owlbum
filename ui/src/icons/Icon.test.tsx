@@ -28,7 +28,7 @@ function svgOf(container: HTMLElement): SVGSVGElement {
 describe("Icon", () => {
   it("has exactly the icons the design document lists", () => {
     const documented = documentedNames();
-    expect(documented.length).toBe(65);
+    expect(documented.length).toBe(67);
     expect([...iconNames].sort()).toEqual([...documented].sort());
   });
 

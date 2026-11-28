@@ -258,6 +258,11 @@ function SettingsBody() {
             });
           }}
         />
+        <Checkbox
+          label={t.saveAllAsk}
+          checked={settings["save_all.ask"]}
+          onChange={(on) => void save({ "save_all.ask": on })}
+        />
       </Section>
       <Section title={t.view}>
         <RadioGroup

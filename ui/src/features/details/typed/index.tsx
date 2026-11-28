@@ -9,19 +9,19 @@
 // changed, valid value. A value on its way is remembered so it is not
 // sent twice.
 
-import { useEffect, useId, useRef, useState, type FocusEvent, type KeyboardEvent, type ReactNode } from "react";
+import { useEffect, useId, useRef, useState, type KeyboardEvent } from "react";
 import { api } from "../../../api";
 import type { PersonCount } from "../../../api/bindings/PersonCount";
 import type { PhotoDetail } from "../../../api/bindings/PhotoDetail";
-import { Chip } from "../../../controls";
+import { Chip, IconButton } from "../../../controls";
 import { Icon } from "../../../icons";
 import { detailsText as t } from "../../../text/details";
-import { CountrySearch, withCountry, type LocationBoxes } from "../CountrySearch";
 import {
   addNames,
   boxesFor,
   cleanText,
   dateOutcome,
+  parseDate,
   locationOutcome,
   shownDate,
   splitAtCommas,
@@ -118,7 +118,7 @@ function useDraft(saved: string) {
   };
 }
 
-/** Description (one line) or Notes (a text area). */
+/** Notes (a text area); a one-line box when not `multiline`. */
 function TextInfo({
   field,
   label,
@@ -127,7 +127,7 @@ function TextInfo({
   disabledReason,
   saver,
 }: {
-  field: "description" | "notes";
+  field: "notes";
   label: string;
   value: string | null;
   multiline: boolean;
@@ -176,20 +176,13 @@ function TextInfo({
   );
 }
 
-/** The Description and notes section's body. */
+/**
+ * The Notes section's body: one box (owner's feedback, issue 208). The typed
+ * Description was folded into Notes by the album's migration 2; the
+ * model's description in What's in it is apart and stays.
+ */
 export function NotesFields(props: TypedProps) {
-  return (
-    <>
-      <TextInfo
-        {...props}
-        field="description"
-        label={t.description}
-        value={props.detail.description}
-        multiline={false}
-      />
-      <TextInfo {...props} field="notes" label={t.notes} value={props.detail.notes} multiline />
-    </>
-  );
+  return <TextInfo {...props} field="notes" label={t.notes} value={props.detail.notes} multiline />;
 }
 
 /** The People section's body: chips, and a box with suggestions. */
@@ -355,8 +348,8 @@ export function DateField({ detail, disabledReason, saver }: TypedProps) {
     });
   };
 
-  const commit = (leaving: boolean) => {
-    const outcome = dateOutcome(draft, detail);
+  const commit = (leaving: boolean, text = draft) => {
+    const outcome = dateOutcome(text, detail);
     switch (outcome.kind) {
       case "none":
         if (!leaving) setError(null);
@@ -372,9 +365,13 @@ export function DateField({ detail, disabledReason, saver }: TypedProps) {
         return;
       case "send":
         if (!leaving) setError(null);
-        send(outcome.value, draft);
+        send(outcome.value, text);
     }
   };
+  // The calendar and clock (owner's feedback, issue 208): a date and time
+  // input kept out of sight, opened by the button beside the box.
+  const picker = useRef<HTMLInputElement>(null);
+  const picked = parseDate(draft) ?? "";
   useOnLeave(() => {
     if (!disabled) commit(true);
   });
@@ -382,6 +379,7 @@ export function DateField({ detail, disabledReason, saver }: TypedProps) {
   return (
     <div className="ow-details__typed">
       <Label htmlFor={id} text={t.dateTaken} field="date" saver={saver} />
+      <div className="ow-typed__date">
       <input
         id={id}
         className="ow-input"
@@ -398,6 +396,34 @@ export function DateField({ detail, disabledReason, saver }: TypedProps) {
           if (e.key === "Enter") commit(false);
         }}
       />
+      <input
+        ref={picker}
+        className="ow-typed__picker"
+        type="datetime-local"
+        step={1}
+        tabIndex={-1}
+        aria-label={t.pickDate}
+        value={picked}
+        disabled={disabled}
+        onChange={(e) => {
+          const text = e.target.value.replace("T", " ");
+          if (text === "") return;
+          setDraft(text);
+          commit(false, text);
+        }}
+      />
+      <IconButton
+        icon="calendar"
+        label={t.pickDate}
+        disabledReason={disabledReason ?? undefined}
+        onClick={() => {
+          const el = picker.current;
+          if (el === null) return;
+          if (typeof el.showPicker === "function") el.showPicker();
+          else el.focus();
+        }}
+      />
+      </div>
       <FieldError id={errorId} message={error} />
       {detail.date.typed !== null && (
         <button
@@ -420,31 +446,34 @@ export function DateField({ detail, disabledReason, saver }: TypedProps) {
   );
 }
 
-function boxesKey(b: LocationBoxes): string {
-  return `${b.lat}\n${b.lon}\n${b.name}`;
-}
-
-/** The Location group, under the Place section's rows. */
+/**
+ * The Place name box, under the Place section's Coordinates and Country
+ * labels (owner's feedback, issue 208: the Location search and the
+ * Latitude and Longitude boxes were taken out; Pick on map sets the
+ * coordinates). A name needs a place: the box is off until the photo has
+ * coordinates.
+ */
 export function LocationField({ detail, disabledReason, saver }: TypedProps) {
   const id = useId();
   const errorId = `${id}-error`;
-  const saved = boxesKey(boxesFor(detail));
-  const { draft, setDraft, settle, reset } = useDraft(saved);
-  const [lat = "", lon = "", name = ""] = draft.split("\n");
-  const boxes: LocationBoxes = { lat, lon, name };
+  const saved = boxesFor(detail);
+  const { draft, setDraft, settle, reset } = useDraft(saved.name);
   const [error, setError] = useState<string | null>(null);
-  const sent = useSent<string>(`${saved}|${detail.place.typed}`);
-  const disabled = disabledReason !== null;
+  const sent = useSent<string>(`${saved.lat}
+${saved.lon}
+${saved.name}|${detail.place.typed}`);
+  const noPlace = saved.lat === "" || saved.lon === "";
+  const off = disabledReason ?? (noPlace ? t.nameNeedsCoordinates : null);
 
-  const commit = (from: LocationBoxes, leaving: boolean) => {
-    const outcome = locationOutcome(from, detail);
+  const commit = (name: string, leaving: boolean) => {
+    const outcome = locationOutcome({ ...saved, name }, detail);
     switch (outcome.kind) {
       case "none":
         if (!leaving) setError(null);
         return;
       case "restore":
         if (!leaving) {
-          reset(boxesKey(outcome.boxes));
+          reset(outcome.boxes.name);
           setError(null);
         }
         return;
@@ -455,60 +484,35 @@ export function LocationField({ detail, disabledReason, saver }: TypedProps) {
         if (!leaving) setError(null);
         const key = JSON.stringify(outcome.location);
         if (!sent.once(key)) return;
-        const text = boxesKey(from);
         void saver.save("location", { location: outcome.location }).then((ok) => {
-          if (ok) settle(text);
+          if (ok) settle(name);
           else sent.forget();
         });
       }
     }
   };
   useOnLeave(() => {
-    if (!disabled) commit(boxes, true);
+    if (off === null) commit(draft, true);
   });
 
-  const set = (part: keyof LocationBoxes, value: string) => setDraft(boxesKey({ ...boxes, [part]: value }));
-  const onBlur = (e: FocusEvent<HTMLDivElement>) => {
-    if (e.relatedTarget instanceof Node && e.currentTarget.contains(e.relatedTarget)) return;
-    commit(boxes, false);
-  };
-  const onKeyDown = (e: KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === "Enter") commit(boxes, false);
-  };
-  const box = (part: keyof LocationBoxes, label: string, extra?: ReactNode) => (
-    <label className="ow-typed__box">
-      <span className="ow-details__label">{label}</span>
+  return (
+    <div className="ow-details__typed">
+      <Label htmlFor={id} text={t.placeName} field="location" saver={saver} />
       <input
+        id={id}
         className="ow-input"
         type="text"
-        value={boxes[part]}
-        disabled={disabled}
-        title={disabledReason ?? undefined}
+        value={draft}
+        disabled={off !== null}
+        title={off ?? undefined}
         aria-invalid={error !== null || undefined}
         aria-describedby={error !== null ? errorId : undefined}
-        onChange={(e) => set(part, e.target.value)}
-        onKeyDown={onKeyDown}
-      />
-      {extra}
-    </label>
-  );
-
-  return (
-    <div className="ow-details__typed" role="group" aria-label={t.location} onBlur={onBlur}>
-      <Label text={t.location} field="location" saver={saver} />
-      <CountrySearch
-        disabled={disabled}
-        onChoose={(country) => {
-          const next = withCountry(boxes, country);
-          setDraft(boxesKey(next));
-          commit(next, false);
+        onChange={(e) => setDraft(e.target.value)}
+        onBlur={() => commit(draft, false)}
+        onKeyDown={(e) => {
+          if (e.key === "Enter") commit(draft, false);
         }}
       />
-      <div className="ow-typed__pair">
-        {box("lat", t.latitude)}
-        {box("lon", t.longitude)}
-      </div>
-      {box("name", t.placeName)}
       <FieldError id={errorId} message={error} />
     </div>
   );

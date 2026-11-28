@@ -38,6 +38,44 @@
 }
 
 /* EXIF values can be long runs with no spaces. */
+/* A long EXIF name is clipped with an ellipsis (its full name is the
+   tooltip), so it never runs over its value; the column gap always stays
+   between them (owner's feedback, issue 208). */
+.ow-details__exif {
+  grid-template-columns: 120px minmax(0, 1fr);
+}
+
+.ow-details__exif .ow-details__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The date box with its calendar button; the date and time input it opens
+   is kept out of sight. */
+.ow-typed__date {
+  position: relative;
+  display: flex;
+  align-items: center;
+  gap: var(--space-1);
+}
+
+.ow-typed__date > .ow-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.ow-typed__picker {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+
 .ow-details__exif .ow-details__value {
   overflow-wrap: anywhere;
 }

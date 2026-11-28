@@ -22,7 +22,7 @@ import { useSettingsStore } from "../app";
 import { resetGrid, useGridStore } from "../grid";
 import { resetImageCache, type Load } from "../preview";
 import { resetViewer } from "../viewer/store";
-import { SaveAllButton } from "./SaveAllButton";
+import { SaveAllButton, resetSaveAllAsk } from "./SaveAllButton";
 import { resetSaves, savedToast, useSaveStore } from "./save";
 
 class FakeResizeObserver {
@@ -267,33 +267,64 @@ describe("the save toast", () => {
 });
 
 describe("Save all in the top bar", () => {
-  it("shows in file mode with the count, and the progress while saving", () => {
-    setup("file");
-    useSettingsStore.setState({
-      settings: { ...defaultSettings, edit_target: "file" },
-    });
-    useSaveStore.setState({ status: { edited: 3, waiting: 3, saving: 0 } });
-    const { rerender } = render(<SaveAllButton />);
-    fireEvent.click(screen.getByRole("button", { name: /Save all \(3\)/ }));
-    expect(callsOf("edit_save_all")).toEqual([{}]);
+  afterEach(() => resetSaveAllAsk());
+  const saveAllButton = () => screen.getByRole("button", { name: /Save all \(3\)/ });
+
+  it("shows in either mode with the count, asks first, and shows the progress while saving", async () => {
+    for (const mode of ["album", "file"] as const) {
+      setup(mode);
+      useSettingsStore.setState({ settings: { ...defaultSettings, edit_target: mode } });
+      useSaveStore.setState({ status: { edited: 3, waiting: mode === "file" ? 3 : 0, saving: 0 } });
+      const { unmount } = render(<SaveAllButton />);
+      fireEvent.click(saveAllButton());
+      // The question: Cancel does nothing.
+      const question = screen.getByRole("dialog", { name: "Save 3 edits into their photo files?" });
+      expect(question).toHaveTextContent("The photo files will be overwritten with the edits.");
+      fireEvent.click(screen.getByRole("button", { name: "Cancel" }));
+      expect(screen.queryByRole("dialog")).toBeNull();
+      expect(callsOf("edit_save_all")).toEqual([]);
+      // Yes saves.
+      fireEvent.click(saveAllButton());
+      fireEvent.click(screen.getByRole("button", { name: "Yes" }));
+      await waitFor(() => expect(callsOf("edit_save_all")).toEqual([{}]));
+      expect(callsOf("app_settings_set")).toEqual([]);
+      unmount();
+    }
     act(() =>
       useSaveStore.setState({
         running: true,
         progress: { done: 1, total: 3, current: "b.jpg" },
       }),
     );
-    rerender(<SaveAllButton />);
+    render(<SaveAllButton />);
     expect(
       screen.getByRole("button", { name: /Saving 2 of 3…/ }),
     ).toHaveAttribute("aria-disabled", "true");
   });
 
-  it("is not shown in album mode", () => {
+  it("stops asking once Don't ask again is ticked, which Settings can turn back on", async () => {
     setup("album");
-    useSettingsStore.setState({
-      settings: { ...defaultSettings, edit_target: "album" },
-    });
+    useSettingsStore.setState({ settings: { ...defaultSettings } });
     useSaveStore.setState({ status: { edited: 3, waiting: 0, saving: 0 } });
+    render(<SaveAllButton />);
+    fireEvent.click(saveAllButton());
+    fireEvent.click(screen.getByRole("checkbox", { name: "Don't ask again, always overwrite" }));
+    fireEvent.click(screen.getByRole("button", { name: "Yes" }));
+    await waitFor(() => expect(callsOf("edit_save_all")).toHaveLength(1));
+    expect(callsOf("app_settings_set")).toEqual([{ patch: { "save_all.ask": false } }]);
+    await waitFor(() => expect(useSettingsStore.getState().settings?.["save_all.ask"]).toBe(false));
+    await waitFor(() => expect(useSaveStore.getState().running).toBe(false));
+    await waitFor(() => expect(callsOf("edit_status").length).toBeGreaterThan(0));
+    await act(async () => useSaveStore.setState({ status: { edited: 3, waiting: 0, saving: 0 } }));
+    fireEvent.click(saveAllButton());
+    expect(screen.queryByRole("dialog")).toBeNull();
+    await waitFor(() => expect(callsOf("edit_save_all")).toHaveLength(2));
+  });
+
+  it("is not shown while no photo has an edit", () => {
+    setup("album");
+    useSettingsStore.setState({ settings: { ...defaultSettings } });
+    useSaveStore.setState({ status: { edited: 0, waiting: 0, saving: 0 } });
     render(<SaveAllButton />);
     expect(screen.queryByRole("button")).toBeNull();
   });

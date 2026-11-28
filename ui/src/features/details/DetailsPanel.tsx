@@ -165,7 +165,7 @@ function ExifFacts({ id, revision }: { id: number; revision: number }) {
     <dl className="ow-details__rows ow-details__exif">
       {state.fields.map((f, i) => (
         <Fragment key={`${i}:${f.group}:${f.name}`}>
-          <dt className="ow-details__label" title={f.group}>
+          <dt className="ow-details__label" title={`${f.name} (${f.group})`}>
             {f.name}
           </dt>
           <dd className="ow-details__value ow-selectable">{f.value}</dd>
@@ -190,15 +190,18 @@ function PlaceFacts({
   disabledReason: string | null;
   saver: InfoSaver;
 }) {
+  // Coordinates and Country are labels; Pick on map sets them (owner's
+  // feedback, issue 208), and Place name is the one box.
   const { lat, lon, country } = detail.place;
-  const rows: FactRow[] = [];
-  if (lat !== null && lon !== null) {
-    if (country !== null) rows.push({ label: t.country, value: country });
-    rows.push({ label: t.coordinates, value: formatCoordinates(lat, lon) });
-  }
+  const located = lat !== null && lon !== null;
+  const rows: FactRow[] = [
+    { label: t.coordinates, value: located ? formatCoordinates(lat, lon) : t.noPlace },
+    { label: t.country, value: located && country !== null ? country : t.noPlace },
+  ];
   return (
     <>
-      {rows.length > 0 && <Rows rows={rows} />}
+      <LocationField detail={detail} disabledReason={disabledReason} saver={saver} />
+      <Rows rows={rows} />
       <div className="ow-details__actions">
         <PickPlaceButton photoId={detail.id} disabledReason={disabledReason} />
         {/* Show on map needs a place to show: GPS or a typed place with coordinates. */}
@@ -210,7 +213,6 @@ function PlaceFacts({
           </Tooltip>
         )}
       </div>
-      <LocationField detail={detail} disabledReason={disabledReason} saver={saver} />
     </>
   );
 }

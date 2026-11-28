@@ -126,22 +126,16 @@ export function WhatsInIt({ detail, disabledReason }: WhatsInItProps) {
           )}
         </div>
       )}
-      {tags.keywords.length > 0 && (
+      {/* Keywords and objects share one row of chips (owner's feedback, issue 208). */}
+      {tags.keywords.length + tags.objects.length > 0 && (
         <>
-          <p className="ow-whatsinit__label">{t.keywords}</p>
+          <p className="ow-whatsinit__label">{t.tags}</p>
           <div className="ow-whatsinit__chips">
             {tags.keywords.map((k) => (
-              <TagChip key={k} kind="keyword" label={k} text={k} />
+              <TagChip key={`k:${k}`} kind="keyword" label={k} text={k} />
             ))}
-          </div>
-        </>
-      )}
-      {tags.objects.length > 0 && (
-        <>
-          <p className="ow-whatsinit__label">{t.objects}</p>
-          <div className="ow-whatsinit__chips">
             {tags.objects.map((o) => (
-              <TagChip key={o.label} kind="object" label={o.label} text={t.count(o.label, o.count)} />
+              <TagChip key={`o:${o.label}`} kind="object" label={o.label} text={t.count(o.label, o.count)} />
             ))}
           </div>
         </>

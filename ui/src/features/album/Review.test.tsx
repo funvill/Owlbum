@@ -8,6 +8,8 @@ import { defaultSettings } from "../../api/fake/app";
 import { useSettingsStore } from "../app";
 import { resetGrid, useGridStore } from "../grid";
 import { Review } from "./Review";
+import { read, srcDir } from "../../test/sources";
+import { join } from "node:path";
 
 function photos(n: number): FakePhoto[] {
   return Array.from({ length: n }, (_, i) => ({ id: i + 1, rel_path: `day/p${i + 1}.jpg` }));
@@ -16,6 +18,9 @@ function photos(n: number): FakePhoto[] {
 let fake: FakeApi;
 const grid = () => useGridStore.getState();
 const calls = (command: string) => fake.calls.filter((c) => c.command === command);
+/** The fake's settings forget earlier patches; these keep them, as Rust does. */
+const keepSettings = () =>
+  fake.handle("app_settings_set", ({ patch }) => ({ ...useSettingsStore.getState().settings!, ...patch }));
 
 beforeEach(() => {
   resetGrid();
@@ -121,10 +126,11 @@ describe("Review splitters", () => {
     fireEvent.pointerDown(thumbs, { button: 0, pointerId: 1, clientX: 420 });
     fireEvent.pointerMove(thumbs, { pointerId: 1, clientX: 380.4 });
     expect(thumbs).toHaveAttribute("aria-valuenow", "380");
-    fireEvent.pointerMove(thumbs, { pointerId: 1, clientX: 0 });
+    // Past the minimum, but not far enough to hide the column.
+    fireEvent.pointerMove(thumbs, { pointerId: 1, clientX: 160 });
     expect(thumbs).toHaveAttribute("aria-valuenow", "200");
     expect(saves()).toEqual([]);
-    fireEvent.pointerUp(thumbs, { pointerId: 1, clientX: 0 });
+    fireEvent.pointerUp(thumbs, { pointerId: 1, clientX: 160 });
     await waitFor(() => expect(saves()).toEqual([{ "panel.grid_width": 200 }]));
 
     const details = splitter("Resize details panel");
@@ -137,6 +143,41 @@ describe("Review splitters", () => {
     fireEvent.doubleClick(thumbs);
     await waitFor(() => expect(saves().at(-1)).toEqual({ "panel.grid_width": 420 }));
     expect(thumbs).toHaveAttribute("aria-valuenow", "420");
+  });
+
+  it("hides a panel dragged well past its minimum, keeping its stored width", async () => {
+    useSettingsStore.setState({ settings: { ...defaultSettings, "panel.grid_width": 300 } });
+    keepSettings();
+    render(<Review busy={() => false} />);
+    await waitFor(() => expect(grid().result).not.toBeNull());
+    // Just past the minimum it stops there and stays.
+    const thumbs = splitter("Resize thumbnail column");
+    fireEvent.pointerDown(thumbs, { button: 0, pointerId: 1, clientX: 300 });
+    fireEvent.pointerMove(thumbs, { pointerId: 1, clientX: 180 });
+    expect(thumbs).toHaveAttribute("aria-valuenow", "200");
+    expect(thumbs).not.toHaveClass("ow-splitter--collapsing");
+    // Well past it, letting go hides the thumbnails.
+    fireEvent.pointerMove(thumbs, { pointerId: 1, clientX: 100 });
+    expect(thumbs).toHaveClass("ow-splitter--collapsing");
+    fireEvent.pointerUp(thumbs, { pointerId: 1 });
+    await waitFor(() => expect(useSettingsStore.getState().settings?.["panel.grid_shown"]).toBe(false));
+    expect(saves()).toEqual([{ "panel.grid_shown": false }]);
+
+    const details = splitter("Resize details panel");
+    fireEvent.pointerDown(details, { button: 0, pointerId: 2, clientX: 1000 });
+    fireEvent.pointerMove(details, { pointerId: 2, clientX: 1200 });
+    fireEvent.pointerUp(details, { pointerId: 2 });
+    await waitFor(() => expect(useSettingsStore.getState().settings?.["panel.details_shown"]).toBe(false));
+    expect(useSettingsStore.getState().settings?.["panel.grid_width"]).toBe(300);
+
+    // Each comes back from its button at the preview's edge, at its old width.
+    fireEvent.click(screen.getByRole("button", { name: "Show thumbnails" }));
+    await waitFor(() => expect(splitter("Resize thumbnail column")).toHaveAttribute("aria-valuenow", "300"));
+    expect(document.querySelector(".ow-review__edge--left")).toBeNull();
+    expect(document.querySelector(".ow-review__edge--right")).not.toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Show details panel" }));
+    await waitFor(() => expect(screen.getByRole("complementary", { name: "Details" })).toBeInTheDocument());
+    expect(screen.queryByRole("button", { name: "Show details panel" })).toBeNull();
   });
 
   it("narrows the columns in a narrow row without changing the stored widths", async () => {
@@ -189,6 +230,30 @@ describe("Review panels", () => {
     await waitFor(() => expect(grid().current?.index).toBe(1));
     fireEvent.click(screen.getByRole("button", { name: "Thumbnails" }));
     await waitFor(() => expect(photosColumn()).toBeVisible());
+  });
+
+  it("toggles each panel exactly once for one press of T or I", async () => {
+    useSettingsStore.setState({ settings: { ...defaultSettings } });
+    keepSettings();
+    render(<Review busy={() => false} />);
+    await waitFor(() => expect(grid().current?.index).toBe(0));
+    const patches = () => calls("app_settings_set").map((c) => (c.args as { patch: unknown }).patch);
+    fireEvent.keyDown(window, { key: "t", code: "KeyT" });
+    await waitFor(() => expect(settings()?.["panel.grid_shown"]).toBe(false));
+    fireEvent.keyDown(window, { key: "i", code: "KeyI" });
+    await waitFor(() => expect(settings()?.["panel.details_shown"]).toBe(false));
+    // Nothing else toggles them back afterwards.
+    await new Promise((r) => setTimeout(r, 50));
+    expect(patches()).toEqual([{ "panel.grid_shown": false }, { "panel.details_shown": false }]);
+    expect(settings()?.["panel.grid_shown"]).toBe(false);
+    // The hidden thumbnails' button sits at the preview's left edge.
+    expect(document.querySelector(".ow-review__edge--left")).not.toBeNull();
+  });
+
+  it("keeps the grid's scrollbar room so a width settles (no shaking)", () => {
+    const css = read(join(srcDir, "features/grid/Grid.css"));
+    expect(css).toMatch(/\.ow-grid \{[^}]*scrollbar-gutter: stable;/);
+    expect(css).toMatch(/\.ow-grid--across \{[^}]*overflow-x: scroll;/);
   });
 
   it("puts the thumbnails in a strip along the bottom that scrolls sideways", async () => {

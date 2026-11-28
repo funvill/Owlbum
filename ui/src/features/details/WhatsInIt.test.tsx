@@ -75,7 +75,7 @@ describe("What's in it", () => {
     const user = userEvent.setup();
     show(detail({ state: "off", description: null, keywords: [], objects: [], can_regenerate: false }));
     expect(screen.getByText(t.off)).toBeInTheDocument();
-    expect(screen.queryByText(t.keywords)).toBeNull();
+    expect(screen.queryByText(t.tags)).toBeNull();
     await user.click(screen.getByRole("button", { name: t.settings }));
     expect(useSettingsOpen.getState()).toEqual({ open: true, section: "tagging" });
   });
@@ -83,10 +83,12 @@ describe("What's in it", () => {
   it("shows the description, keywords and objects with counts", () => {
     show(detail());
     expect(screen.getByText("A dog running along a sandy beach.")).toBeInTheDocument();
-    expect(screen.getByText(t.keywords)).toBeInTheDocument();
+    expect(screen.getByText(t.tags)).toBeInTheDocument();
     expect(screen.getByRole("button", { name: "beach" })).toHaveAttribute("aria-pressed", "false");
     expect(screen.getAllByRole("button", { name: "dog" })).toHaveLength(2);
     expect(screen.getByRole("button", { name: "person ×2" })).toBeInTheDocument();
+    // One row of chips: the keywords, then the objects.
+    expect(document.querySelectorAll(".ow-whatsinit__chips")).toHaveLength(1);
     expect(screen.queryByText(t.notWorking)).toBeNull();
   });
 

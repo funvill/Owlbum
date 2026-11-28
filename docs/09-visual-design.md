@@ -372,7 +372,7 @@ Drawing rules:
 | New: browsing | `timeline`, `map`, `map-pin`, `stack`, `search`, `filter`, `sort`, `calendar`, `person`, `zoom-in`, `zoom-out`, `fit`, `details` (show or hide the details panel), `panel-left`, `panel-bottom` (show or hide the thumbnails, at the left or the bottom) |
 | New: video | `video` (a tile is a video), `play`, `pause`, `volume`, `volume-off` |
 | New: editing | `rotate-ccw`, `flip-h`, `flip-v`, `straighten`, `sliders` (light and colour), `reset` |
-| New: program | `star-filled`, `minus`, `settings` (a gear; the old program used a text character), `keyboard` (shortcut overlay), `rescan`, `tidy`, `close-album`, `warning` (a triangle with an exclamation mark, for banners; `alert` is a circle with one, for errors), `external` (opens outside Owlbum), `reveal` (show in file manager), `path` (copy path), `more` |
+| New: program | `star-filled`, `minus`, `settings` (a gear; the old program used a text character), `keyboard` (shortcut overlay), `rescan`, `tidy`, `close-album`, `warning` (a triangle with an exclamation mark, for banners; `alert` is a circle with one, for errors), `external` (opens outside Owlbum), `reveal` (show in file manager), `path` (copy path), `more`, `full-screen` and `exit-full-screen` (the map's full-screen button) |
 
 `rotate-ccw` is its own drawing, not a mirrored `rotate-cw`, so that it mirrors correctly if a right-to-left language is ever added.
 

@@ -6,6 +6,7 @@ import { EmptyState } from "../../controls";
 import { mapText as t } from "../../text/map";
 import { gridBlocks, pickById, useBrowseKeys, useGridStore } from "../grid";
 import { useMapFocus } from "./focus";
+import { FullScreenButton, useFullScreen } from "./FullScreen";
 import { PhotoMap } from "./photoMap";
 import { TileControls, useMapTiles } from "./tiles";
 import "./MapView.css";
@@ -48,6 +49,8 @@ export function MapView({ album, onOpen, onMenu }: MapViewProps) {
   const [answer, setAnswer] = useState<{ token: string; map: MapPoints } | null>(null);
   const [failing, setFailing] = useState(false);
   const stageRef = useRef<HTMLDivElement>(null);
+  const frameRef = useRef<HTMLDivElement>(null);
+  const full = useFullScreen(frameRef);
   const mapRef = useRef<PhotoMap | null>(null);
   const fitted = useRef(false);
   // The result shown when the view opened was made for the grid or the
@@ -160,7 +163,7 @@ export function MapView({ album, onOpen, onMenu }: MapViewProps) {
   return (
     <div className="ow-map">
       {map !== null && map.unlocated > 0 && <p className="ow-map__note">{t.unlocated(map.unlocated)}</p>}
-      <div className="ow-map__frame">
+      <div ref={frameRef} className={full.full ? "ow-map__frame ow-map__frame--full" : "ow-map__frame"}>
         <div ref={stageRef} className="ow-map__stage" role="region" aria-label={t.region} />
         {map !== null && map.points.length === 0 && (
           <div className="ow-map__empty">
@@ -168,6 +171,7 @@ export function MapView({ album, onOpen, onMenu }: MapViewProps) {
           </div>
         )}
         <TileControls tiles={tiles} failing={failing} />
+        <FullScreenButton full={full.full} onToggle={full.toggle} />
       </div>
     </div>
   );

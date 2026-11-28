@@ -327,6 +327,31 @@ fn copy_not_shown_copies_unsupported_then_unreadable_files() {
 }
 
 #[test]
+fn save_all_writes_the_edits_into_the_files_in_album_mode_too() {
+    // Owner's feedback, issue 209: Save all is offered whenever a photo has
+    // an edit, whatever `edit_target` says.
+    use owlbum_core::edit::save::{EditStatus, SavedEdits};
+    let f = fixture();
+    let root = f.open();
+    let a = f.id_of("a.png");
+    f.call::<serde_json::Value>(
+        "edit_set",
+        json!({ "photo_id": a, "edit": { "rotate": 90, "flip": false } }),
+    )
+    .unwrap();
+    let out: SavedEdits = f.call("edit_save_all", json!({})).unwrap();
+    assert_eq!(out.saved, vec![a], "{out:?}");
+    assert!(
+        f.fake.bin.join("a.png").exists(),
+        "the original is in the bin"
+    );
+    let saved = image::open(root.join("a.png")).unwrap();
+    assert_eq!((saved.width(), saved.height()), (20, 30));
+    let status: EditStatus = f.call("edit_status", json!({})).unwrap();
+    assert_eq!(status.edited, 0);
+}
+
+#[test]
 fn save_into_the_file_goes_through_the_bin_and_status_counts_from_the_database() {
     use owlbum_core::edit::save::{EditStatus, SavedEdits};
     let f = fixture();
@@ -343,11 +368,6 @@ fn save_into_the_file_goes_through_the_bin_and_status_counts_from_the_database()
         (1, 0),
         "album mode waits for nothing"
     );
-    let refused = f
-        .call::<SavedEdits>("edit_save_all", json!({}))
-        .unwrap_err();
-    assert_eq!(refused["code"], "not_supported");
-
     f.call::<serde_json::Value>(
         "app_settings_set",
         json!({ "patch": { "edit_target": "file" } }),

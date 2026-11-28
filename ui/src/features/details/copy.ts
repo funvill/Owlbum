@@ -44,7 +44,6 @@ export function detailsAsText(d: PhotoDetail, score: ScoreBreakdown | null, exif
   sections.push([t.sections.place, place]);
   sections.push([t.sections.people, d.people.length > 0 ? [d.people.join(", ")] : []]);
   const notes: string[] = [];
-  if (d.description !== null && d.description !== "") notes.push(`${t.description}: ${d.description}`);
   if (d.notes !== null && d.notes !== "") notes.push(`${t.notes}: ${d.notes}`);
   sections.push([t.sections.notes, notes]);
   if (exif !== null && exif.length > 0) {

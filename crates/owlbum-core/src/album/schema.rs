@@ -25,10 +25,16 @@ pub struct Migration {
 
 /// Every migration, in order. Add the next script at the end; never edit
 /// one that has shipped.
-pub const MIGRATIONS: &[Migration] = &[Migration {
-    version: 1,
-    sql: include_str!("migrations/0001_initial.sql"),
-}];
+pub const MIGRATIONS: &[Migration] = &[
+    Migration {
+        version: 1,
+        sql: include_str!("migrations/0001_initial.sql"),
+    },
+    Migration {
+        version: 2,
+        sql: include_str!("migrations/0002_notes_take_description.sql"),
+    },
+];
 
 /// The newest schema version this program knows.
 pub const CURRENT_VERSION: u32 = latest(MIGRATIONS);
@@ -196,7 +202,7 @@ mod tests {
         for (i, m) in MIGRATIONS.iter().enumerate() {
             assert_eq!(m.version as usize, i + 1);
         }
-        assert_eq!(CURRENT_VERSION, 1);
+        assert_eq!(CURRENT_VERSION, 2);
     }
 
     #[test]
@@ -206,11 +212,11 @@ mod tests {
         assert_eq!(
             state,
             SchemaState::Current {
-                version: 1,
+                version: 2,
                 from: 0
             }
         );
-        assert_eq!(version(&conn).unwrap(), 1);
+        assert_eq!(version(&conn).unwrap(), 2);
         assert_eq!(
             table_names(&conn),
             [
@@ -259,29 +265,30 @@ mod tests {
         assert_eq!(
             state,
             SchemaState::Current {
-                version: 1,
-                from: 1
+                version: 2,
+                from: 2
             }
         );
     }
 
     #[test]
     fn later_migrations_run_in_order_and_keep_the_meta_rows() {
-        const V2: &[Migration] = &[
+        const V3: &[Migration] = &[
             MIGRATIONS[0],
+            MIGRATIONS[1],
             Migration {
-                version: 2,
+                version: 3,
                 sql: "ALTER TABLE photos ADD COLUMN extra TEXT;",
             },
         ];
         let mut conn = Connection::open_in_memory().unwrap();
         migrate_with(&mut conn, MIGRATIONS, fixed_meta).unwrap();
-        let state = migrate_with(&mut conn, V2, || panic!("not asked")).unwrap();
+        let state = migrate_with(&mut conn, V3, || panic!("not asked")).unwrap();
         assert_eq!(
             state,
             SchemaState::Current {
-                version: 2,
-                from: 1
+                version: 3,
+                from: 2
             }
         );
         conn.prepare("SELECT extra FROM photos").unwrap();
@@ -315,6 +322,79 @@ mod tests {
         let state = migrate_with(&mut conn, MIGRATIONS, || panic!("not asked")).unwrap();
         assert_eq!(state, SchemaState::Newer { version: 7 });
         assert_eq!(version(&conn).unwrap(), 7);
+    }
+
+    #[test]
+    fn version_2_folds_each_typed_description_into_the_notes_once() {
+        // Owner's feedback, issue 208: Description and Notes are one field.
+        let mut conn = Connection::open_in_memory().unwrap();
+        migrate_with(&mut conn, &MIGRATIONS[..1], fixed_meta).unwrap();
+        conn.execute_batch(
+            "INSERT INTO photos (id, rel_path, rel_dir, file_name, size, mtime_ms, file_key, thumb_key,
+                                 kind, format, width, height, scan_version, description, notes)
+             VALUES (1, 'a.jpg', '', 'a.jpg', 1, 1, 'k1', 't1', 'image', 'jpeg', 1, 1, 1, 'Tower', 'Windy day'),
+                    (2, 'b.jpg', '', 'b.jpg', 1, 1, 'k2', 't2', 'image', 'jpeg', 1, 1, 1, 'Lighthouse', NULL),
+                    (3, 'c.jpg', '', 'c.jpg', 1, 1, 'k3', 't3', 'image', 'jpeg', 1, 1, 1, NULL, 'Only notes'),
+                    (4, 'd.jpg', '', 'd.jpg', 1, 1, 'k4', 't4', 'image', 'jpeg', 1, 1, 1, '  ', 'Blank description');
+             INSERT INTO tags (photo_id, part, model_id, status, description, made_at)
+             VALUES (1, 'describe', 'm', 'done', 'A tall tower', 1);
+             INSERT INTO search (rowid, file_name, description, notes)
+             VALUES (1, 'a.jpg', 'Tower', 'Windy day'), (2, 'b.jpg', 'Lighthouse', NULL),
+                    (3, 'c.jpg', NULL, 'Only notes'), (4, 'd.jpg', '  ', 'Blank description');",
+        )
+        .unwrap();
+        let state = migrate_with(&mut conn, MIGRATIONS, || panic!("not asked")).unwrap();
+        assert_eq!(
+            state,
+            SchemaState::Current {
+                version: 2,
+                from: 1
+            }
+        );
+        let rows: Vec<(i64, Option<String>, Option<String>)> = conn
+            .prepare("SELECT id, description, notes FROM photos ORDER BY id")
+            .unwrap()
+            .query_map([], |r| Ok((r.get(0)?, r.get(1)?, r.get(2)?)))
+            .unwrap()
+            .map(Result::unwrap)
+            .collect();
+        assert_eq!(
+            rows,
+            [
+                (
+                    1,
+                    None,
+                    Some(
+                        "Tower
+
+Windy day"
+                            .to_owned()
+                    )
+                ),
+                (2, None, Some("Lighthouse".to_owned())),
+                (3, None, Some("Only notes".to_owned())),
+                (4, None, Some("Blank description".to_owned())),
+            ]
+        );
+        // The folded text is found under notes now; the model's description stays apart.
+        let hit = |q: &str| -> Vec<i64> {
+            let mut s = conn
+                .prepare("SELECT rowid FROM search WHERE search MATCH ?1 ORDER BY rowid")
+                .unwrap();
+            s.query_map([q], |r| r.get(0))
+                .unwrap()
+                .map(Result::unwrap)
+                .collect()
+        };
+        assert_eq!(hit("notes:tower"), [1]);
+        assert_eq!(hit("notes:lighthouse"), [2]);
+        assert!(hit("description:tower").is_empty());
+        assert_eq!(hit("tag_description:tall"), [1]);
+        assert_eq!(hit("notes:only"), [3], "an untouched entry stays");
+        let temp: i64 = conn
+            .query_row("SELECT count(*) FROM sqlite_temp_master", [], |r| r.get(0))
+            .unwrap();
+        assert_eq!(temp, 0, "the migration's own table is gone");
     }
 
     #[test]

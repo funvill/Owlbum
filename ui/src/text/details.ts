@@ -23,7 +23,7 @@ export const detailsText = {
     place: "Place",
     people: "People",
     date: "Date and time",
-    notes: "Description and notes",
+    notes: "Notes",
     exif: "EXIF",
   },
 
@@ -78,6 +78,8 @@ export const detailsText = {
   countryLooking: "…",
   coordinates: "Coordinates",
   placeName: "Place name",
+  noPlace: "None",
+  nameNeedsCoordinates: "Pick the place on the map first",
 
   // Typed info (docs/04-browsing.md, "How typed fields save")
   saved: "Saved",
@@ -89,9 +91,9 @@ export const detailsText = {
   suggestions: "Names used in this album",
   dateTaken: "Date and time taken",
   datePlaceholder: "YYYY-MM-DD HH:MM",
+  pickDate: "Pick the date and time",
   useCameraDate: "Use the camera's date",
   clearDate: "Clear the date",
-  description: "Description",
   notes: "Notes",
   invalidDate: "That is not a valid date and time. Use YYYY-MM-DD HH:MM.",
   latNumber: "Latitude must be a number.",
@@ -118,8 +120,7 @@ export const whatsInItText = {
   regenerating: "Writing a new description…",
   regenerateLabel: "Regenerate the description",
   regenerateTooltip: (label: string) => `Ask ${label} to describe this photo again`,
-  keywords: "Keywords",
-  objects: "Objects",
+  tags: "Keywords and objects",
   filterOn: "Show only photos with this",
   filterOff: "Stop filtering by this",
   count: (label: string, count: number) => (count > 1 ? `${label} ×${count}` : label),

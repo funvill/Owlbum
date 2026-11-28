@@ -904,23 +904,25 @@ The workflow never publishes. If a release for the tag is already published, it 
 
 | Topic | Detail |
 |---|---|
-| Trigger | A push to `main` that changes `site/**`, and a manual run. |
-| Permissions | `pages: write`, `id-token: write`. |
-| Steps | Check out; `actions/configure-pages`; `actions/upload-pages-artifact` with `path: site`; `actions/deploy-pages`. |
+| Trigger | A manual run only (Actions, Pages, Run workflow). As built (#68): the push trigger on `site/**` is left out until Pages is on, so that no merge can start a publish; the workflow file says what to add. |
+| Permissions | `contents: read`, `pages: write`, `id-token: write`. |
+| Steps | Check out; `node scripts/check-site.mjs`; a "Pages is on" check; `actions/configure-pages`; `actions/upload-pages-artifact` with `path: site`; `actions/deploy-pages`. |
 | Build | None. The folder is published as it is. |
 
-It fails until a person switches GitHub Pages on for the repository with "GitHub Actions" as the source. That is done at final review.
+The "Pages is on" step asks the GitHub API for the repository's Pages settings and stops the run, before anything is uploaded, with "GitHub Pages is not switched on for this repository..." when Pages is off, or a similar message when its source is not GitHub Actions. A person switches Pages on with "GitHub Actions" as the source at final review, then runs the workflow once by hand; adding the push trigger afterwards is optional.
 
 ## The marketing site
 
-One static page, `site/index.html`, with `site/style.css` and an `site/img/` folder. It is hand-written HTML and CSS. There is no build step, no framework, no script, no web font from another host, no analytics and no cookie. It is published at `https://funvill.github.io/Owlbum/`.
+One static page, `site/index.html`, with `site/style.css`, a `site/img/` folder (the approved icon at 128 px and the 32 px favicon, copied from `src-tauri/icons/`) and a `site/fonts/` folder (Inter's Latin variable file from `@fontsource-variable/inter`, with its licence as `OFL.txt`). It is hand-written HTML and CSS. There is no build step, no framework, no script, no web font from another host, no analytics and no cookie. It is published at `https://funvill.github.io/Owlbum/`.
+
+`scripts/check-site.mjs` checks it, with no network: every local file and `#anchor` the page names exists, there is no script, inline handler or embedded page, nothing is loaded from another host, and links to other sites go only to `https://github.com/funvill/Owlbum`. It is a step of `scripts/check.sh` (quick and full) and of `pages.yml`.
 
 | Section | Content |
 |---|---|
 | What it is | The name, the logo, one sentence, and three or four short points: star and hide, find by what is in a photo, simple edits, drag into other programs. |
 | Screenshots | The grid, the viewer, the map and Settings. |
 | Privacy | The About box's network statement, word for word, plus: "No account. No telemetry. The Windows installer may download Microsoft's WebView2 if your computer does not have it." |
-| Download | Two buttons, Windows and Linux, both linking to `https://github.com/funvill/Owlbum/releases/latest`. Beneath: the Windows SmartScreen note ("Windows may warn that the publisher is unknown, because the installer is not signed yet. Choose More info, then Run anyway.") and the Linux floor (Ubuntu 22.04, Debian 12, or newer). |
+| Download | Two buttons, Windows and Linux, both linking to `https://github.com/funvill/Owlbum/releases/latest`. Beneath: the Windows SmartScreen note ("Windows may warn that the publisher is unknown, because the installer is not signed yet. Choose More info, then Run anyway.") and the Linux floor (Ubuntu 22.04, Debian 12, or newer). As built (#68), while Linux work is paused the Linux line adds that the first release is Windows only. |
 | Open source | "Owlbum is free and open source under the MIT licence." with links to the source, the issues and the third-party notices. |
 | Footer | A link to GitHub and the copyright line. |
 
@@ -967,7 +969,7 @@ Tests run locally, on Windows and on Linux under WSL, and on GitHub Actions on W
 | Rewrite the TypeScript bindings | `./scripts/bindings.sh` |
 | Smoke test | `npm --prefix e2e test` after `npm --prefix ui run tauri build -- --debug` |
 
-`scripts/check.sh` installs the page's packages when `ui/node_modules` is missing or older than `ui/package-lock.json`, then runs the eight rows after it, in that order, and stops at the first failure. There is one script for both systems; on Windows it runs under Git Bash. It points `CARGO_TARGET_DIR` at the main checkout's `target/` when the variable is not set, so every git worktree of a clone shares one build directory.
+`scripts/check.sh` first checks that text files are UTF-8 and that the website is sound (`node scripts/check-site.mjs`, see [The marketing site](#the-marketing-site)). It then installs the page's packages when `ui/node_modules` is missing or older than `ui/package-lock.json`, then runs the eight rows after it, in that order, and stops at the first failure. There is one script for both systems; on Windows it runs under Git Bash. It points `CARGO_TARGET_DIR` at the main checkout's `target/` when the variable is not set, so every git worktree of a clone shares one build directory.
 
 **Temporary folders.** `scripts/check.sh` runs the Rust tests with `TMP`, `TEMP` and `TMPDIR` pointing at a new folder of its own, fails when the tests leave anything in it, and then removes that folder only. Tests put albums and app data in a `tempfile::TempDir`, which deletes its folder when dropped and ignores a failure; on Windows the delete fails while a database inside is still open, so the `TempDir` must be dropped after everything that opened files in it. A fixture struct keeps its `TempDir` as its last field, since fields drop in order. Shell tests get their app from `common::window`, whose `TestApp` closes the album and takes the app data and thumbnail cache out of the app when dropped, because Tauri never frees what an app manages.
 

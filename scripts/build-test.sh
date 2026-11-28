@@ -79,5 +79,9 @@ npm --prefix ui ci --silent
 npm --prefix ui run tauri -- build --no-bundle
 mkdir -p "$test_dir"
 cp "$CARGO_TARGET_DIR/release/owlbum.exe" "$test_dir/owlbum-test.exe"
-cp resources/onnxruntime.dll "$test_dir/onnxruntime.dll"
+# The same pinned DLL is usually there already, and a running copy keeps it
+# locked, so copy it only when it differs.
+if ! cmp -s resources/onnxruntime.dll "$test_dir/onnxruntime.dll"; then
+  cp resources/onnxruntime.dll "$test_dir/onnxruntime.dll"
+fi
 echo "Owlbum $new is at $test_dir/owlbum-test.exe"

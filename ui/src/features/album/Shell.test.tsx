@@ -266,6 +266,70 @@ describe("the grid in the window", () => {
   });
 });
 
+describe("the accessibility baseline", () => {
+  async function review() {
+    const album = createQueryFake([
+      { id: 1, rel_path: "a.jpg", date: "2024-01-01T00:00:01" },
+      { id: 2, rel_path: "b.jpg", date: "2024-01-01T00:00:02" },
+    ]);
+    const fake = await shell({
+      ...album.handlers,
+      album_open: () => ({ status: { ...fakeStatus("D:\\Trip"), photos: 2 }, session: null }),
+    });
+    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    const grid = await screen.findByRole("grid", { name: gridText.label });
+    await waitFor(() => expect(within(grid).getAllByRole("gridcell")).toHaveLength(2));
+    return grid;
+  }
+
+  const region = (name: string) => document.querySelector<HTMLElement>(`[data-region="${name}"]`)!;
+
+  it("has the window regions as landmarks", async () => {
+    await review();
+    // A details panel heading is a <header> too, but inside the aside it is no banner (axe knows; jsdom does not).
+    expect(screen.getAllByRole("banner")).toContain(region("top"));
+    expect(screen.getByRole("search")).toBe(region("filters"));
+    expect(screen.getByRole("main")).toContainElement(region("grid"));
+    expect(screen.getByRole("main")).toContainElement(region("preview"));
+    expect(screen.getByRole("complementary", { name: "Details" })).toBeInTheDocument();
+  });
+
+  it("moves focus through the regions with F6 and back with Shift+F6", async () => {
+    const grid = await review();
+    const order = ["top", "filters", "grid", "preview", "details"];
+    const where = () => order.find((name) => region(name).contains(document.activeElement));
+
+    for (const name of order) {
+      await userEvent.keyboard("{F6}");
+      expect(where()).toBe(name);
+    }
+    // It wraps around, and lands on the grid's current cell, not its view bar.
+    await userEvent.keyboard("{F6}{F6}{F6}");
+    expect(where()).toBe("grid");
+    expect(grid).toContainElement(document.activeElement as HTMLElement);
+    await userEvent.keyboard("{Shift>}{F6}{/Shift}");
+    expect(where()).toBe("filters");
+    await userEvent.keyboard("{Shift>}{F6}{F6}{/Shift}");
+    expect(where()).toBe("details");
+  });
+
+  it("leaves the search box with F6", async () => {
+    await review();
+    const search = within(region("filters")).getByRole("searchbox");
+    search.focus();
+    await userEvent.keyboard("{F6}");
+    expect(region("grid")).toContainElement(document.activeElement as HTMLElement);
+    // Back to the filter bar comes back to the search box.
+    await userEvent.keyboard("{Shift>}{F6}{/Shift}");
+    expect(search).toHaveFocus();
+  });
+
+  it("puts everything in a landmark and passes the automated check", async () => {
+    await review();
+    expect(await seriousFindings(document.body, { landmarks: true })).toEqual([]);
+  });
+});
+
 describe("questions when opening", () => {
   const stale: AppError = appError("album_lock_stale", "This album looks open on STUDIO-PC, last seen 2026-11-20 14:03.", {
     host: "STUDIO-PC",
@@ -287,6 +351,7 @@ describe("questions when opening", () => {
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(stale.message)).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: albumText.openViewOnly })).toHaveFocus();
+    expect(await seriousFindings(dialog)).toEqual([]);
     await userEvent.keyboard("{Escape}");
     expect(opens(fake).at(-1)).toEqual({
       path: "D:\\Trip",

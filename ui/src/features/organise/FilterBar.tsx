@@ -72,7 +72,7 @@ export function FilterBar() {
   useEffect(() => () => void useGridStore.getState().wantFacets(false), []);
 
   return (
-    <div className="ow-filter-bar" role="search" aria-label={t.bar.label}>
+    <div className="ow-filter-bar" role="search" aria-label={t.bar.label} data-region="filters">
       <div className="ow-filter-bar__main">
         <QueryBox />
         <span className="ow-filter-bar__spacer" />

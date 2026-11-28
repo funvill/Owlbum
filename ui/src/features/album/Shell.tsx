@@ -1,6 +1,7 @@
 import { useCallback, useEffect } from "react";
 import { AboutDialog } from "../app/AboutDialog";
 import { closeAbout, useAboutOpen } from "../app/aboutOpen";
+import { useRegionKeys } from "../app/regions";
 import { useShortcutKey, type Where } from "../app/shortcuts";
 import { SettingsDialog } from "../app/SettingsDialog";
 import { closeSettings, useSettingsOpen } from "../app/settingsOpen";
@@ -40,6 +41,8 @@ export function Shell() {
       [],
     ),
   );
+  // F6 and Shift+F6 move between the regions (docs/09, "Accessibility baseline").
+  useRegionKeys();
   useEffect(() => {
     void useAlbumStore.getState().start();
   }, []);

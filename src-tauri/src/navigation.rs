@@ -74,7 +74,10 @@ mod tests {
     #[test]
     fn under_tauri_dev_the_vite_server_is_the_apps_page() {
         let dev = url("http://localhost:5173");
-        assert!(allowed(&url("http://localhost:5173/src/main.tsx"), Some(&dev)));
+        assert!(allowed(
+            &url("http://localhost:5173/src/main.tsx"),
+            Some(&dev)
+        ));
         assert!(!allowed(&url("http://localhost:5174/"), Some(&dev)));
         assert!(!allowed(&url("https://localhost:5173/"), Some(&dev)));
         assert!(!allowed(&url("https://example.com/"), Some(&dev)));

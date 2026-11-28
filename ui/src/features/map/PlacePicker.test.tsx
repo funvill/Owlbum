@@ -7,6 +7,7 @@ import { appError, createFakeApi, type FakeApi } from "../../api/fake";
 import { createQueryFake, type FakePhoto } from "../../api/fake/query";
 import { useToasts } from "../../controls";
 import { mapText } from "../../text/map";
+import { seriousFindings } from "../../test/axe";
 import { useSettingsStore } from "../app";
 import { resetGrid, useGridStore } from "../grid";
 import { PhotoMap } from "./photoMap";
@@ -68,6 +69,7 @@ describe("the place picker", () => {
     const run = fake.calls.find((c) => c.command === "query_run");
     expect(run?.args).toMatchObject({ query: { view: "map", filter: {}, stack: false }, keep: null });
     expect(screen.getByRole("dialog", { name: t.title(1) })).toBeInTheDocument();
+    expect(await seriousFindings()).toEqual([]);
   });
 
   it("sets the clicked place, with the country there as its name, for every photo", async () => {

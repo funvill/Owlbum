@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { ProgressBar } from "../../controls";
+import { albumText } from "../../text/album";
 import { readingLabel } from "./reading";
 import { useAlbumStore } from "./session";
 
@@ -18,7 +19,7 @@ export function ReadingBar() {
   if (p === null) return null;
   const known = p.phase === "reading" && p.found > 0;
   return (
-    <div className="ow-reading">
+    <div className="ow-reading" role="region" aria-label={albumText.readingRegion}>
       <ProgressBar
         label={readingLabel(p, start, now)}
         value={known ? p.done : undefined}

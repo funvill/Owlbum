@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it } from "vitest";
 import { setApi } from "../../api";
 import { createFakeApi, type FakeApi } from "../../api/fake";
 import { aboutText as t } from "../../text/app";
+import { seriousFindings } from "../../test/axe";
 import { AboutDialog } from "./AboutDialog";
 
 let fake: FakeApi;
@@ -24,6 +25,7 @@ describe("the About box", () => {
     expect(dialog.querySelector("img")).not.toBeNull();
     // OK is focused, so Enter or Esc closes the box.
     expect(screen.getByRole("button", { name: t.ok })).toHaveFocus();
+    expect(await seriousFindings()).toEqual([]);
   });
 
   it("opens the repository and the feedback page through Rust, never by itself", async () => {

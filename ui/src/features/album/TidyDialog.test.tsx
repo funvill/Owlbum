@@ -7,6 +7,7 @@ import { appError, createFakeApi, type FakeApi, type FakeHandlers } from "../../
 import { fakeStatus } from "../../api/fake/album";
 import { Toasts, useToasts } from "../../controls";
 import { albumText as t } from "../../text/album";
+import { seriousFindings } from "../../test/axe";
 import { useGridStore } from "../grid";
 import { TidyDialog, defaultTicks } from "./TidyDialog";
 import { TopBar } from "./TopBar";
@@ -115,6 +116,7 @@ describe("Tidy dialog", () => {
     expect(screen.getByText(t.tidySelected(1, 2))).toBeInTheDocument();
     expect(screen.getByText(t.tidySelected(0, 1))).toBeInTheDocument();
     expect(removeButton()).toHaveTextContent("Remove 3 entries");
+    expect(await seriousFindings()).toEqual([]);
   });
 
   it("a folder's box ticks or clears its files, and the count follows in the singular", async () => {

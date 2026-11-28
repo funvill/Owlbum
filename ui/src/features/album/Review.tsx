@@ -107,7 +107,7 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
 
   return (
     <section ref={ref} className="ow-review" aria-label={albumText.photosRegion}>
-      <div className="ow-review__photos" style={{ width: columns.grid }}>
+      <div className="ow-review__photos" style={{ width: columns.grid }} data-region="grid">
         <ViewBar />
         {view === "map" ? (
           <MapView album={folder} onOpen={open} />
@@ -132,7 +132,7 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
         onMove={(w) => move("panel.grid_width", w)}
         onSave={(w) => void save("panel.grid_width", w)}
       />
-      <div className="ow-review__preview">
+      <div className="ow-review__preview" data-region="preview">
         <Preview detail={detail.detail} onOpen={open} onMenu={openMenu} />
       </div>
       <Splitter
@@ -145,7 +145,7 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
         onMove={(w) => move("panel.details_width", w)}
         onSave={(w) => void save("panel.details_width", w)}
       />
-      <div className="ow-review__details" style={{ width: columns.details }}>
+      <div className="ow-review__details" style={{ width: columns.details }} data-region="details">
         <DetailsPanel current={shown} onNotFound={notFound} shared={detail} />
       </div>
       <Viewer detail={detail.detail} />

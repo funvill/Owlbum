@@ -33,7 +33,7 @@ export function TopBar() {
         : albumText.albumTooltip(status.root);
 
   return (
-    <header className="ow-topbar">
+    <header className="ow-topbar" data-region="top">
       <div className="ow-topbar__left">
         <span className="ow-topbar__name">{appText.name}</span>
         {status !== null && (

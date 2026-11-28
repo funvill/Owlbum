@@ -562,7 +562,7 @@ Every feature meets this baseline before it is called done.
 
 - Everything that can be done with the mouse can be done with the keyboard, except dragging a photo out of the window, for which Copy is the keyboard route.
 - Tab moves between regions and controls. Arrow keys move inside the grid, menus, segmented controls, radio groups and sliders.
-- F6 and Shift+F6 move focus between the top bar, the filter bar, the grid, the preview and the details panel.
+- F6 and Shift+F6 move focus between the top bar, the filter bar, the grid, the preview and the details panel, wrapping around, and work from inside a text field. Focus goes back to where it last was in that region; the first time, to the grid's current cell, or else the region's first control (a region with none takes focus itself). Regions not shown are skipped, and the keys do nothing while a dialog or the viewer is open. Each region is the element marked `data-region` (`ui/src/features/app/regions.ts`).
 - Splitters take focus; Left and Right move them 16 px, and Home and End go to the minimum and maximum.
 - Single-letter shortcuts do nothing while a text field has focus.
 - Escape closes the topmost thing: tooltip, menu, popover, dialog, then viewer.
@@ -572,7 +572,7 @@ Every feature meets this baseline before it is called done.
 
 | Part | Roles and properties |
 |---|---|
-| Window regions | `banner` for the top bar, `search` for the filter bar, `main` for the grid and preview, `complementary` labelled "Details" for the details panel. |
+| Window regions | `banner` for the top bar, `search` for the filter bar, `main` for the grid and preview, `complementary` labelled "Details" for the details panel. The reading bar is a `region` labelled "Reading progress", so nothing on the page is outside a landmark. |
 | Thumbnail grid | `role="grid"` with `aria-multiselectable="true"`, `aria-rowcount` and `aria-colcount` for the whole result, not only the rows drawn. Each row is `role="row"` with `aria-rowindex`; each tile is `role="gridcell"` with `aria-selected`. One cell has `tabindex="0"`; the rest have `-1`. |
 | A tile's name | The file name, then its state in words: "IMG_0042.jpg, starred, score 55, stack of 3". |
 | Dialogs | `role="dialog"` with `aria-modal="true"` and `aria-labelledby` pointing at the title. Focus is trapped inside. The rest of the page is `inert`. A dialog that only asks to confirm a deletion is `role="alertdialog"`. |
@@ -595,7 +595,7 @@ Every feature meets this baseline before it is called done.
 - The page works at 200% display scaling in the minimum window without losing a control.
 - With Windows contrast themes (`forced-colors: active`), borders and focus rings use system colours and stay visible. Photos and the histogram are left alone.
 
-**Checking.** Page tests run an automated accessibility check (axe) on the grid, the viewer, the Filters panel, Settings and each dialog, and fail on any serious finding. A keyboard-only walk through the main tasks is on the release checklist.
+**Checking.** Page tests run an automated accessibility check (axe, `ui/src/test/axe.ts`) on the grid, the viewer, the Filters panel, Settings and each dialog, and fail on any serious finding. A test of the whole window with an album open also fails when any content is outside a landmark. Colour contrast is not part of it (jsdom draws nothing); the token tests check contrast from the token values instead. A keyboard-only walk through the main tasks is on the release checklist.
 
 ## Logo and app icon
 

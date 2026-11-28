@@ -36,6 +36,8 @@ export const albumText = {
   noPhotos: "No photos in this folder.",
   dropHere: "Drop to open this folder",
   photosRegion: "Photos",
+  /** The reading bar's landmark name. */
+  readingRegion: "Reading progress",
 
   // Review screen splitters (docs/04-browsing.md, "Splitters")
   resizeGrid: "Resize thumbnail column",

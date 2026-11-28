@@ -9,6 +9,19 @@ the window's title shows the version that is running.
 
 ## [Unreleased]
 
+### Added
+
+- F6 and Shift+F6 move the keyboard focus between the top bar, the filter
+  bar, the grid, the preview and the details panel, and back to where it
+  was in each.
+
+### Changed
+
+- The app window is locked down: it loads nothing from the internet except
+  map tiles (after you say yes), never leaves its own page or opens new
+  windows, and the page can only call Owlbum's own commands. Links such as
+  the project page still open in your browser.
+
 ## [0.1.2] - 2026-11-27
 
 ### Added

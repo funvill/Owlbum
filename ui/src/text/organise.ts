@@ -1,9 +1,11 @@
 // Text shown by the organise feature (src/features/organise).
 // docs/05-organising.md, "Star and hide", "Sorting", "The filter bar" and "Undo".
 
+import { formatNumber } from "./i18n/locale";
+
 /** A whole number with digit grouping: 2,140. */
 function group(n: number): string {
-  return n.toLocaleString("en-US");
+  return formatNumber(n);
 }
 
 export const organiseText = {

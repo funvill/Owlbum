@@ -6,13 +6,14 @@ import { useGridStore } from "../grid";
 import { SortSelect } from "../organise/SortSelect";
 import "./ViewBar.css";
 
-const VIEWS: SegmentOption[] = [
+// Read when drawn, so they are in the language in use.
+const views = (): SegmentOption[] => [
   { value: "grid", label: t.views.grid, icon: "grid" },
   { value: "timeline", label: t.views.timeline, icon: "timeline" },
   { value: "map", label: t.views.map, icon: "map" },
 ];
 
-const UNITS: SegmentOption[] = [
+const units = (): SegmentOption[] => [
   { value: "day", label: t.unit.day },
   { value: "month", label: t.unit.month },
 ];
@@ -45,7 +46,7 @@ export function ViewBar() {
         as="tablist"
         label={t.views.label}
         value={view}
-        options={VIEWS}
+        options={views()}
         onChange={(value) => {
           const next = value === "timeline" || value === "map" ? value : "grid";
           if (next === view) return;
@@ -58,7 +59,7 @@ export function ViewBar() {
         <Segmented
           label={t.unit.label}
           value={unit}
-          options={UNITS}
+          options={units()}
           onChange={(value) => {
             const next = value === "month" ? "month" : "day";
             if (next === asked) return;

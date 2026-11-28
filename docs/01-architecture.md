@@ -64,7 +64,7 @@ Owlbum/
   LICENSE                 MIT
 ```
 
-**Interface text has two homes.** Text the page shows lives in `ui/src/text/`. Text that Rust produces (error messages in `AppError`, menu labels, native dialog wording) lives in one `text` module in `owlbum-core`. No sentence for the user is written anywhere else.
+**Interface text has two homes.** Text the page shows lives in `ui/src/text/`. Text that Rust produces (error messages in `AppError`, menu labels, native dialog wording) lives in one `text` module in `owlbum-core`. No sentence for the user is written anywhere else. The page's text can be shown in another language through `ui/src/text/i18n/`; see [Visual design, Languages](09-visual-design.md#languages).
 
 ## The two Rust crates
 

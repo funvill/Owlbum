@@ -16,6 +16,7 @@ pub mod handoff;
 pub mod navigation;
 pub mod protocol;
 pub mod session;
+pub mod theme;
 pub mod update;
 pub mod window;
 
@@ -182,6 +183,7 @@ pub fn run() {
     let settings = data.settings().unwrap_or_default();
     let pubkey = update::public_key(context.config());
     let saved_window = settings.window;
+    let saved_theme = settings.theme;
 
     let mut builder = tauri::Builder::default();
     // Step 3: one running copy per app data folder. Tests that set
@@ -200,6 +202,7 @@ pub fn run() {
             // Step 8: the window, hidden, with the restored geometry.
             let window = main_window(app, dev)?;
             self::window::place(&window, &saved_window);
+            theme::apply(&window, saved_theme);
             // The smoke test (e2e/, issue 204) answers the folder dialog
             // and stops the browser through two variables, since WebDriver
             // cannot reach native windows.
@@ -455,24 +458,6 @@ fn folder_dialog<R: Runtime>(
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    /// The window is filled with the theme's window colour (`--bg`) before
-    /// the page draws, so there is no white flash (docs/08, "The window").
-    #[test]
-    fn the_window_background_is_the_theme_colour() {
-        let conf: serde_json::Value =
-            serde_json::from_str(include_str!("../tauri.conf.json")).unwrap();
-        let main = &conf["app"]["windows"][0];
-        assert_eq!(main["label"], "main");
-        let tokens = include_str!("../../ui/src/styles/tokens.css");
-        let bg = tokens
-            .lines()
-            .find_map(|l| l.trim().strip_prefix("--bg:"))
-            .expect("tokens.css sets --bg")
-            .trim()
-            .trim_end_matches(';');
-        assert_eq!(main["backgroundColor"], bg);
-    }
 
     #[test]
     fn the_window_title_carries_the_version() {

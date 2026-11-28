@@ -1,6 +1,7 @@
 // The token file against docs/09-visual-design.md: every token the document
-// names exists with its dark value, the layers keep their order, and the
-// contrast table still holds for the values in the file.
+// names exists with its dark and light values, the layers keep their order,
+// and the contrast table still holds for the values in the file, in both
+// themes.
 
 import { describe, expect, it } from "vitest";
 import { declarations, firstBlock, read, readDoc, sourceFiles, srcDir, tokenFile, tokenRows } from "../test/sources";
@@ -9,7 +10,12 @@ import { join } from "node:path";
 const doc = readDoc("09-visual-design.md");
 const css = read(tokenFile);
 const dark = declarations(firstBlock(css));
+const lightBlock = /:root\[data-theme="light"\] \{([^}]*)\}/.exec(css);
+const light = declarations(lightBlock?.[1] ?? "");
 const everyDeclared = declarations(css);
+
+/** Whether a token value is a colour. */
+const isColour = (value: string) => /^(#[0-9a-f]{6}|rgba?\()/i.test(value);
 
 /** The CSS value the document's "Dark" or "Value" cell stands for. */
 function expectedValue(row: string[]): string {
@@ -31,6 +37,14 @@ const docTokens = tokenRows(doc).map((row) => ({
   value: expectedValue(row).replace(/\s+/g, " "),
 }));
 
+/** The Light column of the colour tables: "same" repeats the dark value. */
+const docLight = tokenRows(doc)
+  .filter((row) => row.length >= 4 && (/^`.+`$/.test(row[2]!) || row[2] === "same"))
+  .map((row) => ({
+    name: row[0]!.slice(1, -1),
+    value: (row[2] === "same" ? row[1]! : row[2]!).slice(1, -1).replace(/\s+/g, " "),
+  }));
+
 describe("design tokens", () => {
   it("finds the token tables in the design document", () => {
     expect(docTokens.length).toBeGreaterThan(90);
@@ -44,10 +58,30 @@ describe("design tokens", () => {
     expect(dark.get("--font")).toMatch(/^'Inter Variable', system-ui, sans-serif$/);
   });
 
-  it("chooses the dark theme on the root element", () => {
+  it("chooses the dark theme on the root element until the setting is read", () => {
     expect(css).toMatch(/:root\[data-theme="dark"\]/);
     expect(firstBlock(css)).toMatch(/color-scheme: dark;/);
     expect(read(join(srcDir, "..", "index.html"))).toMatch(/<html lang="en" data-theme="dark">/);
+  });
+
+  it("has a light block that sets the light colour scheme", () => {
+    expect(lightBlock).not.toBeNull();
+    expect(lightBlock![1]).toMatch(/color-scheme: light;/);
+  });
+
+  it("finds the Light column in the design document", () => {
+    expect(docLight.length).toBeGreaterThan(50);
+  });
+
+  it.each(docLight)("defines $name for the light theme as in the document", ({ name, value }) => {
+    expect(light.get(name)).toBe(value);
+  });
+
+  it("gives every colour token a light value and nothing else", () => {
+    const colours = [...dark].filter(([, value]) => isColour(value)).map(([name]) => name);
+    const extra = [...light.keys()].filter((name) => !dark.has(name));
+    expect(colours.filter((name) => !light.has(name))).toEqual([]);
+    expect(extra).toEqual([]);
   });
 
   it("stacks the layers in the documented order", () => {
@@ -108,9 +142,16 @@ function contrast(a: string, b: string): number {
 
 const pairs = doc
   .split("\n")
-  .map((line) => /^\| `(--[a-z0-9-]+)` on `(--[a-z0-9-]+)`(?: \([^)]*\))? \| ([\d.]+) \|/.exec(line))
+  .map((line) => /^\| `(--[a-z0-9-]+)` on `(--[a-z0-9-]+)`( \([^)]*\))? \| ([\d.]+) \| ([\d.]+) \|/.exec(line))
   .filter((m): m is RegExpExecArray => m !== null)
-  .map((m) => ({ fg: m[1]!, bg: m[2]!, ratio: Number(m[3]) }));
+  .map((m) => ({
+    fg: m[1]!,
+    bg: m[2]!,
+    // Text needs 4.5:1; a row that says "needs 3" is a border, ring or outline.
+    least: m[3]?.includes("needs 3") ? 3 : 4.5,
+    ratio: Number(m[4]),
+    lightRatio: Number(m[5]),
+  }));
 
 describe("contrast", () => {
   it("finds the contrast table", () => {
@@ -120,5 +161,11 @@ describe("contrast", () => {
   it.each(pairs)("$fg on $bg measures $ratio in the dark theme", ({ fg, bg, ratio }) => {
     const measured = contrast(dark.get(fg)!, dark.get(bg)!);
     expect(Math.abs(measured - ratio)).toBeLessThan(0.15);
+  });
+
+  it.each(pairs)("$fg on $bg measures $lightRatio in the light theme, at least $least", ({ fg, bg, lightRatio, least }) => {
+    const measured = contrast(light.get(fg)!, light.get(bg)!);
+    expect(Math.abs(measured - lightRatio)).toBeLessThan(0.15);
+    expect(measured).toBeGreaterThanOrEqual(least);
   });
 });

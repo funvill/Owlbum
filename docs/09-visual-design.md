@@ -6,19 +6,21 @@ This part says how Owlbum looks: its colours, type, spacing, layers, icons, cont
 
 Owlbum keeps the look of the program it replaces: a dark window with an amber accent, and three columns side by side (the thumbnail grid, the preview, the details panel) under a top bar and a filter bar.
 
-Version 1 ships one theme, which is dark. Every colour in the page comes from a named token, so a light theme can be added later by supplying a second set of values. No component may write a colour, a z-index or a duration as a literal. A page test fails if a style outside the token file contains a hex colour, `rgb(` or `hsl(`.
+There are two themes, dark and light (the light one was added after version 1, issue 75). Every colour in the page comes from a named token, and the light theme is a second set of values for the same tokens. No component may write a colour, a z-index or a duration as a literal. A page test fails if a style outside the token file contains a hex colour, `rgb(` or `hsl(`.
 
 Changes from the old look are few and are listed where they happen. Larger ideas are not built; they are in [Suggestions awaiting a decision](#suggestions-awaiting-a-decision).
 
 ## Colour tokens
 
-Tokens are CSS custom properties on `:root`. The theme is chosen by a `data-theme` attribute on the root element, which is `dark` in version 1. The root also sets `color-scheme` to match, so native scrollbars and form parts follow.
+Tokens are CSS custom properties on `:root`. The theme is chosen by a `data-theme` attribute on the root element, `dark` or `light`. The root also sets `color-scheme` to match, so native scrollbars and form parts follow.
 
-The light column is a proposal. It is not built in version 1 (issue 75). It is here to prove the token set is enough to describe a second theme, and its values were checked for contrast in the same way as the dark ones.
+**Choosing the theme** (issue 75, suggestion 1): Settings > View > Theme offers **Same as Windows** (the default), **Dark** and **Light**, saved as the setting `theme` (`system`, `dark`, `light`; see [Data](02-data.md)). `ui/src/features/app/theme.ts` sets `data-theme` from the setting; under Same as Windows it follows `prefers-color-scheme` and changes when Windows does. `index.html` starts with `dark`, and the page sets the real theme before the window is shown. On the Rust side (`src-tauri/src/theme.rs`) the window gets the matching window theme, which colours its title bar, and is filled with that theme's `--bg` before the page draws; `backgroundColor` in `tauri.conf.json` stays the dark `--bg` for the moment before the setting is read, and a test keeps both colours equal to the token file. Map tiles, photos, the viewer and the app icon are the same in both themes.
+
+The light values were proposed with version 1 and are built as written in the Light column. The token tests check every value against these tables and every contrast pair below in both themes (`ui/src/styles/tokens.test.ts`). jsdom cannot measure contrast on the page, so the axe checks in page tests run with the contrast rule off and these value checks stand in for it.
 
 ### Surfaces and lines
 
-| Token | Dark | Light (proposed) | Use |
+| Token | Dark | Light | Use |
 |---|---|---|---|
 | `--bg` | `#161618` | `#f4f3f0` | Window background, start screen. |
 | `--stage` | `#111113` | `#e9e8e4` | Grid column background. |
@@ -33,7 +35,7 @@ The light column is a proposal. It is not built in version 1 (issue 75). It is h
 
 ### Text
 
-| Token | Dark | Light (proposed) | Use |
+| Token | Dark | Light | Use |
 |---|---|---|---|
 | `--text` | `#ecebe7` | `#1d1c1a` | Body text, values, headings. |
 | `--muted` | `#9b988f` | `#605d56` | Labels, hints, counts, placeholders. |
@@ -41,7 +43,7 @@ The light column is a proposal. It is not built in version 1 (issue 75). It is h
 
 ### Accent, state and selection
 
-| Token | Dark | Light (proposed) | Use |
+| Token | Dark | Light | Use |
 |---|---|---|---|
 | `--accent` | `#e7a65f` | `#9a560a` | Primary buttons, the star, active chips, checked boxes, slider fill, progress fill, open-stack outline, map cluster bubbles. |
 | `--accent-strong` | `#f2b871` | `#824707` | Primary button hover. |
@@ -61,7 +63,7 @@ The light column is a proposal. It is not built in version 1 (issue 75). It is h
 
 These were fixed colours in the old program. They are tokens now. Surfaces that sit on or around a photo stay dark in both themes where a light value would hurt the photo.
 
-| Token | Dark | Light (proposed) | Use |
+| Token | Dark | Light | Use |
 |---|---|---|---|
 | `--preview-bg` | `#111113` | `#e9e8e4` | Preview column background. |
 | `--preview-text` | `#ffffff` | `#1d1c1a` | Text drawn in the preview column. |
@@ -81,7 +83,7 @@ These were fixed colours in the old program. They are tokens now. Surfaces that 
 
 ### Edits, score and histogram
 
-| Token | Dark | Light (proposed) | Use |
+| Token | Dark | Light | Use |
 |---|---|---|---|
 | `--marker-edited` | `#c2a37d` | `#7a5a2e` | The edit dot on a tile and the "Edited" badge when `edit_target` is `album`: the edit is kept in the album and nothing is waiting to be saved. A quiet form of the accent. |
 | `--marker-unsaved` | `#d98b2b` | `#a35808` | The edit dot on a tile and the "Edited · not saved" badge when `edit_target` is `file`: the edit is not in the file yet. |
@@ -110,7 +112,7 @@ Three old values were changed so they pass the contrast target:
 
 The target is WCAG 2.2 level AA: 4.5:1 for text, 3:1 for large text, icons, control borders and focus rings. The ratios below were computed from the token values with the WCAG relative-luminance formula.
 
-| Pair | Dark | Light (proposed) |
+| Pair | Dark | Light |
 |---|---|---|
 | `--text` on `--bg` | 15.2 | 15.4 |
 | `--text` on `--stage` | 15.8 | 13.9 |
@@ -627,11 +629,23 @@ The one-colour `OwlMark` in `ui/src/controls/` was drawn from an earlier draft a
 
 Clear space around the icon is at least one quarter of its width. The icon is not recoloured, stretched, rotated or placed on a photo.
 
+## Languages
+
+Built after version 1 as machinery only (issue 76): the page can show another language, but none is translated yet. How a translator adds one is in [Translating Owlbum](translating.md).
+
+- **English is the source.** The text modules in `ui/src/text/` are written in English and stay the only place interface text is written. A translation is a file `ui/src/text/locales/<tag>.json` (a BCP 47 tag: `fr`, `pt-BR`) that maps keys to translated text. A key is the module, the exported object and the path inside it: `grid.gridText.label`. A key a translation leaves out stays English.
+- **Messages.** An entry that builds its text from values (a count, a file name) is translated as a message, a small part of ICU MessageFormat: `{0}` for an argument, `{0.fileName}` for a field of one, `{0, plural, one {# photo} other {# photos}}` for plurals by the language's own rules (`Intl.PluralRules`), and `{0, select, true {…} other {…}}`. A number put in a message is written in the language's own way.
+- **Formats.** Numbers, dates, month and day names come from `Intl` in the language in use (`ui/src/text/i18n/locale.ts`). English keeps the version 1 formats ("14 July 2026", "2,140").
+- **Which language.** Settings > View > Language offers "Same as Windows (…)" (the default, setting `language` null), English and each translation found. Same as Windows takes the first of the system's languages that has a translation, trying `pt-BR` and then `pt`, else English. The language is set before the page draws, so a change shows from the next start; Settings says so.
+- **The pseudo-language** `qps-ploc` (Windows' own pseudo-locale tag) is English with every letter accented, a third longer and in brackets. It is offered in development builds only. A page test (`ui/src/text/i18n/pseudo.test.tsx`) draws the start screen, the review screen, Settings and About in it and fails on any plain English word that is not data, which proves the text goes through the modules; it also caught labels read once when a module loaded, which now are read when drawn. Whether layouts survive the longer text is checked by eye in a development build, since jsdom does no layout.
+- **Rust's text** (`owlbum_core::text`: error messages, filter chip labels, the native dialogs) is English only for now. It would follow the same `language` setting in a later step.
+- **Right-to-left languages** are not handled yet.
+
 ## Suggestions awaiting a decision
 
 These are optional. Each has a default that applies if the owner says nothing. The ones marked "in v1" are already written into the sections above and can be reversed; the ones marked "not in v1" are not built.
 
-1. **Follow the system's light or dark setting.** Reason: most desktop programs do, and people who use a light desktop find a lone dark window jarring. Needs the light theme to be built and a three-way setting (System, Dark, Light). Default: not in v1.
+1. **Follow the system's light or dark setting.** Reason: most desktop programs do, and people who use a light desktop find a lone dark window jarring. Needs the light theme to be built and a three-way setting (System, Dark, Light). Default: not in v1. As built after version 1 (issue 75): the light theme and the setting, defaulting to Same as Windows; see [Colour tokens](#colour-tokens).
 2. **Pick the first-run thumbnail size from the window width.** Reason: 160 px tiles look small on a large monitor; 200 px above 1600 px of width shows more of each photo. The user's own choice would still win afterwards. Default: not in v1 (160 px everywhere).
 3. **One slimmer combined bar.** Reason: the top bar and filter bar together take about 110 px of height from the photos. One 48 px bar could hold the album name, search, Filters and Sort, with the rest moved into a menu. Default: not in v1 (two bars).
 4. **A status bar for progress.** Reason: scan and tagging strips that appear under the top bar push the grid down when they come and go. A 24 px status bar along the bottom would hold both, plus the photo count and selection count, and nothing would jump. Default: not in v1 (strips under the top bar).

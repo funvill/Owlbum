@@ -5,8 +5,10 @@
  * z-index or a duration of its own (src/styles/literals.test.ts), and
  * another checks these values against the document (tokens.test.ts).
  *
- * Version 1 ships the dark theme only. A second theme is a second block of
- * the same names under :root[data-theme="<name>"].
+ * Two themes: dark (the first block, also used before a theme is chosen)
+ * and light (a second block of the same colour names under
+ * :root[data-theme="light"]). ui/src/features/app/theme.ts sets the
+ * attribute from the theme setting.
  */
 
 :root,
@@ -167,6 +169,81 @@
   --z-menu: 500;
   --z-toast: 600;
   --z-tooltip: 700;
+}
+
+/*
+ * The light theme (issue 75): the colour tokens again, with the values of
+ * the Light column of docs/09-visual-design.md. Everything that is not a
+ * colour is shared, from the block above.
+ */
+:root[data-theme="light"] {
+  color-scheme: light;
+  /* Surfaces and lines */
+  --bg: #f4f3f0;
+  --stage: #e9e8e4;
+  --panel: #ffffff;
+  --panel-2: #f3f2ee;
+  --panel-3: #e6e4df;
+  --line: #d2d0ca;
+  --line-soft: #e2e0da;
+  --line-strong: #86847e;
+  --backdrop: rgba(0,0,0,0.35);
+  --shadow: 0 8px 28px rgba(0,0,0,0.18);
+
+  /* Text */
+  --text: #1d1c1a;
+  --muted: #605d56;
+  --disabled: #a09d96;
+
+  /* Accent, state and selection */
+  --accent: #9a560a;
+  --accent-strong: #824707;
+  --accent-ink: #ffffff;
+  --focus: #824707;
+  --focus-gap: #ffffff;
+  --select: #1b66d6;
+  --ok: #1f7a43;
+  --warn: #855f00;
+  --error: #bf3526;
+  --info-soft: #e4edfa;
+  --ok-soft: #e4efe8;
+  --warn-soft: #f0ece0;
+  --error-soft: #f7e7e5;
+
+  /* Photo surfaces */
+  --preview-bg: #e9e8e4;
+  --preview-text: #1d1c1a;
+  --edit-bar: #f3f2ee;
+  --seg-bg: #e6e4df;
+  --seg-line: #c4c2bb;
+  --viewer-bg: #000000;
+  --viewer-text: #ffffff;
+  --viewer-muted: #b8b5ad;
+  --viewer-panel: rgba(20,20,22,0.88);
+  --viewer-bar: rgba(0,0,0,0.7);
+  --badge-bg: rgba(0,0,0,0.65);
+  --badge-text: #ffffff;
+  --crop-line: rgba(255,255,255,0.9);
+  --crop-shade: rgba(0,0,0,0.55);
+  --minimap-line: rgba(255,255,255,0.5);
+
+  /* Edits, score and histogram */
+  --marker-edited: #7a5a2e;
+  --marker-unsaved: #a35808;
+  --marker-ink: #ffffff;
+  --mark-off: rgba(255,255,255,0.85);
+  --drag-placeholder: #e6e4df;
+  --score-up-bg: rgba(30,114,58,0.92);
+  --score-down-bg: rgba(201,58,46,0.92);
+  --score-toast-text: #ffffff;
+  --score-plus: #1f7a43;
+  --score-minus: #bf3526;
+  --hist-red: #d13b30;
+  --hist-green: #2e8b47;
+  --hist-blue: #2f6fe0;
+  --hist-luma: #777777;
+  --hist-fill: 0.45;
+  --hist-luma-fill: 0.35;
 }
 
 /* Reduced motion is handled here, once: components never test for it. */

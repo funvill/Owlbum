@@ -5,7 +5,8 @@ import { useGridStore } from "../grid";
 
 type Sort = Query["sort"];
 
-const SORTS: SelectOption[] = (Object.keys(t.sorts) as Sort[]).map((value) => ({ value, label: t.sorts[value] }));
+/** The sorts, read when drawn so they are in the language in use. */
+const sorts = (): SelectOption[] => (Object.keys(t.sorts) as Sort[]).map((value) => ({ value, label: t.sorts[value] }));
 
 /**
  * The Sort control (docs/05-organising.md, "Sorting"). It sits beside the
@@ -19,7 +20,7 @@ export function SortSelect() {
     <SelectField
       label={t.bar.sort}
       value={sort}
-      options={SORTS}
+      options={sorts()}
       onChange={(next) => {
         const state = useGridStore.getState();
         state.setQuery({ ...state.query, sort: next as Sort });

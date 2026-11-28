@@ -9,6 +9,7 @@ import "leaflet/dist/leaflet.css";
 import "leaflet.markercluster/dist/MarkerCluster.css";
 import type { MapPoint } from "../../api/bindings/MapPoint";
 import { thumbUrl } from "../../api/media";
+import { formatNumber } from "../../text/i18n/locale";
 import { mapText } from "../../text/map";
 import { editedHtml } from "../edit/drawing";
 import { holdColourFilter } from "../edit/filters";
@@ -67,7 +68,7 @@ function clusterIcon(cluster: L.MarkerCluster): L.DivIcon {
   const n = cluster.getChildCount();
   return L.divIcon({
     className: "ow-map-cluster",
-    html: `<span aria-label="${escape(mapText.cluster(n))}">${n.toLocaleString("en-US")}</span>`,
+    html: `<span aria-label="${escape(mapText.cluster(n))}">${formatNumber(n)}</span>`,
     iconSize: [BUBBLE, BUBBLE],
     iconAnchor: [BUBBLE / 2, BUBBLE / 2],
   });

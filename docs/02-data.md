@@ -287,6 +287,8 @@ Settings keys (each has a default in code; an unknown key is ignored and kept). 
 | `cache.limit_gb` | 20 | Whole number, 1 to 1000. |
 | `window` | 1440 × 900 | `{ x, y, width, height, maximised }` in physical pixels. |
 | `whats_new.last_seen` | null | The last version whose notes were shown. |
+| `theme` | `system` | `system` (follow the system's light or dark setting), `dark` or `light` (docs/09, "Colour tokens", issue 75). |
+| `language` | null | The interface language as a BCP 47 tag (`fr`, `pt-BR`), or null to use the system's language when a translation of it exists, else English (docs/09, "Languages", issue 76). |
 
 The recent list keeps 12 entries, newest first by `opened_at`; an entry can be removed from the start screen. Opening a folder or saving its session moves it to the top, with an `opened_at` later than every other entry's even when the clock gives the same millisecond. `root` is matched exactly as given. Saving a session keeps fields of the stored one that the new one does not have. The page keeps nothing in `localStorage`; every preference goes through `app_settings_get` and `app_settings_set`.
 

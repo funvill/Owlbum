@@ -2,6 +2,8 @@
 // docs/04-browsing.md, "Start screen", "Opening a folder", "Top bar",
 // "Album banners", "Reading bar", "Notices" and "Toasts and other dialogs".
 
+import { formatNumber } from "./i18n/locale";
+
 /** "1 photo", "2,140 photos": the plural "s" only when the number is not 1. */
 function plural(n: number, one: string, many: string): string {
   return n === 1 ? one : many;
@@ -9,7 +11,7 @@ function plural(n: number, one: string, many: string): string {
 
 /** "2,140": thousands separators. */
 function count(n: number): string {
-  return n.toLocaleString("en-US");
+  return formatNumber(n);
 }
 
 export const albumText = {

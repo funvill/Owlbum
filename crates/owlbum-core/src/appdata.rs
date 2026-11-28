@@ -30,7 +30,7 @@ use crate::text;
 
 pub use paths::{Location, Platform, locate};
 pub use recent::Recent;
-pub use settings::{GridPlace, Settings};
+pub use settings::{GridPlace, Settings, Theme};
 
 /// The open app data folder and its `app.sqlite`. Cloning is cheap; every
 /// clone shares one connection, used by one caller at a time.

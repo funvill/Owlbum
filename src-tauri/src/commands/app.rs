@@ -600,13 +600,15 @@ command! {
     /// Saves some settings and answers every setting. Unknown keys are kept.
     /// A value outside its setting's range answers `setting_out_of_range`
     /// and changes nothing.
-    pub async fn app_settings_set(
+    pub async fn app_settings_set<R: Runtime>(
         patch: Map<String, Value>;
+        app: AppHandle<R>,
         data: State<'_, AppData>,
         thumbs: State<'_, Thumbs>
     ) -> Settings {
         let data = data.inner().clone();
         let thumbs = thumbs.inner().clone();
+        let theme_changed = patch.contains_key("theme");
         let settings = blocking(move || {
             let settings = data.set_settings(&patch)?;
             // Lowering the limit prunes at once.
@@ -614,6 +616,10 @@ command! {
             Ok(settings)
         })
         .await?;
+        // A new theme colours the title bar and the window at once (issue 75).
+        if theme_changed && let Some(window) = app.get_webview_window("main") {
+            crate::theme::apply(&window, settings.theme);
+        }
         Ok(settings)
     }
 }

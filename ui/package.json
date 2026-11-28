@@ -8,6 +8,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "eslint --max-warnings 0 .",
     "test": "vitest run",
+    "text:template": "node scripts/text-template.mjs",
     "tauri": "cd .. && tauri",
     "app:dev": "cd .. && tauri dev --config src-tauri/tauri.dev.conf.json"
   },

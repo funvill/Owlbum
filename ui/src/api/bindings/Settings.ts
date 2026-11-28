@@ -3,6 +3,7 @@ import type { EditTarget } from "./EditTarget";
 import type { GridPlace } from "./GridPlace";
 import type { SettingsTimelineUnit } from "./SettingsTimelineUnit";
 import type { SettingsView } from "./SettingsView";
+import type { Theme } from "./Theme";
 import type { WindowSetting } from "./WindowSetting";
 
 /**
@@ -104,4 +105,14 @@ window: WindowSetting,
 /**
  * The last version whose What's new notes were shown.
  */
-"whats_new.last_seen": string | null, };
+"whats_new.last_seen": string | null, 
+/**
+ * The colour theme: system, dark or light.
+ */
+theme: Theme, 
+/**
+ * The interface language as a BCP 47 tag (`fr`, `pt-BR`), or null to
+ * follow the system's language when a translation exists
+ * (docs/09-visual-design.md, "Languages").
+ */
+language: string | null, };

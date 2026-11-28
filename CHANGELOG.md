@@ -22,6 +22,13 @@ the window's title shows the version that is running.
   approximate. CMYK JPEG XL pictures open instead of failing.
 - About lists the ONNX Runtime version once photo tagging has loaded
   it, and the log names the version at the first model load.
+- A light theme. Settings > View > Theme chooses Same as Windows (the
+  default, which follows Windows' light or dark setting), Dark or
+  Light; the window's title bar and background follow too.
+- Owlbum can now be translated: Settings > View > Language chooses the
+  language (Same as Windows by default), and numbers, dates and month
+  names follow it. Only English exists so far; docs/translating.md says
+  how a translator adds a language.
 
 ### Changed
 

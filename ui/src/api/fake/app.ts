@@ -29,6 +29,8 @@ export const defaultSettings: Settings = {
   "cache.limit_gb": 20,
   window: { x: null, y: null, width: 1440, height: 900, maximised: false },
   "whats_new.last_seen": null,
+  theme: "system",
+  language: null,
 };
 
 /** The ranges the fake checks, like Rust's `setting_out_of_range`. */

@@ -5,8 +5,9 @@ import type { Commands, Events } from "./bindings";
 import type { AppError } from "./bindings/AppError";
 import type { Recent } from "./bindings/Recent";
 import type { Settings } from "./bindings/Settings";
+import type { Theme } from "./bindings/Theme";
 
-export type { Commands, Events, AppError, Recent, Settings };
+export type { Commands, Events, AppError, Recent, Settings, Theme };
 
 /** Some settings to change with `app_settings_set`. */
 export type SettingsPatch = Partial<Settings>;

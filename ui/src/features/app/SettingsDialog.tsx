@@ -3,8 +3,10 @@ import { api, toAppError } from "../../api";
 import type { Association } from "../../api/bindings/Association";
 import type { CacheUsage } from "../../api/bindings/CacheUsage";
 import type { SettingsPatch } from "../../api";
-import { Button, Checkbox, Dialog, RadioGroup, TextField, showToast } from "../../controls";
+import { Button, Checkbox, Dialog, RadioGroup, SelectField, TextField, showToast } from "../../controls";
 import { settingsText as t, updateText } from "../../text/app";
+import { availableLanguages, chooseLanguage, languageName, systemLanguages } from "../../text/i18n/languages";
+import { formatDate } from "../../text/i18n/locale";
 import { formatSize } from "../details/facts";
 import { refreshEditStatus } from "../edit/save";
 import { updateCommand } from "./lifecycle";
@@ -31,7 +33,7 @@ export function lastChecked(ms: number | null, now: Date = new Date()): string {
   const at = new Date(ms);
   const time = `${pad(at.getHours())}:${pad(at.getMinutes())}`;
   if (at.toDateString() === now.toDateString()) return t.today(time);
-  const day = at.toLocaleDateString("en-GB", {
+  const day = formatDate(at, {
     day: "numeric",
     month: "short",
     year: "numeric",
@@ -74,6 +76,41 @@ function OpenPictures() {
       disabled={busy}
       onChange={(on) => void change(on)}
     />
+  );
+}
+
+/** Theme and language (issues 75 and 76). */
+function Appearance({ theme, language }: { theme: string; language: string | null }) {
+  const [changedLanguage, setChangedLanguage] = useState(false);
+  const languages = availableLanguages();
+  const system = chooseLanguage(null, systemLanguages(), languages);
+  return (
+    <>
+      <RadioGroup
+        label={t.theme}
+        value={theme}
+        options={[
+          { value: "system", label: t.themeSystem, description: t.themeSystemNote },
+          { value: "dark", label: t.themeDark },
+          { value: "light", label: t.themeLight },
+        ]}
+        onChange={(v) => {
+          if (v === "system" || v === "dark" || v === "light") void save({ theme: v });
+        }}
+      />
+      <SelectField
+        label={t.language}
+        value={language ?? ""}
+        options={[
+          { value: "", label: t.languageSystem(languageName(system)) },
+          ...languages.map((tag) => ({ value: tag, label: languageName(tag) })),
+        ]}
+        onChange={(v) => {
+          void save({ language: v === "" ? null : v }).then((ok) => setChangedLanguage(ok));
+        }}
+      />
+      {changedLanguage && <p className="ow-settings__note">{t.languageNote}</p>}
+    </>
   );
 }
 
@@ -276,6 +313,7 @@ function SettingsBody() {
             if (v === "left" || v === "bottom") void save({ "panel.grid_place": v, "panel.grid_shown": true });
           }}
         />
+        <Appearance theme={settings.theme} language={settings.language} />
       </Section>
       <Section title={t.maps}>
         <Checkbox

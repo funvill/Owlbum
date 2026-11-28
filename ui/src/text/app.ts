@@ -42,6 +42,17 @@ export const settingsText = {
   gridPlace: "Thumbnails",
   gridLeft: "At the left",
   gridBottom: "Along the bottom, under the preview",
+  /** The colour theme (issue 75). */
+  theme: "Theme",
+  themeSystem: "Same as Windows",
+  themeSystemNote: "Light or dark, as chosen in Windows' colour settings.",
+  themeDark: "Dark",
+  themeLight: "Light",
+  /** The interface language (issue 76). */
+  language: "Language",
+  /** The first choice: the system's language, or English when there is no translation of it. */
+  languageSystem: (name: string) => `Same as Windows (${name})`,
+  languageNote: "The new language is shown the next time Owlbum starts.",
   maps: "Maps",
   mapsOnline: "Load maps from the internet",
   mapsNote: "Map pictures come from OpenStreetMap. Your photos and their locations are never sent.",

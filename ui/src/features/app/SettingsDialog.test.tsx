@@ -11,6 +11,7 @@ import { settingsText as t } from "../../text/app";
 import { formatSize } from "../details/facts";
 import { SettingsDialog, lastChecked, parseLimit } from "./SettingsDialog";
 import { useSettingsStore } from "./settings";
+import { followTheme, resolveTheme } from "./theme";
 
 const BYTES = 12_400_000_000;
 const SIZE = formatSize(BYTES);
@@ -171,5 +172,40 @@ describe("helpers", () => {
     expect(lastChecked(null, now)).toBe(t.never);
     expect(lastChecked(new Date(2026, 10, 27, 9, 14).getTime(), now)).toBe(t.today("09:14"));
     expect(lastChecked(new Date(2026, 10, 20, 8, 5).getTime(), now)).toBe(t.onDay("20 Nov 2026", "08:05"));
+  });
+});
+
+describe("theme and language (issues 75 and 76)", () => {
+  it("saves the theme and redraws the page in it", async () => {
+    const stop = followTheme();
+    const { fake } = show();
+    const system = await screen.findByRole("radio", { name: t.themeSystem });
+    expect(system).toBeChecked();
+    // jsdom has no system preference: the system counts as dark.
+    expect(document.documentElement.dataset.theme).toBe("dark");
+    await userEvent.click(screen.getByRole("radio", { name: t.themeLight }));
+    await waitFor(() => expect(setCalls(fake)).toEqual([{ patch: { theme: "light" } }]));
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("light"));
+    await userEvent.click(screen.getByRole("radio", { name: t.themeDark }));
+    await waitFor(() => expect(document.documentElement.dataset.theme).toBe("dark"));
+    stop();
+  });
+
+  it("resolves System by the system's choice", () => {
+    expect(resolveTheme("system", true)).toBe("light");
+    expect(resolveTheme("system", false)).toBe("dark");
+    expect(resolveTheme("dark", true)).toBe("dark");
+    expect(resolveTheme("light", false)).toBe("light");
+  });
+
+  it("saves a language, or null for the system's, and says when it is shown", async () => {
+    const { fake } = show();
+    const select = await screen.findByRole("combobox", { name: t.language });
+    expect(select).toHaveValue("");
+    await userEvent.selectOptions(select, "en");
+    await waitFor(() => expect(setCalls(fake)).toEqual([{ patch: { language: "en" } }]));
+    expect(await screen.findByText(t.languageNote)).toBeInTheDocument();
+    await userEvent.selectOptions(select, "");
+    await waitFor(() => expect(setCalls(fake)).toContainEqual({ patch: { language: null } }));
   });
 });

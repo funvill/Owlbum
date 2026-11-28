@@ -3,12 +3,18 @@ import { albumText } from "../../text/album";
 import { viewOnlyBanner, type BannerAction } from "./banners";
 import { useAlbumStore } from "./session";
 
-const actionLabel: Record<BannerAction, string> = {
-  try_again: albumText.tryAgain,
-  open_for_changes: albumText.openForChanges,
-  take_lock: albumText.openForChanges,
-  restore: albumText.restoreBackupEllipsis,
-};
+/** A banner button's label, read when drawn so it is in the language in use. */
+function actionLabel(action: BannerAction): string {
+  switch (action) {
+    case "try_again":
+      return albumText.tryAgain;
+    case "open_for_changes":
+    case "take_lock":
+      return albumText.openForChanges;
+    case "restore":
+      return albumText.restoreBackupEllipsis;
+  }
+}
 
 /** The album banners under the top bar (docs/04-browsing.md, "Album banners"). */
 export function AlbumBanners() {
@@ -43,7 +49,7 @@ export function AlbumBanners() {
           actions={
             banner.action === null ? undefined : (
               <Button size="sm" onClick={() => act(banner.action ?? "try_again")}>
-                {actionLabel[banner.action]}
+                {actionLabel(banner.action)}
               </Button>
             )
           }

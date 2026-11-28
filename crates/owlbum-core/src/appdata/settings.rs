@@ -67,6 +67,19 @@ pub enum GridPlace {
     Bottom,
 }
 
+/// The colour theme (docs/09-visual-design.md, "Colour tokens").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum Theme {
+    /// Follow the system's light or dark setting.
+    #[default]
+    System,
+    /// Always dark.
+    Dark,
+    /// Always light.
+    Light,
+}
+
 /// The `window` setting: the window's bounds when it is not maximised, in
 /// physical pixels, and whether it was maximised
 /// (docs/08-desktop-and-release.md, "The window"). A missing number means
@@ -165,6 +178,12 @@ pub struct Settings {
     /// The last version whose What's new notes were shown.
     #[serde(rename = "whats_new.last_seen")]
     pub whats_new_last_seen: Option<String>,
+    /// The colour theme: system, dark or light.
+    pub theme: Theme,
+    /// The interface language as a BCP 47 tag (`fr`, `pt-BR`), or null to
+    /// follow the system's language when a translation exists
+    /// (docs/09-visual-design.md, "Languages").
+    pub language: Option<String>,
 }
 
 impl Default for Settings {
@@ -193,6 +212,8 @@ impl Default for Settings {
             cache_limit_gb: 20,
             window: WindowSetting::default(),
             whats_new_last_seen: None,
+            theme: Theme::System,
+            language: None,
         }
     }
 }
@@ -233,7 +254,22 @@ pub const KEYS: &[(&str, Check)] = &[
     ("cache.limit_gb", |v| int_in(v, 1, 1000)),
     ("window", window),
     ("whats_new.last_seen", |v| v.is_null() || v.is_string()),
+    ("theme", |v| one_of(v, &["system", "dark", "light"])),
+    ("language", |v| {
+        v.is_null() || v.as_str().is_some_and(language_tag)
+    }),
 ];
+
+/// A BCP 47 language tag of the simple kind a locale file is named by:
+/// a two- or three-letter language, then subtags of letters and digits
+/// (`fr`, `pt-BR`, `qps-ploc`).
+fn language_tag(tag: &str) -> bool {
+    let mut parts = tag.split('-');
+    let first = parts.next().unwrap_or_default();
+    (2..=3).contains(&first.len())
+        && first.bytes().all(|b| b.is_ascii_alphabetic())
+        && parts.all(|p| (2..=8).contains(&p.len()) && p.bytes().all(|b| b.is_ascii_alphanumeric()))
+}
 
 /// The largest width in pixels a panel setting may hold.
 const MAX_PIXELS: i64 = 100_000;
@@ -381,6 +417,8 @@ mod tests {
                 "cache.limit_gb": 20,
                 "window": { "x": null, "y": null, "width": 1440, "height": 900, "maximised": false },
                 "whats_new.last_seen": null,
+                "theme": "system",
+                "language": null,
             })
         );
     }
@@ -427,6 +465,8 @@ mod tests {
                 "window": { "x": -1920, "y": 10, "width": 1200, "height": 800, "maximised": true },
                 "updates.last_check": 1_795_683_903_007_i64,
                 "whats_new.last_seen": "0.1.0",
+                "theme": "light",
+                "language": "pt-BR",
             })),
         )
         .unwrap();
@@ -457,6 +497,8 @@ mod tests {
         );
         assert_eq!(s.updates_last_check, Some(1_795_683_903_007));
         assert_eq!(s.whats_new_last_seen.as_deref(), Some("0.1.0"));
+        assert_eq!(s.theme, Theme::Light);
+        assert_eq!(s.language.as_deref(), Some("pt-BR"));
         assert_eq!(get(&c).unwrap(), s);
     }
 
@@ -513,6 +555,11 @@ mod tests {
             ("updates.notice_seen", json!(0)),
             ("tagging.describe", json!("")),
             ("tagging.keywords", json!(7)),
+            ("theme", json!("blue")),
+            ("theme", json!(null)),
+            ("language", json!("")),
+            ("language", json!("english")),
+            ("language", json!("fr_FR")),
             ("cache.limit_gb", json!(0)),
             ("cache.limit_gb", json!(1001)),
             ("window", json!(null)),

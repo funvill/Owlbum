@@ -9,7 +9,6 @@ import type { Association } from "./Association";
 import type { CacheCleared } from "./CacheCleared";
 import type { CacheUsage } from "./CacheUsage";
 import type { Capabilities } from "./Capabilities";
-import type { CountryMatch } from "./CountryMatch";
 import type { FolderDrop } from "./FolderDrop";
 import type { FormatInfo } from "./FormatInfo";
 import type { JsonValue } from "./serde_json/JsonValue";
@@ -45,7 +44,6 @@ export type AppCommands = {
   app_open_release_page: { args: Record<string, never>; result: null };
   app_open_repository: { args: Record<string, never>; result: null };
   app_pick_folder: { args: Record<string, never>; result: string | null };
-  app_place_search: { args: { text: string }; result: Array<CountryMatch> };
   app_quit: { args: Record<string, never>; result: null };
   app_recent_list: { args: Record<string, never>; result: Array<Recent> };
   app_recent_remove: { args: { root: string }; result: Array<Recent> };

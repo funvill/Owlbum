@@ -2,9 +2,6 @@
 // docs/04-browsing.md, "The details panel".
 
 export const detailsText = {
-  countrySearch: "Search for a country…",
-  countryMatches: "Countries",
-
   // The panel
   region: "Details",
   noPhoto: "No photo selected",

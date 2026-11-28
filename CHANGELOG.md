@@ -9,9 +9,32 @@ the window's title shows the version that is running.
 
 ## [Unreleased]
 
+### Added
+
+- About lists the ONNX Runtime version once photo tagging has loaded
+  it, and the log names the version at the first model load.
+
+### Changed
+
+- Moving photos to the Recycle Bin or Trash now asks in Owlbum's own
+  dialog, where Cancel is the default button: Enter and Esc both keep
+  the photos.
+- In a window narrower than 1100 px the thumbnail-size slider drops
+  from the grid icon instead of taking room in the top bar.
+- The window's web view keeps its own data inside Owlbum's data folder
+  (the `webview` folder) rather than in a separate folder.
+
 ### Fixed
 
 - The update notice and the About box no longer send you to the Help menu, which is gone; the setting is in Settings.
+- Edit (the E key, the photo menu and the preview's Edit) is turned off
+  for a photo while it is being saved, with "This photo is being saved".
+- The Low quality filter and `is:lowquality` found nothing: blurry,
+  dark, bright and small photos are now flagged as described.
+
+### Removed
+
+- The unused country search left over from the details panel.
 
 ## [0.1.6] - 2026-11-27
 

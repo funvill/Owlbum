@@ -1,6 +1,5 @@
 //! Country outlines: which country a place is in (the details panel's
-//! Country row) and the country search (`app_place_search`), from Natural
-//! Earth's admin-0 countries bundled in `data/countries.bin`
+//! Country row), from Natural Earth's admin-0 countries bundled in `data/countries.bin`
 //! (docs/04-browsing.md, "How typed fields save"; docs/01-architecture.md,
 //! "Dependencies chosen"). Nothing is fetched.
 //!
@@ -23,23 +22,9 @@
 
 use std::sync::OnceLock;
 
-use serde::{Deserialize, Serialize};
-use ts_rs::TS;
-
-/// The most `place_search` answers.
-pub const SEARCH_LIMIT: usize = 6;
-
 /// How far out to sea a place still takes the nearest country: 12 nautical
 /// miles, the width of territorial waters.
 pub const SEA_MARGIN_KM: f64 = 22.224;
-
-/// One answer of `app_place_search`: a country and its central point.
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, TS)]
-pub struct CountryMatch {
-    pub name: String,
-    pub lat: f64,
-    pub lon: f64,
-}
 
 /// The bundled outlines (`scripts/countries.mjs` writes them).
 static DATA: &[u8] = include_bytes!("../../data/countries.bin");
@@ -53,22 +38,8 @@ const KM_PER_DEGREE: f64 = 111.32;
 
 pub(crate) struct Country {
     pub name: String,
-    /// Natural Earth's label point, `(lon, lat)` in units.
-    label: (i32, i32),
     /// The bounding box's area in square units, for overlaps.
     box_area: f64,
-    /// The name in lower case without accents, for the search.
-    folded: String,
-}
-
-impl Country {
-    /// The country's central point, `(lat, lon)` in degrees.
-    pub(crate) fn centre(&self) -> (f64, f64) {
-        (
-            f64::from(self.label.1) / UNIT,
-            f64::from(self.label.0) / UNIT,
-        )
-    }
 }
 
 /// One outline edge, in units.
@@ -115,8 +86,9 @@ fn parse(data: &[u8]) -> Option<Outlines> {
         let country = u16::try_from(index).ok()?;
         let len = usize::from(r.take(1)?[0]);
         let name = std::str::from_utf8(r.take(len)?).ok()?.to_owned();
-        let lon = i32::from_le_bytes(r.take(4)?.try_into().ok()?);
-        let lat = i32::from_le_bytes(r.take(4)?.try_into().ok()?);
+        // Natural Earth's label point, which nothing reads since the
+        // country search went (issue 208).
+        r.take(8)?;
         let (mut x0, mut y0, mut x1, mut y1) = (i32::MAX, i32::MAX, i32::MIN, i32::MIN);
         for _ in 0..r.varint()? {
             let n = r.varint()? as usize;
@@ -147,9 +119,7 @@ fn parse(data: &[u8]) -> Option<Outlines> {
             0.0
         };
         countries.push(Country {
-            folded: fold(&name),
             name,
-            label: (lon, lat),
             box_area,
         });
     }
@@ -332,51 +302,6 @@ fn segment_distance(p: (f64, f64), a: (f64, f64), b: (f64, f64)) -> f64 {
         0.0
     };
     (p.0 - a.0 - t * dx).hypot(p.1 - a.1 - t * dy)
-}
-
-/// Countries whose name contains the text, ignoring case and accents, at
-/// most [`SEARCH_LIMIT`]: names that start with the text first, then names
-/// with a word that starts with it, then the rest, each group in name order.
-/// Empty text answers nothing.
-pub fn place_search(text: &str) -> Vec<CountryMatch> {
-    let wanted = fold(text.trim());
-    if wanted.is_empty() {
-        return Vec::new();
-    }
-    let o = outlines();
-    let mut found: Vec<(u8, &Country)> = o
-        .countries
-        .iter()
-        .filter_map(|c| {
-            let rank = if c.folded.starts_with(&wanted) {
-                0
-            } else if c
-                .folded
-                .split(|ch: char| !ch.is_alphanumeric())
-                .any(|word| word.starts_with(&wanted))
-            {
-                1
-            } else if c.folded.contains(&wanted) {
-                2
-            } else {
-                return None;
-            };
-            Some((rank, c))
-        })
-        .collect();
-    found.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.folded.cmp(&b.1.folded)));
-    found
-        .into_iter()
-        .take(SEARCH_LIMIT)
-        .map(|(_, c)| {
-            let (lat, lon) = c.centre();
-            CountryMatch {
-                name: c.name.clone(),
-                lat,
-                lon,
-            }
-        })
-        .collect()
 }
 
 /// Lower case, with the accents of Latin letters removed, so "aland" finds

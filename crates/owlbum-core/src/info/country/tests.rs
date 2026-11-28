@@ -157,19 +157,6 @@ fn disputed_areas_follow_natural_earths_default_view() {
 const CRIMEA: &str = "Russia";
 
 #[test]
-fn every_central_point_is_in_its_own_country() {
-    let o = outlines();
-    let mut wrong = Vec::new();
-    for c in &o.countries {
-        let (lat, lon) = c.centre();
-        if country_at(lat, lon) != Some(c.name.as_str()) {
-            wrong.push(format!("{} -> {:?}", c.name, country_at(lat, lon)));
-        }
-    }
-    assert!(wrong.is_empty(), "{wrong:?}");
-}
-
-#[test]
 fn a_hundred_thousand_lookups_are_quick() {
     let start = std::time::Instant::now();
     let o = parse(DATA).unwrap();
@@ -210,49 +197,4 @@ fn a_hundred_thousand_lookups_are_quick() {
     // other builds does not fail it; it still catches a lookup that tests
     // every edge (about 190,000 per point), which would take minutes.
     assert!(took.as_millis() < 30_000, "{took:?}");
-}
-
-#[test]
-fn search_lists_names_containing_the_text() {
-    let names =
-        |text: &str| -> Vec<String> { place_search(text).into_iter().map(|m| m.name).collect() };
-    assert_eq!(names("france"), ["France"]);
-    assert_eq!(names("FRANCE"), ["France"]);
-    assert_eq!(names("  fran "), ["France"]);
-    assert!(names("").is_empty());
-    assert!(names("   ").is_empty());
-    assert!(names("zzz").is_empty());
-    // Accents are ignored too.
-    assert_eq!(names("aland"), ["Åland", "New Zealand"]);
-    assert_eq!(names("sao tome"), ["São Tomé and Príncipe"]);
-    assert_eq!(names("curaçao"), ["Curaçao"]);
-    // Names that start with the text first, then names with a word that
-    // starts with it, then the rest; each group in name order. At most 6.
-    assert_eq!(names("ger"), ["Germany", "Algeria", "Niger", "Nigeria"]);
-    assert_eq!(
-        names("in"),
-        [
-            "India",
-            "Indonesia",
-            "Australian Indian Ocean Territories",
-            "British Indian Ocean Territory",
-            "United Nations Buffer Zone in Cyprus",
-            "Argentina",
-        ]
-    );
-    assert_eq!(names("land").len(), 6);
-}
-
-#[test]
-fn search_answers_each_countrys_central_point() {
-    let found = place_search("japan");
-    assert_eq!(found.len(), 1);
-    let m = &found[0];
-    assert_eq!(m.name, "Japan");
-    assert_eq!(country_at(m.lat, m.lon), Some("Japan"));
-    // Natural Earth's label point, to 4 decimals.
-    assert!(
-        (m.lat - 36.9).abs() < 2.0 && (m.lon - 138.4).abs() < 2.0,
-        "{m:?}"
-    );
 }

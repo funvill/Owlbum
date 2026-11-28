@@ -14,7 +14,7 @@ use owlbum_core::app::whats_new::{self, WhatsNewEntry};
 use owlbum_core::app::{self, About, AppClosing, AppVersion, FolderDrop, OpenFolder, Startup};
 use owlbum_core::appdata::{AppData, Recent, Settings};
 use owlbum_core::files::Capabilities;
-use owlbum_core::info::country::{self, CountryMatch};
+use owlbum_core::info::country;
 use owlbum_core::media::{self, FormatInfo};
 use owlbum_core::thumbs::{CacheCleared, CacheUsage, Thumbs};
 use owlbum_core::{AppError, text};
@@ -47,7 +47,6 @@ area! {
         app_open_release_page,
         app_open_repository,
         app_pick_folder,
-        app_place_search,
         app_quit,
         app_recent_list,
         app_recent_remove,
@@ -530,16 +529,6 @@ command! {
     /// (docs/03-media-and-scanning.md, "Commands").
     pub fn app_formats() -> Vec<FormatInfo> {
         Ok(media::formats())
-    }
-}
-
-command! {
-    /// Countries whose name contains the text, at most 6, each with its
-    /// central point, from the bundled outlines (docs/04-browsing.md, "How
-    /// typed fields save"). Async so the first call, which reads the
-    /// outlines, runs off the main thread.
-    pub async fn app_place_search(text: String) -> Vec<CountryMatch> {
-        Ok(country::place_search(&text))
     }
 }
 

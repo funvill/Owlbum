@@ -6,7 +6,13 @@ import type { PersonCount } from "../../../api/bindings/PersonCount";
 import type { PhotoDetail } from "../../../api/bindings/PhotoDetail";
 import type { TypedLocation } from "../../../api/bindings/TypedLocation";
 import { detailsText as t } from "../../../text/details";
-import type { LocationBoxes } from "../CountrySearch";
+
+/** The Location group's three boxes, as typed. */
+export interface LocationBoxes {
+  lat: string;
+  lon: string;
+  name: string;
+}
 
 /** The longest name, in characters (as in Rust). */
 export const MAX_NAME_CHARS = 100;

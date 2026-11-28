@@ -1053,7 +1053,7 @@ Done once, at final review, by a person (these wait for the owner): create the s
 
 ## Commands and events this part adds
 
-The events `open_folder` and `update_state` are listed in [Architecture](01-architecture.md#events). Other `app_` commands are defined by the part that owns their behaviour: `app_settings_get`, `app_settings_set`, `app_recent_list`, `app_recent_remove`, `app_session_save` and `app_place_search` in [Browsing](04-browsing.md#commands-and-events); `app_formats` in [Media and scanning](03-media-and-scanning.md#commands-events-and-urls); `app_capabilities` in [Editing and file actions](06-editing-and-file-actions.md#commands-and-events). A value outside its range given to `app_settings_set` answers `setting_out_of_range` and changes nothing.
+The events `open_folder` and `update_state` are listed in [Architecture](01-architecture.md#events). Other `app_` commands are defined by the part that owns their behaviour: `app_settings_get`, `app_settings_set`, `app_recent_list`, `app_recent_remove` and `app_session_save` in [Browsing](04-browsing.md#commands-and-events); `app_formats` in [Media and scanning](03-media-and-scanning.md#commands-events-and-urls); `app_capabilities` in [Editing and file actions](06-editing-and-file-actions.md#commands-and-events). A value outside its range given to `app_settings_set` answers `setting_out_of_range` and changes nothing.
 
 | Command | Arguments → reply | Purpose |
 |---|---|---|

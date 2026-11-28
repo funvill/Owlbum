@@ -326,3 +326,52 @@ impl MediaHandler for Raw {
         Cost::Heavy
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// A hand check of real RAW files (#157): for every file in the folder
+    /// `OWLBUM_RAWS`, the sensor size, the embedded pictures' sizes, and
+    /// the time of `metadata`, `preview(1600)` and `working`, and whether
+    /// each used an embedded picture or developed. Run on a release build:
+    /// `OWLBUM_RAWS=<folder> cargo test --release -p owlbum-core --lib
+    /// raw::tests::real_raw_files -- --ignored --nocapture`.
+    #[test]
+    #[ignore = "a hand check with real RAW files"]
+    fn real_raw_files() {
+        use std::time::Instant;
+        let dir = std::env::var_os("OWLBUM_RAWS").expect("OWLBUM_RAWS");
+        let size = |r: Result<Option<DynamicImage>, _>| {
+            r.ok().flatten().map(|i: DynamicImage| (i.width(), i.height()))
+        };
+        for entry in std::fs::read_dir(dir).unwrap() {
+            let path = entry.unwrap().path();
+            let name = path.file_name().unwrap().to_string_lossy().into_owned();
+            let t = Instant::now();
+            let meta = RAW.metadata(&path);
+            let meta_took = t.elapsed();
+            let Ok(meta) = meta else {
+                println!("{name}: metadata failed: {:?}", meta.err());
+                continue;
+            };
+            let opened = open(&path).unwrap();
+            let p = params();
+            let embedded = (
+                size(opened.decoder.full_image(&opened.source, &p)),
+                size(opened.decoder.preview_image(&opened.source, &p)),
+                size(opened.decoder.thumbnail_image(&opened.source, &p)),
+            );
+            let t = Instant::now();
+            let preview = RAW.preview(&path, 1600).map(|px| (px.width, px.height));
+            let preview_took = t.elapsed();
+            let t = Instant::now();
+            let working = RAW.working(&path).map(|px| (px.width, px.height));
+            let working_took = t.elapsed();
+            println!(
+                "{name}: {}x{}; embedded full/preview/thumbnail {embedded:?}; metadata {meta_took:?}; preview {preview:?} in {preview_took:?}; working {working:?} in {working_took:?}",
+                meta.width, meta.height
+            );
+        }
+    }
+}

@@ -238,6 +238,21 @@ fn copy_image_copies_the_upright_picture() {
 }
 
 #[test]
+fn copy_image_draws_the_stored_edit() {
+    let f = fixture();
+    f.open();
+    let b = f.id_of("b.png");
+    f.call::<serde_json::Value>(
+        "edit_set",
+        json!({ "photo_id": b, "edit": { "rotate": 90, "flip": false } }),
+    )
+    .unwrap();
+    let out: CopiedImage = f.call("file_copy_image", json!({ "photo_id": b })).unwrap();
+    assert!(!out.scaled && !out.file);
+    assert_eq!(*f.fake.image.lock().unwrap(), Some((20, 31)), "turned a quarter");
+}
+
+#[test]
 fn copy_files_copies_the_files_or_their_paths() {
     let f = fixture();
     let root = f.open();

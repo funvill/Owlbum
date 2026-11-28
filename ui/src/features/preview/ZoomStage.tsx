@@ -96,6 +96,11 @@ export interface ZoomStageProps {
   actualSizeAtFit?: boolean;
   /** Right-click: the photo menu (#38). */
   onMenu?: (event: ReactMouseEvent) => void;
+  /**
+   * A primary-button press at fit, where there is nothing to pan: the
+   * preview starts a drag out from it (docs/06, "Dragging photos out").
+   */
+  onPressAtFit?: (event: ReactPointerEvent) => void;
   handle?: Ref<ZoomHandle>;
 }
 
@@ -132,6 +137,7 @@ export function ZoomStage({
   onOpenAtFit,
   actualSizeAtFit = false,
   onMenu,
+  onPressAtFit,
   handle,
 }: ZoomStageProps) {
   const stageRef = useRef<HTMLDivElement>(null);
@@ -231,7 +237,11 @@ export function ZoomStage({
 
   const drag = useRef<{ id: number; x: number; y: number; from: View } | null>(null);
   const onPointerDown = (e: ReactPointerEvent<HTMLDivElement>) => {
-    if (e.button !== 0 || shown.zoom <= 1) return;
+    if (e.button !== 0) return;
+    if (shown.zoom <= 1) {
+      onPressAtFit?.(e);
+      return;
+    }
     drag.current = { id: e.pointerId, x: e.clientX, y: e.clientY, from: shown };
     e.currentTarget.setPointerCapture?.(e.pointerId);
     setGrabbing(true);

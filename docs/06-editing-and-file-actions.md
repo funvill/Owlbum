@@ -765,7 +765,7 @@ Ctrl+C with one photo selected, or **Copy** in the menu, calls `file_copy_image(
 
 | Rule | Detail |
 |---|---|
-| What is copied | The photo as Owlbum shows it: upright, **with its stored edit applied**, rendered by the renderer. Until the renderer exists (#43) the copy is upright and unedited; the reply's `with_edits` says when the photo has an edit that the copy lacks. |
+| What is copied | The photo as Owlbum shows it: upright, **with its stored edit applied**, drawn by the edit renderer from the full-size working picture (`render_pixels`), then scaled to the size limit. |
 | Size limit | At most 50 megapixels. A larger picture is scaled down to fit, keeping its shape. |
 | Video | The file is copied instead, as in "Copy several". |
 | Toast | "Copied"; "Copied, made smaller to fit the clipboard" when it was scaled. |
@@ -849,7 +849,7 @@ Every command takes photo ids. An unknown id answers `photo_not_found`. A comman
 | `edit_save_as` | `photo_id` | `{ cancelled, saved_name, in_album, photo_id, warning, revision }` | Rust opens the dialog. One flat shape: `cancelled` true leaves the rest empty. |
 | `file_trash` | `photo_ids` | `{ trashed: [id], failed: [{ id, name, message }], cancelled, revision }` | Rust shows the confirm. |
 | `file_reveal` | `photo_id` | nothing | |
-| `file_copy_image` | `photo_id` | `{ scaled, file, with_edits }` | `file` when a video's file was copied instead; `with_edits` while the copy cannot show the edit yet. |
+| `file_copy_image` | `photo_id` | `{ scaled, file }` | `file` when a video's file was copied instead. The picture has the stored edit drawn. |
 | `file_copy_files` | `photo_ids` | `{ copied, dropped, as, with_edits }` | `as` is `files` or `paths`. |
 | `file_copy_paths` | `photo_ids` | `{ copied, dropped }` | |
 | `file_copy_text` | `content` | nothing | Puts plain text on the clipboard: the details panel's Copy ([Browsing](04-browsing.md#the-details-panel)). At most 1 MiB. Errors: `internal` for more, `clipboard_failed`. |

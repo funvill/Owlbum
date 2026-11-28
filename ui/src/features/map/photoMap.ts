@@ -32,6 +32,8 @@ const BUBBLE = 40;
 export interface PhotoMapEvents {
   /** A marker was clicked, with Ctrl (or Cmd) or not. */
   onPick(id: number, add: boolean): void;
+  /** A marker was right-clicked at this point of the window: the photo menu. */
+  onMenu?(id: number, at: { x: number; y: number }): void;
   /** A tile failed, or the next one loaded after a failure. */
   onTiles(failing: boolean): void;
 }
@@ -221,6 +223,12 @@ export class PhotoMap {
     marker.on("click", (e: L.LeafletMouseEvent) => {
       const ev = e.originalEvent;
       this.events.onPick(p[0], ev?.ctrlKey === true || ev?.metaKey === true);
+    });
+    marker.on("contextmenu", (e: L.LeafletMouseEvent) => {
+      const ev = e.originalEvent;
+      // Owlbum's menu replaces the webview's own, as on a tile.
+      ev?.preventDefault();
+      if (ev !== undefined) this.events.onMenu?.(p[0], { x: ev.clientX, y: ev.clientY });
     });
     this.markers.set(p[0], marker);
     const colour = p[5]?.colour ?? null;

@@ -35,11 +35,13 @@ export interface PreviewProps {
   onOpen?: (at: PhotoAt) => void;
   /** Right-click on the stage: the photo menu (#38). */
   onMenu?: (at: PhotoAt, event: ReactMouseEvent) => void;
+  /** A primary-button press at fit: the start of a drag out (#42). */
+  onPress?: (at: PhotoAt, event: { button: number; clientX: number; clientY: number }) => void;
   /** The zoom component's handle, for keys. */
   zoom?: Ref<ZoomHandle>;
 }
 
-export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
+export function Preview({ detail, onOpen, onMenu, onPress, zoom }: PreviewProps) {
   const { current, pending, row } = useShownRow();
   const selected = useGridStore((s) => s.selection.length);
   const editTarget = useSettingsStore((s) => s.settings?.edit_target ?? "album");
@@ -100,6 +102,7 @@ export function Preview({ detail, onOpen, onMenu, zoom }: PreviewProps) {
                     onMenu(at, e);
                   }
             }
+            onPressAtFit={onPress === undefined ? undefined : (e) => onPress(at, e)}
             handle={zoom}
           />
         </StageFor>

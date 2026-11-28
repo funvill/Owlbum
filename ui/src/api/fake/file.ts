@@ -22,7 +22,7 @@ export const fileHandlers: AreaHandlers<FileCommands> = {
       with_edits: false,
     };
   },
-  file_copy_image: () => ({ scaled: false, file: false, with_edits: false }),
+  file_copy_image: () => ({ scaled: false, file: false }),
   file_copy_text: () => null,
   file_copy_paths: ({ photo_ids }) => {
     const ids = unique(photo_ids);

@@ -147,7 +147,7 @@ describe("the Delete key", () => {
 
 describe("Ctrl+C", () => {
   it("copies the picture of one photo", async () => {
-    setup({ file_copy_image: () => ({ scaled: true, file: false, with_edits: false }) });
+    setup({ file_copy_image: () => ({ scaled: true, file: false }) });
     await show(2);
     press("c", { ctrlKey: true });
     await waitFor(() => expect(callsOf("file_copy_image")).toEqual([{ photo_id: 2 }]));
@@ -245,6 +245,34 @@ describe("the photo menu", () => {
     expect(callsOf("edit_turn")[1]).toEqual({ photo_ids: [1, 2], op: "flip" });
   });
 
+  it("closes on a review key, which then acts; its own keys keep it open", async () => {
+    await show(1, [2]);
+    fireEvent.contextMenu(tile(0), { clientX: 10, clientY: 10 });
+    await screen.findByRole("menu");
+    press("ArrowDown");
+    expect(screen.getByRole("menu")).toBeInTheDocument();
+    press("Delete");
+    expect(screen.queryByRole("menu")).toBeNull();
+    await waitFor(() => expect(callsOf("file_trash")).toEqual([{ photo_ids: [1, 2] }]));
+  });
+
+  it("opens in the viewer on a right-click; Esc closes the menu and not the viewer", async () => {
+    await show(2);
+    act(() => openViewer({ id: 2, index: 1 }));
+    const viewer = await screen.findByRole("dialog");
+    fireEvent.contextMenu(viewer.querySelector<HTMLElement>(".ow-zoom")!, { clientX: 10, clientY: 10 });
+    await screen.findByRole("menu", { name: "Photo" });
+    press("Escape");
+    expect(screen.queryByRole("menu")).toBeNull();
+    expect(screen.getByRole("dialog")).toBeInTheDocument();
+    // A viewer key closes the menu and then acts: Ctrl+C copies the shown photo.
+    fireEvent.contextMenu(viewer.querySelector<HTMLElement>(".ow-zoom")!, { clientX: 10, clientY: 10 });
+    await screen.findByRole("menu");
+    press("c", { ctrlKey: true });
+    expect(screen.queryByRole("menu")).toBeNull();
+    await waitFor(() => expect(callsOf("file_copy_image")).toEqual([{ photo_id: 2 }]));
+  });
+
   it("closes when the window loses focus", async () => {
     await show(1);
     fireEvent.contextMenu(tile(1), { clientX: 10, clientY: 10 });
@@ -264,6 +292,16 @@ describe("dragging out", () => {
     fireEvent.pointerMove(window, { buttons: 1, clientX: 103, clientY: 100 });
     expect(callsOf("file_start_drag")).toEqual([]);
     fireEvent.pointerMove(window, { buttons: 1, clientX: 105, clientY: 100 });
+    await waitFor(() => expect(callsOf("file_start_drag")).toEqual([{ photo_ids: [2] }]));
+  });
+
+  it("starts from the preview at fit", async () => {
+    await show(2);
+    await waitFor(() => expect(callsOf("app_capabilities").length).toBe(1));
+    const stage = document.querySelector<HTMLElement>(".ow-preview .ow-zoom")!;
+    fireEvent.pointerDown(stage, { button: 0, clientX: 100, clientY: 100 });
+    await waitFor(() => expect(callsOf("file_prepare_drag")).toEqual([{ photo_ids: [2] }]));
+    fireEvent.pointerMove(window, { buttons: 1, clientX: 110, clientY: 100 });
     await waitFor(() => expect(callsOf("file_start_drag")).toEqual([{ photo_ids: [2] }]));
   });
 

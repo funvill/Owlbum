@@ -10,10 +10,12 @@ use std::path::Path;
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
+use rusqlite::OptionalExtension;
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use crate::album::{Album, sqlite_error};
+use crate::edit::{PhotoEdit, render, store};
 use crate::error::{AppError, AppResult, ErrorCode};
 use crate::scan::memory::Overlay;
 use crate::text;
@@ -311,16 +313,14 @@ impl Capabilities {
     }
 }
 
-/// `file_copy_image`'s answer.
+/// `file_copy_image`'s answer. The picture is drawn with the photo's
+/// stored edit.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct CopiedImage {
     /// The picture was made smaller to fit the clipboard.
     pub scaled: bool,
     /// The photo is a video, so its file was copied instead.
     pub file: bool,
-    /// The photo has a stored edit that the copy does not show yet (the
-    /// renderer comes with saving edits).
-    pub with_edits: bool,
 }
 
 /// `file_copy_files`'s answer.
@@ -386,18 +386,38 @@ pub struct Picture {
     pub scaled: bool,
 }
 
+/// The stored edit of photo `id`, if it has a readable one. A database
+/// that cannot be read counts as no edit.
+pub fn stored_edit(album: &Album, id: i64) -> Option<PhotoEdit> {
+    let text: Option<String> = album
+        .db()
+        .read(move |conn| {
+            conn.query_row("SELECT edit FROM photos WHERE id = ?1", [id], |r| r.get(0))
+                .optional()
+                .map(Option::flatten)
+                .map_err(sqlite_error(text::album::READING_DATABASE))
+        })
+        .ok()
+        .flatten();
+    store::read_stored(id, text.as_deref())
+}
+
 /// The picture of a still photo for copy image (docs/06, "Copy image (one
-/// photo)"): its full-size working pixels, scaled down to at most
-/// [`MAX_COPY_PIXELS`]. The stored edit is not drawn yet: that needs the
-/// edit renderer. `internal` with "Couldn't read that photo." when it
-/// cannot be decoded.
-pub fn picture(target: &Target) -> AppResult<Picture> {
+/// photo)"): its full-size working pixels drawn through `edit` (the
+/// photo's stored edit, if any) by the edit renderer, then scaled down to
+/// at most [`MAX_COPY_PIXELS`]. `internal` with "Couldn't read that
+/// photo." when it cannot be decoded.
+pub fn picture(target: &Target, edit: Option<&PhotoEdit>) -> AppResult<Picture> {
     let read_failed = || AppError::new(ErrorCode::Internal, text::files::READ_FAILED);
     let format = target.photo.format.ok_or_else(read_failed)?;
     let px = format
         .handler
         .working(&target.photo.path)
         .map_err(|_| read_failed())?;
+    let px = match edit {
+        Some(edit) => render::render_pixels(&px, edit).1,
+        None => px,
+    };
     let img = image::RgbaImage::from_raw(px.width, px.height, px.rgba).ok_or_else(read_failed)?;
     Ok(
         match fit_pixels(img.width(), img.height(), MAX_COPY_PIXELS) {

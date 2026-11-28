@@ -218,8 +218,8 @@ command! {
 command! {
     /// Puts the picture of one photo on the clipboard, upright, at most 50
     /// megapixels (docs/06, "Copy image (one photo)"). A video's file is
-    /// copied instead. The stored edit is not drawn yet: `with_edits` says
-    /// when the photo has one. Errors: `photo_not_found`, `file_missing`,
+    /// copied instead. The photo's stored edit is drawn through the edit
+    /// renderer. Errors: `photo_not_found`, `file_missing`,
     /// `internal` (cannot be read), `clipboard_failed`.
     pub async fn file_copy_image<R: Runtime>(photo_id: i64; app: AppHandle<R>) -> CopiedImage {
         let scanner = scanner(&app)?;
@@ -230,13 +230,14 @@ command! {
             let failed = |r: String| AppError::new(ErrorCode::ClipboardFailed, text::files::copy_image_failed(&r));
             if target.photo.kind == MediaKind::Video {
                 copy_files_to(&*desktop, std::slice::from_ref(&target)).map_err(failed)?;
-                return Ok(CopiedImage { scaled: false, file: true, with_edits: false });
+                return Ok(CopiedImage { scaled: false, file: true });
             }
-            let picture = files::picture(&target)?;
+            let edit = files::stored_edit(open.album, photo_id);
+            let picture = files::picture(&target, edit.as_ref())?;
             desktop
                 .copy_image(picture.width, picture.height, picture.rgba)
                 .map_err(failed)?;
-            Ok(CopiedImage { scaled: picture.scaled, file: false, with_edits: target.edited })
+            Ok(CopiedImage { scaled: picture.scaled, file: false })
         })
         .await
     }

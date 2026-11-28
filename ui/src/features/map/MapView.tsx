@@ -15,6 +15,8 @@ export interface MapViewProps {
   album: string;
   /** Open the viewer on the current photo: Enter or Space. */
   onOpen?: (at: PhotoAt) => void;
+  /** A marker's right-click: the photo menu at that point of the window. */
+  onMenu?: (id: number, at: { x: number; y: number }) => void;
 }
 
 /** Where the map was left, so switching views and back keeps it. */
@@ -31,7 +33,11 @@ export function resetMapPlace(): void {
  * current photo, the selection and the keys are the grid's: Left, Right,
  * Home and End step through the map's whole result, located or not.
  */
-export function MapView({ album, onOpen }: MapViewProps) {
+export function MapView({ album, onOpen, onMenu }: MapViewProps) {
+  const menu = useRef(onMenu);
+  useEffect(() => {
+    menu.current = onMenu;
+  });
   useBrowseKeys({ onOpen });
   const token = useGridStore((s) => s.result?.token ?? null);
   const current = useGridStore((s) => s.current);
@@ -54,6 +60,7 @@ export function MapView({ album, onOpen }: MapViewProps) {
     if (el === null) return;
     const map = new PhotoMap(el, {
       onPick: (id, add) => void pickById(id, add),
+      onMenu: (id, at) => menu.current?.(id, at),
       onTiles: setFailing,
     });
     mapRef.current = map;

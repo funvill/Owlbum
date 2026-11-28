@@ -1,7 +1,8 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
+import { flushSync } from "react-dom";
 import { Menu, type MenuEntry } from "../../controls";
 import type { Point } from "../../controls/place";
-import { primaryKey } from "../../keys";
+import { matchKey, primaryKey } from "../../keys";
 import { filesText } from "../../text/files";
 import { useAlbumStore, viewOnlyReason } from "../album";
 import { BLOCK, copyOnlyLabel, gridBlocks, useGridStore } from "../grid";
@@ -9,6 +10,7 @@ import { turn } from "../edit/turn";
 import { isEditing, notEditable, openEdit } from "../edit/mode";
 import { refreshEditStatus, revertToOriginal, saveAll, saveAs, saveToFile, saving, useSaveStore } from "../edit/save";
 import { useSettingsStore } from "../app/settings";
+import { useViewerStore } from "../viewer/store";
 import { editText } from "../../text/edit";
 import { toggleFlag } from "../organise";
 import { bin, copyPaths, copyPhotos, revealPhoto, trashPhotos } from "./actions";
@@ -148,6 +150,32 @@ export function PhotoMenu({ at, photoId, onClose }: PhotoMenuProps) {
       window.removeEventListener("wheel", onScroll, true);
     };
   }, [onClose]);
+
+  // A review key closes the menu and then acts as usual (docs/06, "The
+  // photo menu"): the menu's own keys (arrows, Home, End, Enter, Space,
+  // Esc, Tab) stay its own. The key is handed back to what had focus
+  // before the menu took it, so the listeners that skip keys inside a
+  // menu see it.
+  const [opener] = useState(() => document.activeElement);
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      const target = e.target instanceof Element ? e.target : null;
+      if (target?.closest('[role="menu"]') == null) return;
+      const place = useViewerStore.getState().open ? "viewer" : "browse";
+      if (matchKey(e, { place, focus: "menu" }) === null) return;
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      flushSync(onClose);
+      const back = opener instanceof HTMLElement && opener.isConnected ? opener : document.body;
+      back.focus();
+      const { key, code, ctrlKey, shiftKey, altKey, metaKey, repeat } = e;
+      back.dispatchEvent(
+        new KeyboardEvent("keydown", { key, code, ctrlKey, shiftKey, altKey, metaKey, repeat, bubbles: true, cancelable: true }),
+      );
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
+  }, [onClose, opener]);
 
   const entries: MenuEntry[] = [
     {

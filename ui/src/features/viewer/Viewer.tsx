@@ -6,8 +6,9 @@
 // photo that leaves the result is replaced by the one now in its place by
 // the grid's own settling, and an empty result closes the viewer.
 
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouseEvent } from "react";
 import { createPortal } from "react-dom";
+import type { PhotoAt } from "../../api/bindings/PhotoAt";
 import type { PhotoDetail } from "../../api/bindings/PhotoDetail";
 import { IconButton, Tooltip, layerRoot } from "../../controls";
 import { viewerBarMs } from "../../controls/timing";
@@ -82,15 +83,17 @@ const BLOCKED = new Set(["Tab", "PageUp", "PageDown"]);
 export interface ViewerProps {
   /** The current photo's details, read once by the review screen; used only when they are this photo's. */
   detail: PhotoDetail | null;
+  /** Right-click on the shown photo: the photo menu (docs/06, "The photo menu"). */
+  onMenu?: (at: PhotoAt, event: ReactMouseEvent) => void;
 }
 
-export function Viewer({ detail }: ViewerProps) {
+export function Viewer({ detail, onMenu }: ViewerProps) {
   const open = useViewerStore((s) => s.open);
   if (!open) return null;
-  return createPortal(<OpenViewer detail={detail} />, layerRoot());
+  return createPortal(<OpenViewer detail={detail} onMenu={onMenu} />, layerRoot());
 }
 
-function OpenViewer({ detail }: ViewerProps) {
+function OpenViewer({ detail, onMenu }: ViewerProps) {
   const { current, pending, row } = useShownRow();
   const count = useGridStore((s) => s.result?.count ?? 0);
   const details = useViewerStore((s) => s.details);
@@ -132,9 +135,10 @@ function OpenViewer({ detail }: ViewerProps) {
     const onKeyDown = (e: KeyboardEvent) => {
       const el = root.current;
       if (el === null) return;
-      // A dialog or menu opened over the viewer has the keys.
+      // A dialog or menu opened over the viewer has the keys (the photo
+      // menu closes itself on a viewer key and hands the key back).
       const above = [...document.querySelectorAll('[aria-modal="true"]')].some((m) => m !== el);
-      if (above) return;
+      if (above || document.querySelector('[role="menu"]') !== null) return;
       showBar();
       const target = e.target instanceof Element ? e.target : null;
       const focus: Focus = target !== null && el.contains(target) && target.closest("button") !== null ? "control" : "none";
@@ -184,6 +188,15 @@ function OpenViewer({ detail }: ViewerProps) {
               original={own !== null && own.width > 0 && own.height > 0 ? { width: own.width, height: own.height } : null}
               zoomable={row.kind !== "video"}
               actualSizeAtFit
+              onMenu={
+                onMenu === undefined
+                  ? undefined
+                  : (e) => {
+                      // Owlbum's menu replaces the webview's own.
+                      e.preventDefault();
+                      onMenu(current, e);
+                    }
+              }
               handle={zoom}
             />
           </StageFor>

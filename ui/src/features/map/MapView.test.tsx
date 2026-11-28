@@ -233,6 +233,20 @@ describe("the map's markers", () => {
     el.remove();
   });
 
+  it("a right-click asks for the photo menu at the pointer, in place of the webview's menu", () => {
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    const menus: [number, { x: number; y: number }][] = [];
+    const map = new PhotoMap(el, { onPick: () => {}, onMenu: (id, at) => menus.push([id, at]), onTiles: () => {} });
+    act(() => map.setPoints([point(1), point(2)]));
+    const ev = new MouseEvent("contextmenu", { clientX: 40, clientY: 50, cancelable: true });
+    map.marker(2)!.fire("contextmenu", { originalEvent: ev });
+    expect(menus).toEqual([[2, { x: 40, y: 50 }]]);
+    expect(ev.defaultPrevented).toBe(true);
+    map.destroy();
+    el.remove();
+  });
+
   it("draws an edited photo through its plan, with its colour filter held while the marker is shown", () => {
     const el = document.createElement("div");
     const map = new PhotoMap(el, { onPick: () => {}, onTiles: () => {} });

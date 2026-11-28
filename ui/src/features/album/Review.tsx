@@ -5,7 +5,7 @@ import { albumText } from "../../text/album";
 import { DetailsPanel, useDetail, type CurrentPhoto } from "../details";
 import { PhotoMenu, pressPhoto, useFileKeys } from "../files";
 import { useReviewEdit, useRotateKeys } from "../edit";
-import { BrowseGrid, useGridStore } from "../grid";
+import { BrowseGrid, selectById, useGridStore } from "../grid";
 import { MapView } from "../map";
 import { toggleStack, toggleTileStar, useFlagKeys } from "../organise";
 import { Preview } from "../preview";
@@ -88,11 +88,18 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
   useFlagKeys();
   // Delete and Ctrl+C (docs/06-editing-and-file-actions.md, "File actions").
   useFileKeys();
-  // The photo menu: a right-click on a tile or the preview.
+  // The photo menu: a right-click on a tile, the preview, the viewer or a map marker.
   const [menu, setMenu] = useState<{ at: Point; photoId: number } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const openMenu = useCallback((at: PhotoAt, e: { clientX: number; clientY: number }) => {
     setMenu({ at: { x: e.clientX, y: e.clientY }, photoId: at.id });
+  }, []);
+  // A marker's photo becomes the selection first unless it is in it already.
+  const openMarkerMenu = useCallback((id: number, at: Point) => {
+    void (async () => {
+      if (!useGridStore.getState().selection.includes(id)) await selectById(id);
+      setMenu({ at, photoId: id });
+    })();
   }, []);
   // [ and ] turn the selection (docs/06-editing-and-file-actions.md).
   useRotateKeys();
@@ -110,7 +117,7 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
       <div className="ow-review__photos" style={{ width: columns.grid }} data-region="grid">
         <ViewBar />
         {view === "map" ? (
-          <MapView album={folder} onOpen={open} />
+          <MapView album={folder} onOpen={open} onMenu={openMarkerMenu} />
         ) : (
           <BrowseGrid
             busy={busy}
@@ -133,7 +140,12 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
         onSave={(w) => void save("panel.grid_width", w)}
       />
       <div className="ow-review__preview" data-region="preview">
-        <Preview detail={detail.detail} onOpen={open} onMenu={openMenu} />
+        <Preview
+          detail={detail.detail}
+          onOpen={open}
+          onMenu={openMenu}
+          onPress={(at, e) => pressPhoto(at.id, e)}
+        />
       </div>
       <Splitter
         label={albumText.resizeDetails}
@@ -148,7 +160,7 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
       <div className="ow-review__details" style={{ width: columns.details }} data-region="details">
         <DetailsPanel current={shown} onNotFound={notFound} shared={detail} />
       </div>
-      <Viewer detail={detail.detail} />
+      <Viewer detail={detail.detail} onMenu={openMenu} />
       {menu !== null && <PhotoMenu at={menu.at} photoId={menu.photoId} onClose={closeMenu} />}
     </section>
   );

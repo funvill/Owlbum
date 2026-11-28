@@ -48,9 +48,9 @@ The window is one column. Parts appear top to bottom in this order:
 
 ```text
 +--------------------------------------------------------------------------------------------+
-| TOP BAR (48px)                                                                             |
-| Owlbum   D:\Photos › 2024\Trip   [View only]      [grid ===o===] [Tidy…] [Close folder]    |
-|                                                                 [folder Open folder] [gear] |
+| TOP BAR (48px)        window title: Owlbum 0.1.3 - D:\Photos\2024\Trip                     |
+| Owlbum [Search photos…      ] Show whole album [View only]  [grid ===o===] [Tidy…]         |
+|  Try star:yes …                                   [Close folder] [folder Open folder] [gear] |
 +--------------------------------------------------------------------------------------------+
 | BANNER (only when needed)  View only: this album is open on STUDIO-PC. Stars, notes, …     |
 +--------------------------------------------------------------------------------------------+
@@ -60,7 +60,7 @@ The window is one column. Parts appear top to bottom in this order:
 +--------------------------------------------------------------------------------------------+
 | NOTICES (only when needed)  3 files not supported yet (HEIC, AVIF) · 2 files could not … [x]|
 +--------------------------------------------------------------------------------------------+
-| FILTER BAR (see 05) [Search…]          Sort [Date taken v] [x] Stack similar [Filters v] 2,140 photos |
+| FILTER BAR (see 05)                               [x] Stack similar [Filters v] 2,140 photos |
 +--------------------------------------------------------------------------------------------+
 | FILTERED ROW (see 05) [Starred x] [lake x]            Showing 312 of 2,140 · [Clear filter] |
 +--------------------------------------------------------------------------------------------+
@@ -183,7 +183,7 @@ The bar is 48px high. It has a left group that takes the free space and a right 
 **Left group**
 
 - **Owlbum**, in bold.
-- **The album path**, muted, when an album is open. In a normal open it is the album root. In a scoped open it is the album root, a `›` separator, then the scope relative to the root in `--text`, for example `D:\Photos › 2024\Trip`. If the text does not fit, the root part is cut with a leading ellipsis; the scope is cut last. The tooltip is "Album: <root>" on the first line and, when scoped, "Showing only: <scope folder>" on the second.
+- **The search box** with its hint line, while an album with photos is open (the same condition as the filter bar). It sits at the left, in line with Open folder and Close folder at the right, and is a `search` landmark labelled "Photo search". Defined in [Organising](05-organising.md#the-search-box). The album's folder is not shown in the bar: it is in the window title (owner's feedback, #182; see [Desktop](08-desktop-and-release.md#the-window)).
 - **Show whole album**, a small link shown only in a scoped open. It opens the album root.
 - **View only**, a badge shown while the album is view-only. Its tooltip is the banner's sentence.
 
@@ -195,7 +195,7 @@ The bar is 48px high. It has a left group that takes the free space and a right 
 - **Open folder** (album open; on the start screen the button is in the body instead).
 - **Settings** (always): a gear icon button, label and tooltip "Settings". Defined in [Desktop](08-desktop-and-release.md).
 
-The bar never wraps. The window cannot be narrower than 960px, and below 1280px the bar gives up room in the order [Visual design](09-visual-design.md#the-bars) sets: the path is cut, then the buttons become icon buttons and the slider moves into a popover.
+The bar never wraps. The window cannot be narrower than 960px, and below 1280px the bar gives up room in the order [Visual design](09-visual-design.md#the-bars) sets: the search box shrinks, then the buttons become icon buttons, the slider moves into a popover and the search box's hint row is hidden.
 
 ## Album banners
 
@@ -216,7 +216,7 @@ A banner is a full-width strip under the top bar. Its look (fill, icon, text siz
 
 **What view-only disables.** Browsing, filtering, the viewer, the map, copy and drag-out work. These controls are disabled, each with a tooltip that says why, which is the first sentence of the banner in force (for example "View only: this folder can't be written to."): the star button on tiles, every typed field in the details panel, people chips' remove buttons, "Use the camera's date", Edit, Tidy, and the tagging controls. The keys S, F, H, E, `[`, `]`, Up, Down, Delete and Ctrl+Z do nothing and show the toast "This album is view-only." at most once every 4 seconds.
 
-**Scoped open.** A scoped open has no banner. It is shown by the path in the top bar. Counts, the result, the map and the recent list all refer to the scope only.
+**Scoped open.** A scoped open has no banner. It is shown by the scope folder in the window title and the **Show whole album** link in the top bar. Counts, the result, the map and the recent list all refer to the scope only.
 
 ## Reading bar
 
@@ -314,7 +314,7 @@ Each splitter is a `role=separator` with `aria-orientation=vertical`, 6px wide, 
 
 ### View switch
 
-A segmented control at the top of the thumbnail column, labelled "Show the photos as", with three tabs: **Grid**, **Timeline**, **Map** (a `tablist`, as [Visual design](09-visual-design.md#accessibility-baseline) sets for this switch). The view replaces only the thumbnails; the preview and details stay. Choosing a view saves the setting `view`, re-runs the query with the new view, and keeps the current photo and the selection (see [When the result changes](#when-the-result-changes)).
+A segmented control at the top of the thumbnail column, labelled "Show the photos as", with three tabs: **Grid**, **Timeline**, **Map** (a `tablist`, as [Visual design](09-visual-design.md#accessibility-baseline) sets for this switch). At its right sits the **Sort** control (see [Organising](05-organising.md#sorting)) while Grid is the view, and the Day / Month switch while Timeline is (owner's feedback, #182). In a narrow column the bar wraps onto a second line. The view replaces only the thumbnails; the preview and details stay. Choosing a view saves the setting `view`, re-runs the query with the new view, and keeps the current photo and the selection (see [When the result changes](#when-the-result-changes)).
 
 ## How the page holds a result
 
@@ -665,8 +665,6 @@ The panel shows the current photo. With no current photo the column is an empty 
 
 ```text
 +---------------------------------------+   column: default 340px, 260–560px, background --panel, left border
-|                              [Copy]   |   head: padding `--space-3` `--space-4`, bottom border
-+---------------------------------------+
 | +-----------------------------------+ |   body: padding 12px, gap `--space-5`, scrolls
 | | Photo score                    74 | |   score card (see 05)
 | +-----------------------------------+ |
@@ -679,6 +677,7 @@ The panel shows the current photo. With no current photo the column is an empty 
 |   Format      JPEG                    |
 |   Folder      2024/Trip/Day 2         |
 |   Path        D:\Photos\2024\…\IMG_0042.jpg [copy]
+|   [copy Copy]                         |   copies all of the panel
 | v What's in it      (see 07)          |
 | v Camera                              |
 |   Camera / Lens / Focal length / Aperture / Shutter / ISO / Exposure / Flash
@@ -687,6 +686,7 @@ The panel shows the current photo. With no current photo the column is an empty 
 | v Place                               |
 |   Country     France                  |
 |   Coordinates 48.85837, 2.29448       |
+|   [map-pin Pick on map] [map Show on map]
 |   LOCATION                    Saved   |
 |   [Search for a country…]             |
 |   Latitude [____]  Longitude [____]   |
@@ -706,9 +706,11 @@ The panel shows the current photo. With no current photo the column is an empty 
 +---------------------------------------+
 ```
 
-**Head.** A small **Copy** button (icon `copy`, tooltip "Copy all of these details as plain text"), shown once the photo's details have arrived. It reads the score (`photo_score`) and the EXIF tags (`photo_exif`) afresh and puts everything the panel shows on the clipboard as plain text with `file_copy_text`: the photo score, then each section that has something to say, its title on a line of its own and one "Label: value" line per row, with a blank line between sections; the EXIF section lists every tag as "Name: value". A score or EXIF read that fails leaves that part out. The toast says "Details copied". The head has no file name and no close button (owner's feedback, #167): the Path row names the file, and Ctrl+D still selects nothing.
+**Copy.** A small **Copy** button (icon `copy`, tooltip "Copy all of these details as plain text") at the end of the Photo section, the section below the photo score (owner's feedback, #183; it was in a head over the panel before). It is there once the photo's details have arrived, and folds away with the Photo section. It reads the score (`photo_score`) and the EXIF tags (`photo_exif`) afresh and puts everything the panel shows on the clipboard as plain text with `file_copy_text`: the photo score, then each section that has something to say, its title on a line of its own and one "Label: value" line per row, with a blank line between sections; the EXIF section lists every tag as "Name: value". A score or EXIF read that fails leaves that part out. The toast says "Details copied". The panel has no head: no file name and no close button (owner's feedback, #167): the Path row names the file, and Ctrl+D still selects nothing.
 
-**Loading.** The panel calls `photo_detail(id)` when the current photo changes, and again when an `album_changed` event arrives for a revision newer than the detail's `revision` (also when such an event arrived while the detail was being read). While the first answer is on its way, the head and the body are empty; the previous photo's facts are never shown for the new one. An answer for a photo that is no longer current is thrown away.
+**Icons on buttons.** The panel's buttons carry an icon from Owlbum's set (see [Visual design](09-visual-design.md#icons)) as well as their words (owner's feedback, #183): Copy and Copy path `copy`, Regenerate `rescan`, Pick on map `map-pin`, Show on map `map`, Use the camera's date `undo`, Clear the date `x`. Links inside a sentence (Settings, Retry) and the chips stay as they are.
+
+**Loading.** The panel calls `photo_detail(id)` when the current photo changes, and again when an `album_changed` event arrives for a revision newer than the detail's `revision` (also when such an event arrived while the detail was being read). While the first answer is on its way, the body is empty; the previous photo's facts are never shown for the new one. An answer for a photo that is no longer current is thrown away.
 
 **Notes under the score card.** In a view-only album: "This album is view-only, so nothing here can be changed." When the last save of this photo failed: the error's message, in a note with an `--error` border, until a later save succeeds.
 
@@ -842,6 +844,13 @@ At the owner's request (#169), the Place section has a **Pick on map** button (s
 - **What is saved.** One `photo_set_info(ids, { location: { lat, lon, name } })`, so it is one undo step (Ctrl+Z), like any typed change. `name` is the country at that point from the bundled outlines (`app_country_at`), as choosing a country in the search does; at sea it is null. A typed place name the photos had is replaced. While it saves, the hint reads "Saving the place…"; on success the dialog closes and the panel follows from `album_changed`. A failure shows its message as a toast and the dialog stays.
 - **Map tiles** follow `maps_online` exactly as the Map view does (see [Loading map tiles](#loading-map-tiles)): the same card while it is unset, the same switch, and no tile layer until the user says yes. Without tiles the markers sit on the plain background and a click still works.
 - **Cancel**, Esc or the dialog's close button closes it and changes nothing.
+
+### Show on map
+
+At the owner's request (#183), **Show on map** (small, `map` icon, tooltip "Switch to the map with this photo's marker in the middle") sits beside Pick on map whenever the photo has a place: GPS, or a typed place with coordinates (the effective `place.lat` and `place.lon` are set). It works in a view-only album too, as it changes nothing.
+
+- **What it does.** It switches to the [Map view](#map-view), saving the setting `view` as the view switch does, and the map centres this photo's marker at the zoom it has, opening a cluster that holds it. The photo is the page's current photo, so its marker is already the highlighted one (the `--select` border). Already on the map, it only centres.
+- **When.** The map centres the marker once an answer of `query_map` holds it, after the first fit, which the centring replaces. If the answer does not hold the photo (a filter in the map leaves it out), the request is dropped and the map behaves as usual. The request lives in `ui/src/features/map/focus.ts`.
 
 ## Timeline view
 
@@ -1223,7 +1232,7 @@ type Session = Partial<Query> & {   // the Query's own fields (05), less open_st
 - **Details fields.** Each row of the save table; "Saved" shows for 1,800 ms; a failed save keeps the text and shows a toast; a draft survives an answer from an earlier save; changing photo with unsaved text sends it once; every date and location message; everything is disabled in a view-only album.
 - **Timeline.** Layout rows and tops for a group of 9 at 4 columns (one heading, rows of 4, 4 and 1); binary search returns only rows in view; heading labels in Day and Month; the Sort control is not shown; the month rail lists only months with photos, marks the month in view, and collapses to years when too tall.
 - **Map.** The first-use card's exact text; no tile request is made before **Load maps**; "Not now" leaves markers on a plain background; a failed setting save shows the toast and keeps tiles off; the note's singular and plural; a marker click selects; the viewer, a dialog and a toast are each above the map stage (computed stacking order).
-- **Banners and notices.** Each `view_only` value shows its exact sentence; the conflict banner names the file and can be dismissed; a scoped status shows root and scope in the top bar; notice texts for 1 and many files and the list of formats; the Files not shown dialog lists what `album_unsupported` and `album_scan_errors` return.
+- **Banners and notices.** Each `view_only` value shows its exact sentence; the conflict banner names the file and can be dismissed; a scoped status offers Show whole album; the window title names the open folder; notice texts for 1 and many files and the list of formats; the Files not shown dialog lists what `album_unsupported` and `album_scan_errors` return.
 - **Opening.** Each route calls `album_open` once; a cancelled dialog does nothing; `album_lock_stale` and `album_damaged` show their dialogs and call again with the chosen option; a failed open shows the toast and stays on the start screen; recent entries that do not exist are disabled.
 - **Reopening.** With a session in the answer, the view, sort, filter and current photo are set before the review screen is drawn; `selected_id: null` selects nothing; `scroll` is used only without a selected photo; the session is saved 1,000 ms after a change and at once on close.
 - **Settings only.** No test finds a `localStorage` or `sessionStorage` call in the page; thumbnail size, column widths and sections are written through `app_settings_set`.

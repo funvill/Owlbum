@@ -28,45 +28,6 @@
   align-items: center;
 }
 
-/* The search box grows from 200 px to 460 px; its hint line sits under it. */
-.ow-query-box {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-1);
-  flex: 0 1 460px;
-  min-width: 200px;
-  padding: var(--space-1) 0;
-}
-
-.ow-query-box__input {
-  width: 100%;
-}
-
-.ow-query-box__hint {
-  display: flex;
-  align-items: center;
-  gap: var(--space-1);
-  overflow: hidden;
-  font: var(--text-xs);
-  color: var(--muted);
-}
-
-.ow-query-box__hint--error {
-  color: var(--error);
-}
-
-/* In a narrow window the hint row is hidden unless it holds an error. */
-.ow-query-box__hint--hidden {
-  display: none;
-}
-
-/* A query-word example: a small boxed word (docs/09-visual-design.md). */
-.ow-query-box__word {
-  padding: 0 var(--space-1);
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-sm);
-}
-
 .ow-filter-bar__filters {
   position: relative;
 }

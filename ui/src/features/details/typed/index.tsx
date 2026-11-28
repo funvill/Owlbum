@@ -14,6 +14,7 @@ import { api } from "../../../api";
 import type { PersonCount } from "../../../api/bindings/PersonCount";
 import type { PhotoDetail } from "../../../api/bindings/PhotoDetail";
 import { Chip } from "../../../controls";
+import { Icon } from "../../../icons";
 import { detailsText as t } from "../../../text/details";
 import { CountrySearch, withCountry, type LocationBoxes } from "../CountrySearch";
 import {
@@ -411,6 +412,7 @@ export function DateField({ detail, disabledReason, saver }: TypedProps) {
             send(null, camera);
           }}
         >
+          <Icon name={detail.date.camera === null ? "x" : "undo"} size="sm" />
           {detail.date.camera === null ? t.clearDate : t.useCameraDate}
         </button>
       )}

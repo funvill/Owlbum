@@ -1,8 +1,9 @@
 // The details panel (docs/04-browsing.md, "The details panel"): the
 // current photo's facts, camera, histogram and place, in foldable
 // sections, with the typed-info parts (#24) slotted into their sections,
-// and the file's EXIF tags. Its head holds Copy, which puts all of it on
-// the clipboard as plain text; the file name heading and the Close
+// and the file's EXIF tags. Copy, which puts all of it on the clipboard as
+// plain text, sits in the Photo section, the one below the photo score
+// (owner's feedback, issue 183); the file name heading and the Close
 // details button were taken out on the owner's feedback (issue 167).
 //
 // The panel holds no current photo of its own. The page's one current
@@ -18,6 +19,7 @@ import { Icon } from "../../icons";
 import { detailsText as t, type SectionId } from "../../text/details";
 import { useAlbumStore, viewOnlyReason } from "../album";
 import { copyPaths } from "../files/actions";
+import { showOnMap } from "../map/focus";
 import { PickPlaceButton } from "../map/PlacePicker";
 import { ScoreCard } from "../organise/ScoreCard";
 import { copyDetails } from "./copy";
@@ -97,10 +99,26 @@ function Section({
 }
 
 /**
- * The Photo section: the fact rows, with Taken's "changed" badge, and the
- * Path row: the file's absolute path with a button that copies it.
+ * The Photo section: the fact rows, with Taken's "changed" badge, the Path
+ * row (the file's absolute path with a button that copies it), and Copy,
+ * which copies all of the panel's details.
  */
 function PhotoFacts({ detail }: { detail: PhotoDetail }) {
+  return (
+    <>
+      <PhotoRows detail={detail} />
+      <div className="ow-details__actions">
+        <Tooltip text={t.copyAllTooltip}>
+          <Button icon="copy" size="sm" onClick={() => void copyDetails(detail)}>
+            {t.copyAll}
+          </Button>
+        </Tooltip>
+      </div>
+    </>
+  );
+}
+
+function PhotoRows({ detail }: { detail: PhotoDetail }) {
   return (
     <Rows rows={[...factRows(detail), { label: t.path, value: detail.abs_path }]}>
       {(row) =>
@@ -181,7 +199,17 @@ function PlaceFacts({
   return (
     <>
       {rows.length > 0 && <Rows rows={rows} />}
-      <PickPlaceButton photoId={detail.id} disabledReason={disabledReason} />
+      <div className="ow-details__actions">
+        <PickPlaceButton photoId={detail.id} disabledReason={disabledReason} />
+        {/* Show on map needs a place to show: GPS or a typed place with coordinates. */}
+        {lat !== null && lon !== null && (
+          <Tooltip text={t.showOnMapTooltip}>
+            <Button icon="map" size="sm" onClick={() => showOnMap(detail.id)}>
+              {t.showOnMap}
+            </Button>
+          </Tooltip>
+        )}
+      </div>
       <LocationField detail={detail} disabledReason={disabledReason} saver={saver} />
     </>
   );
@@ -252,19 +280,8 @@ export function DetailsPanel({ current, onNotFound, shared }: DetailsPanelProps)
     );
   }
 
-  // Copy acts on this photo's details only, never on an answer for the one before.
-  const shown = detail !== null && detail.id === current.id ? detail : null;
   return (
     <aside className="ow-details" aria-label={t.region}>
-      {shown !== null && (
-        <header className="ow-details__head">
-          <Tooltip text={t.copyAllTooltip}>
-            <Button icon="copy" size="sm" onClick={() => void copyDetails(shown)}>
-              {t.copyAll}
-            </Button>
-          </Tooltip>
-        </header>
-      )}
       {detail !== null && <Body key={detail.id} detail={detail} sections={sections} />}
       {detail === null && error !== null && <p className="ow-details__empty">{t.couldNotRead}</p>}
     </aside>

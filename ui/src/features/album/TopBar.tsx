@@ -5,16 +5,22 @@ import { albumText } from "../../text/album";
 import { appText, settingsText } from "../../text/app";
 import { openSettings } from "../app/settingsOpen";
 import { ThumbSize } from "../grid";
-import { shownScope, viewOnlyBanner, viewOnlyReason } from "./banners";
+import { QueryBox } from "../organise/QueryBox";
+import { viewOnlyBanner, viewOnlyReason } from "./banners";
+import { bodyState } from "./Body";
 import { TidyDialog } from "./TidyDialog";
 import { useAlbumStore } from "./session";
 
 /**
- * The 48 px bar at the top of the window (docs/04-browsing.md, "Top bar").
- * The gear that opens Settings is always there.
+ * The bar at the top of the window (docs/04-browsing.md, "Top bar"). While
+ * an album with photos is open the search box sits at its left, in line
+ * with Open folder and Close folder at the right; the album's folder is in
+ * the window title, not here (owner's feedback, issue 182). The gear that
+ * opens Settings is always there.
  */
 export function TopBar() {
   const status = useAlbumStore((s) => s.status);
+  const review = useAlbumStore((s) => bodyState(s) === "review");
   const openFolder = useAlbumStore((s) => s.openFolder);
   const pick = useAlbumStore((s) => s.pickFolder);
   const close = useAlbumStore((s) => s.close);
@@ -25,34 +31,12 @@ export function TopBar() {
   const tidyOff = status === null ? undefined : (viewOnlyReason(status) ?? undefined);
   const banner = status === null ? null : viewOnlyBanner(status);
   const scoped = status !== null && status.scope !== "";
-  const tooltip =
-    status === null
-      ? ""
-      : scoped
-        ? `${albumText.albumTooltip(status.root)}\n${albumText.scopeTooltip(status.folder)}`
-        : albumText.albumTooltip(status.root);
 
   return (
     <header className="ow-topbar" data-region="top">
       <div className="ow-topbar__left">
         <span className="ow-topbar__name">{appText.name}</span>
-        {status !== null && (
-          <Tooltip text={tooltip} describe={false}>
-            <span className="ow-topbar__path ow-selectable" tabIndex={0} aria-label={tooltip}>
-              <span className="ow-topbar__root">
-                <bdi>{status.root}</bdi>
-              </span>
-              {scoped && (
-                <>
-                  <span className="ow-topbar__sep" aria-hidden="true">
-                    ›
-                  </span>
-                  <span className="ow-topbar__scope">{shownScope(status)}</span>
-                </>
-              )}
-            </span>
-          </Tooltip>
-        )}
+        {review && <QueryBox />}
         {scoped && (
           <button type="button" className="ow-topbar__whole" onClick={() => void openFolder(status.root)}>
             {albumText.showWholeAlbum}

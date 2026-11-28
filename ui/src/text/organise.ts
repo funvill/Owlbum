@@ -9,7 +9,8 @@ function group(n: number): string {
 export const organiseText = {
   /** The filter bar (docs/05-organising.md, "The filter bar"). */
   bar: {
-    label: "Sort and filter",
+    label: "Filter photos",
+    /** The Sort control, beside the view switch while the grid is the view. */
     sort: "Sort",
     stack: "Stack similar",
     stackTip: "Show the near-identical shots of a burst as one photo",
@@ -21,8 +22,10 @@ export const organiseText = {
     countShort: (n: number) => group(n),
     countUnit: (n: number) => (n === 1 ? " photo" : " photos"),
   },
-  /** The search box and its hint line (docs/05-organising.md, "The filter bar"). */
+  /** The search box and its hint line, in the top bar (docs/05-organising.md, "The search box"). */
   search: {
+    /** The search landmark around the box. */
+    region: "Photo search",
     label: "Search photos",
     placeholder: "Search names, people, places, notes and keywords",
     try: "Try",

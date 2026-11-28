@@ -343,7 +343,7 @@ fn main_window<R: Runtime>(
         .then(|| app.config().build.dev_url.clone())
         .flatten();
     let window = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
-        .title(window_title(&version))
+        .title(window_title(&version, None))
         .user_agent(&user_agent(std::env::consts::OS, &version))
         .on_navigation(move |url| navigation::check(url, dev_url.as_ref()))
         .on_new_window(|url, _| {
@@ -357,9 +357,24 @@ fn main_window<R: Runtime>(
 }
 
 /// The main window's title: `Owlbum <version>`, so a tester can tell which
-/// build is running (CHANGELOG.md says what each version changed).
-pub fn window_title(version: &str) -> String {
-    format!("Owlbum {version}")
+/// build is running (CHANGELOG.md says what each version changed), and
+/// while an album is open ` - <folder>`: the folder the user opened, the
+/// album's root or the scope folder inside it (docs/08, "The window").
+pub fn window_title(version: &str, album: Option<&std::path::Path>) -> String {
+    match album {
+        Some(folder) => format!("Owlbum {version} - {}", folder.display()),
+        None => format!("Owlbum {version}"),
+    }
+}
+
+/// Retitles the main window for the album now open (`None`: none is).
+pub fn show_album_in_title<R: Runtime>(app: &AppHandle<R>, album: Option<&std::path::Path>) {
+    if let Some(window) = app.get_webview_window("main") {
+        let title = window_title(&owlbum_core::app::version().version, album);
+        if let Err(e) = window.set_title(&title) {
+            tracing::warn!(target: "app", "the window title could not be set: {e}");
+        }
+    }
 }
 
 /// The webview's user agent: `Owlbum/<version>`, the platform and the
@@ -399,7 +414,16 @@ mod tests {
 
     #[test]
     fn the_window_title_carries_the_version() {
-        assert_eq!(window_title("0.1.1"), "Owlbum 0.1.1");
+        assert_eq!(window_title("0.1.1", None), "Owlbum 0.1.1");
+    }
+
+    #[test]
+    fn the_window_title_carries_the_open_folder() {
+        let folder = std::path::Path::new("/example/folder/album");
+        assert_eq!(
+            window_title("0.1.3", Some(folder)),
+            "Owlbum 0.1.3 - /example/folder/album"
+        );
     }
 
     #[test]

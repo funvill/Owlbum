@@ -5,6 +5,7 @@ import type { ParsedBox } from "../../api/bindings/ParsedBox";
 import { SearchBox, Tooltip, useNarrowWindow } from "../../controls";
 import { organiseText as t } from "../../text/organise";
 import { useGridStore } from "../grid";
+import "./QueryBox.css";
 
 /** The query re-runs this long after the last change to the search text. */
 export const SEARCH_DELAY_MS = 200;
@@ -32,7 +33,8 @@ function endsWord(text: string): boolean {
 
 /**
  * The search box and its hint line (docs/05-organising.md, "Query words in
- * the search box"). Every change asks Rust to read the box
+ * the search box"), a search landmark at the left of the top bar (owner's
+ * feedback, issue 182). Every change asks Rust to read the box
  * (`query_parse(text, false)`); Enter asks with `enter` true, so the last
  * word is read too. A `key:value` word Rust takes leaves the box and joins
  * the filter at once; the rest is the search text, which re-runs the query
@@ -139,7 +141,7 @@ export function QueryBox() {
   );
 
   return (
-    <div className="ow-query-box">
+    <div className="ow-query-box" role="search" aria-label={t.search.region}>
       {narrow ? <Tooltip text={t.search.tooltip}>{box}</Tooltip> : box}
       {/* Kept in place while hidden, so an error shown in a narrow window is still announced. */}
       <span

@@ -367,16 +367,15 @@ Rust works out the name order once and stores each photo's position as `name_ran
 
 Rust works the keys of `interesting` and `colour` out from the album index each time it sorts (`quality`, the dark and bright flags, the burst keeper and the average colour), so they always match the index as it is; the range of `quality` is taken over every analysed photo in the index, never over the filtered list. Over 100,000 photos each sort takes under 16 ms on a release build.
 
-The sort is saved in the album's session and restored on reopening. Changing it keeps the selection and scrolls as [Browsing](04-browsing.md#when-the-result-changes) says for any change the user makes: to the current photo, or to the top when there is none. In the timeline view the order is always `date`. The Sort control is shown only in the grid view: the timeline is always in date order and the map shows no order, so there it is hidden, and the chosen sort is kept for the grid's return (owner's feedback, #166).
+The sort is saved in the album's session and restored on reopening. Changing it keeps the selection and scrolls as [Browsing](04-browsing.md#when-the-result-changes) says for any change the user makes: to the current photo, or to the top when there is none. In the timeline view the order is always `date`. The Sort control is a select labelled "Sort" with the five options above. It sits beside the view switch at the top of the thumbnail column, at its right, the way the timeline's Day / Month switch does (owner's feedback, #182; see [Browsing](04-browsing.md#view-switch)). It is shown only in the grid view: the timeline is always in date order and the map shows no order, so there it is hidden, and the chosen sort is kept for the grid's return (owner's feedback, #166).
 
 ## The filter bar
 
-The bar is shown while an album is open and has at least one photo. It is a search landmark labelled "Sort and filter".
+The bar is shown while an album is open and has at least one photo. It is a search landmark labelled "Filter photos". The search box is in the top bar and the Sort control beside the view switch (owner's feedback, #182), so the bar holds what is left, at its right.
 
 ```text
 +----------------------------------------------------------------------------------------------------------+
-| [ Search photos                     ]          Sort [Date taken   v]  [x] Stack similar  [Filters · 2 v]  2,140 photos |
-| Try star:yes shape:portrait from:2024-06-01 has:people tag:lake                                                     |
+|                                                          [x] Stack similar  [Filters · 2 v]  2,140 photos |
 +----------------------------------------------------------------------------------------------------------+
 | (Starred ×) (2024-06-01 → 2024-06-30 ×) (lake ×) (Has people ×)        Showing 312 of 2,140 · [Clear filter]  |
 +----------------------------------------------------------------------------------------------------------+
@@ -384,15 +383,22 @@ The bar is shown while an album is open and has at least one photo. It is a sear
 
 | Control | Behaviour |
 |---|---|
-| **Search box** (left) | First in the bar, at its left edge; everything else sits at the right (owner's feedback, #166). See its row below. |
-| **Sort** | A select with the five options above. Shown only in the grid view. |
 | **Stack similar** | A checkbox. |
-| **Search box** | Placeholder "Search names, people, places, notes and keywords". Accessible name "Search photos". Width grows from 200 px to 460 px. |
-| Hint line | Under the box, announced politely. Normally "Try" followed by the examples `star:yes`, `shape:portrait`, `from:2024-06-01`, `has:people`, `tag:lake`, drawn as the small boxed words [Visual design](09-visual-design.md#typography) defines (no monospace font is bundled). When a query word is bad it shows the error in `--error` instead. |
 | **Filters** | A button that opens the panel. It reads "Filters", or "Filters · N" when N panel filters are on, and takes the `--accent` border and text while N > 0. Its chevron turns over while the panel is open. |
 | Count | "2,140 photos" or "1 photo", with digit grouping. Shown only while no filter is on. It is the `total` from `query_run`. |
 
-The bar never wraps. In a narrow window it gives up room in the order [Visual design](09-visual-design.md#the-bars) sets: the search box shrinks, then (under 1100 px) the hint line is hidden and the count shows the number alone. A bad query word's error still shows in the hint line while it is hidden, and the count keeps its word for screen readers and in its tooltip ("2,140 photos"). The map is sealed in its own layer, so the bar and the panel always sit above the map's controls.
+The bar never wraps. In a narrow window (under 1100 px) the count shows the number alone, keeping its word for screen readers and in its tooltip ("2,140 photos"). The map is sealed in its own layer, so the bar and the panel always sit above the map's controls.
+
+### The search box
+
+The search box sits at the left of the top bar, in line with Open folder and Close folder at the right (owner's feedback, #182; it was first in the filter bar before). It is shown under the same condition as the filter bar, and is a search landmark labelled "Photo search" inside the top bar.
+
+| Part | Behaviour |
+|---|---|
+| **Search box** | Placeholder "Search names, people, places, notes and keywords". Accessible name "Search photos". Width grows from 200 px to 460 px. |
+| Hint line | Under the box, announced politely. Normally "Try" followed by the examples `star:yes`, `shape:portrait`, `from:2024-06-01`, `has:people`, `tag:lake`, drawn as the small boxed words [Visual design](09-visual-design.md#typography) defines (no monospace font is bundled). When a query word is bad it shows the error in `--error` instead. |
+
+In a narrow window it gives up room in the order [Visual design](09-visual-design.md#the-bars) sets: the box shrinks, then (under 1100 px) the hint line is hidden and its examples become the box's tooltip. A bad query word's error still shows in the hint line while it is hidden.
 
 ### The filtered row
 
@@ -1028,7 +1034,7 @@ When the page re-runs its query after `album_changed` is decided by the reason, 
 | Targets | The ids sent for one photo, for a multi-selection, for a tile's star button, and in the viewer. |
 | Selection | After a hide, the page re-runs with `keep` and selects `kept.current`. |
 | Mark and toast | The mark for each of the four changes; the toast texts "+1", "−1", "+5" after five taps, "Can't nudge any further"; no motion with reduced motion. |
-| Filter bar | The labels kept for tests: "Sort", "Stack similar", "Search photos", "Filters", "Filters · 2", "2,140 photos", "1 photo", the hint line starting "Try". |
+| Filter bar | The labels kept for tests: "Sort" (beside the view switch), "Stack similar", "Search photos" (top bar), "Filters", "Filters · 2", "2,140 photos", "1 photo", the hint line starting "Try". |
 | Filtered row | Chips are drawn from `chips`; × sends the chip's `remove` filter; "Showing 312 of 2,140"; Clear filter empties the box and the filter. |
 | Panel | Opens with focus on the first control; Esc closes it, returns focus, and does not reach the grid's keys; a press outside closes it; facet counts are shown; Folder is absent with one folder. |
 | Search box | A space after a good word calls `query_parse` and replaces the box with `rest`; a space inside an open quote does not; the error is shown in the hint line and cleared on the next change; Clear filter with a half-typed `star:ye` empties the box. |

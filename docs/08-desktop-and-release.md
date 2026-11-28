@@ -85,7 +85,7 @@ A folder can arrive before the page is listening, so an event alone is not enoug
 
 ## The window
 
-One window, titled `Owlbum <version>` (for example `Owlbum 0.1.3`), so a tester can always tell which build is running. It has no child windows.
+One window, titled `Owlbum <version>` (for example `Owlbum 0.1.3`), so a tester can always tell which build is running. While an album is open the title goes on with ` - ` and the folder the user opened: the album's root, or the scope folder inside it in a scoped open, for example `Owlbum 0.1.3 - C:\example\folder\album` (owner's feedback, #182; the folder was in the top bar before). Rust sets it when `album_open` succeeds and puts `Owlbum <version>` back when the album closes (`album_close`, or the close that starts every `album_open`). It has no child windows.
 
 | Property | Value |
 |---|---|

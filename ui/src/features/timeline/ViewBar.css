@@ -1,11 +1,19 @@
 /* The view switch at the top of the thumbnail column (docs/04-browsing.md,
-   "View switch"); the unit switch sits at its right in the timeline. */
+   "View switch"); Sort sits at its right in the grid, the unit switch in
+   the timeline. A narrow column wraps them onto two lines. */
 .ow-view-bar {
   display: flex;
   flex: none;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: var(--space-3);
   padding: var(--space-3) var(--space-4);
   background: var(--stage);
+}
+
+/* Sort's label sits beside its control here, not above it. */
+.ow-view-bar > .ow-field {
+  flex-direction: row;
+  align-items: center;
 }

@@ -16,13 +16,12 @@
   text-align: center;
 }
 
-.ow-details__head {
+/* A section's buttons: Copy in Photo, Pick on map and Show on map in Place. */
+.ow-details__actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  justify-content: flex-end;
-  gap: var(--space-3);
-  padding: var(--space-3) var(--space-4);
-  border-bottom: 1px solid var(--line);
+  gap: var(--space-2);
 }
 
 /* The Path row: the path wraps anywhere, its copy button beside it. */
@@ -166,6 +165,9 @@
 }
 
 .ow-typed__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
   align-self: flex-start;
   padding: 0;
   border: 0;

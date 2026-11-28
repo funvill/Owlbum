@@ -1,19 +1,14 @@
 import { useEffect, useRef, useState } from "react";
 import type { Filter } from "../../api/bindings/Filter";
-import type { Query } from "../../api/bindings/QueryShape";
-import { Button, Checkbox, SelectField, Tooltip, useNarrowWindow, type SelectOption } from "../../controls";
+import { Button, Checkbox, Tooltip, useNarrowWindow } from "../../controls";
 import { Icon } from "../../icons";
 import { organiseText as t } from "../../text/organise";
 import { useGridStore } from "../grid";
 import { FilterChip } from "./FilterChip";
 import { FilterPanel } from "./FilterPanel";
-import { QueryBox, clearQueryBox } from "./QueryBox";
+import { clearQueryBox } from "./QueryBox";
 import { setStackSimilar } from "./stacks";
 import "./FilterBar.css";
-
-type Sort = Query["sort"];
-
-const SORTS: SelectOption[] = (Object.keys(t.sorts) as Sort[]).map((value) => ({ value, label: t.sorts[value] }));
 
 /** Runs the query with a new filter, keeping the rest of it. */
 function setFilter(filter: Filter): void {
@@ -23,19 +18,16 @@ function setFilter(filter: Filter): void {
 
 /**
  * The filter bar (docs/05-organising.md, "The filter bar"): a search
- * landmark above the body while an album with photos is open. The search
- * box with its hint line (#32) sits at the left; at the right are the Sort
- * control (#29, shown only in the grid view), the Stack similar checkbox
- * (#131, the `stack_similar` setting), the Filters button with its panel,
- * and the count. A second row, "Active filters", shows the chips, "Showing
- * X of Y" and Clear filter while a filter is on (#31).
+ * landmark above the body while an album with photos is open. At the right
+ * are the Stack similar checkbox (#131, the `stack_similar` setting), the
+ * Filters button with its panel, and the count. A second row, "Active
+ * filters", shows the chips, "Showing X of Y" and Clear filter while a
+ * filter is on (#31). The search box is in the top bar and Sort beside the
+ * view switch (owner's feedback, issue 182).
  *
  * Every number and chip comes from the result: the page never counts or
- * builds chip text itself. A change of sort or filter re-runs the query
- * with the selection kept; the grid then scrolls as for any change the
- * user makes. The timeline is always in date order and the map has no
- * order to see, so Sort is shown only in the grid (owner's feedback,
- * issue 166); the chosen sort is kept for when the grid comes back.
+ * builds chip text itself. A change of filter re-runs the query with the
+ * selection kept; the grid then scrolls as for any change the user makes.
  */
 export function FilterBar() {
   const query = useGridStore((s) => s.query);
@@ -44,7 +36,6 @@ export function FilterBar() {
   const [open, setOpen] = useState(false);
   const button = useRef<HTMLButtonElement>(null);
   const area = useRef<HTMLDivElement>(null);
-  const grid = query.view === "grid";
   const panelCount = result?.panel_count ?? 0;
   const filtered = result?.filtered ?? false;
   // In a narrow window the count is the number alone (docs/09-visual-design.md, "The bars").
@@ -74,19 +65,7 @@ export function FilterBar() {
   return (
     <div className="ow-filter-bar" role="search" aria-label={t.bar.label} data-region="filters">
       <div className="ow-filter-bar__main">
-        <QueryBox />
         <span className="ow-filter-bar__spacer" />
-        {grid && (
-          <SelectField
-            label={t.bar.sort}
-            value={query.sort}
-            options={SORTS}
-            onChange={(sort) => {
-              const state = useGridStore.getState();
-              state.setQuery({ ...state.query, sort: sort as Sort });
-            }}
-          />
-        )}
         <Tooltip text={t.bar.stackTip}>
           <span className="ow-filter-bar__stack">
             <Checkbox label={t.bar.stack} checked={query.stack} onChange={setStackSimilar} />

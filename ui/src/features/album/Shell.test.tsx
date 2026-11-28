@@ -172,13 +172,13 @@ describe("opening a folder", () => {
     });
     act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
     await bodySays(albumText.lookingForPhotos);
-    expect(screen.queryByRole("search", { name: "Sort and filter" })).toBeNull();
+    expect(screen.queryByRole("search", { name: "Filter photos" })).toBeNull();
     status = { ...status, photos: 3 };
     act(() => fake.emit("album_changed", { revision: 1, reason: "scan" }));
     expect(await screen.findByRole("region", { name: albumText.photosRegion }, { timeout: 3000 })).toBeInTheDocument();
     expect(screen.getByRole("progressbar")).toBeInTheDocument();
     // The filter bar shows once the album holds photos.
-    expect(screen.getByRole("search", { name: "Sort and filter" })).toBeInTheDocument();
+    expect(screen.getByRole("search", { name: "Filter photos" })).toBeInTheDocument();
   });
 
   it("does nothing when the folder already open is opened again", async () => {
@@ -288,7 +288,8 @@ describe("the accessibility baseline", () => {
     await review();
     // A details panel heading is a <header> too, but inside the aside it is no banner (axe knows; jsdom does not).
     expect(screen.getAllByRole("banner")).toContain(region("top"));
-    expect(screen.getByRole("search")).toBe(region("filters"));
+    expect(screen.getByRole("search", { name: "Filter photos" })).toBe(region("filters"));
+    expect(region("top")).toContainElement(screen.getByRole("search", { name: "Photo search" }));
     expect(screen.getByRole("main")).toContainElement(region("grid"));
     expect(screen.getByRole("main")).toContainElement(region("preview"));
     expect(screen.getByRole("complementary", { name: "Details" })).toBeInTheDocument();
@@ -315,13 +316,24 @@ describe("the accessibility baseline", () => {
 
   it("leaves the search box with F6", async () => {
     await review();
-    const search = within(region("filters")).getByRole("searchbox");
+    const search = within(region("top")).getByRole("searchbox");
     search.focus();
     await userEvent.keyboard("{F6}");
-    expect(region("grid")).toContainElement(document.activeElement as HTMLElement);
-    // Back to the filter bar comes back to the search box.
+    expect(region("filters")).toContainElement(document.activeElement as HTMLElement);
+    // Back to the top bar comes back to the search box.
     await userEvent.keyboard("{Shift>}{F6}{/Shift}");
     expect(search).toHaveFocus();
+  });
+
+  it("puts the search box at the left of the top bar, in line with the folder buttons, and the folder in no bar", async () => {
+    await review();
+    const top = region("top");
+    const search = within(top).getByRole("searchbox", { name: "Search photos" });
+    const open = within(top).getByRole("button", { name: albumText.openFolder });
+    expect(search.compareDocumentPosition(open) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(within(region("filters")).queryByRole("searchbox")).toBeNull();
+    // The album's folder is in the window title (set by Rust), not the top bar.
+    expect(top).not.toHaveTextContent("D:\\Trip");
   });
 
   it("puts everything in a landmark and passes the automated check", async () => {
@@ -475,12 +487,11 @@ describe("top bar and banners", () => {
     expect(screen.queryByText(text)).toBeNull();
   });
 
-  it("shows the root and the scope of a scoped open, and Show whole album opens the root", async () => {
+  it("offers Show whole album for a scoped open, which opens the root; the folder is in the window title", async () => {
     const fake = await openWith(
       fakeStatus("D:\\Photos\\2024\\Trip", { root: "D:\\Photos", scope: "2024/Trip", name: "Trip" }),
     );
-    expect(screen.getByText("D:\\Photos")).toBeInTheDocument();
-    expect(screen.getByText("2024\\Trip")).toBeInTheDocument();
+    expect(screen.queryByText("D:\\Photos")).toBeNull();
     await userEvent.click(screen.getByRole("button", { name: albumText.showWholeAlbum }));
     expect(opens(fake).at(-1)).toMatchObject({ path: "D:\\Photos" });
   });

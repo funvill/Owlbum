@@ -18,5 +18,7 @@ export { FLAG_KEY_IDS, flagKeyHandlers, isFlagKey, useFlagKeys, type FlagKeyId }
 export { nudge, resetNudges, toastText, useScoreToastStore, type NudgeDelta } from "./nudge";
 export { ScoreToast } from "./ScoreToast";
 export { ScoreCard } from "./ScoreCard";
+export { SortSelect } from "./SortSelect";
+export { QueryBox } from "./QueryBox";
 export { setStackSimilar, toggleStack } from "./stacks";
 export { undo, undoToast } from "./undo";

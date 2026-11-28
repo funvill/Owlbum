@@ -50,8 +50,3 @@ export function viewOnlyReason(status: AlbumStatus): string | null {
   const end = banner.text.indexOf(". ");
   return end === -1 ? banner.text : banner.text.slice(0, end + 1);
 }
-
-/** The top bar's path: the root, and the scope in the system's own separators. */
-export function shownScope(status: AlbumStatus): string {
-  return status.root.includes("\\") ? status.scope.replaceAll("/", "\\") : status.scope;
-}

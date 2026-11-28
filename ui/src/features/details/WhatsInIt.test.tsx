@@ -184,6 +184,13 @@ describe("What's in it", () => {
     expect(button).toHaveAttribute("aria-disabled", "true");
   });
 
+  it("draws Regenerate with its icon as well as its word", () => {
+    show(detail());
+    const button = screen.getByRole("button", { name: t.regenerateLabel });
+    expect(button.querySelector("svg")).not.toBeNull();
+    expect(button).toHaveTextContent(t.regenerate);
+  });
+
   it("asks for nothing by itself (no polling)", () => {
     vi.useFakeTimers();
     try {

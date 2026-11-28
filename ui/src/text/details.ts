@@ -37,6 +37,9 @@ export const detailsText = {
   folder: "Folder",
   path: "Path",
   copyPath: "Copy path",
+  /** Beside Pick on map when the photo has a place (docs/04-browsing.md, "Show on map"). */
+  showOnMap: "Show on map",
+  showOnMapTooltip: "Switch to the map with this photo's marker in the middle",
   unknown: "Unknown",
   changed: "changed",
   changedTooltip: "The date was changed here; the camera's is kept in the photo",

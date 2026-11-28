@@ -291,6 +291,24 @@ export class PhotoMap {
     if (this.clusters.getVisibleParent(marker) !== marker) this.clusters.zoomToShowLayer(marker);
   }
 
+  /**
+   * Centres photo `id`'s marker ("Show on map"), once every marker asked
+   * for is on the map. A marker inside a cluster is shown first. Answers
+   * false when the map has no marker for it.
+   */
+  async centre(id: number): Promise<boolean> {
+    await this.whenLoaded();
+    const marker = this.markers.get(id);
+    if (marker === undefined || this.destroyed) return false;
+    const at = marker.getLatLng();
+    if (this.clusters.getVisibleParent(marker) !== marker) {
+      this.clusters.zoomToShowLayer(marker, () => this.map.setView(at, this.map.getZoom(), { animate: false }));
+    } else {
+      this.map.setView(at, this.map.getZoom(), { animate: false });
+    }
+    return true;
+  }
+
   /** Creates or removes the tile layer. Tiles are requested only while it exists. */
   setTiles(on: boolean): void {
     if (on === (this.tiles !== null)) return;

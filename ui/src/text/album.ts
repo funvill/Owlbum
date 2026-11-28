@@ -44,8 +44,6 @@ export const albumText = {
   resizeDetails: "Resize details panel",
 
   // Top bar
-  albumTooltip: (root: string) => `Album: ${root}`,
-  scopeTooltip: (folder: string) => `Showing only: ${folder}`,
   showWholeAlbum: "Show whole album",
   viewOnlyBadge: "View only",
   closeFolder: "Close folder",

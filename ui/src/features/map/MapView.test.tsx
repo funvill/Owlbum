@@ -15,6 +15,7 @@ import { drawPlan } from "../edit/drawing";
 import { useColourFilters } from "../edit/filters";
 import { resetGrid, useGridStore } from "../grid";
 import { ViewBar } from "../timeline";
+import { resetMapFocus, showOnMap, useMapFocus } from "./focus";
 import { MapView, resetMapPlace } from "./MapView";
 import { PhotoMap } from "./photoMap";
 import { diffPoints } from "./points";
@@ -46,6 +47,7 @@ let fake: FakeApi;
 beforeEach(() => {
   resetGrid();
   resetMapPlace();
+  resetMapFocus();
   useToasts.setState({ toasts: [] });
   useSettingsStore.setState({ settings: null, error: null });
   fake = createFakeApi(createQueryFake(PHOTOS).handlers);
@@ -157,6 +159,32 @@ describe("the map view", () => {
     await screen.findByText("2 photos have no location");
     await waitFor(() => expect(fake.calls.some((c) => c.command === "query_window")).toBe(true));
   });
+
+  it("Show on map switches to the map and centres the photo's marker", async () => {
+    const centre = vi.spyOn(PhotoMap.prototype, "centre");
+    render(
+      <div>
+        <ViewBar />
+        <MapView album="/photos" />
+      </div>,
+    );
+    await grid().start();
+    act(() => showOnMap(3));
+    expect(grid().query.view).toBe("map");
+    await waitFor(() => expect(centre).toHaveBeenCalledWith(3));
+    expect(useMapFocus.getState().id).toBeNull();
+    await waitFor(() => expect(useSettingsStore.getState().settings?.view).toBe("map"));
+    centre.mockRestore();
+  });
+
+  it("drops a Show on map request for a photo the map does not hold", async () => {
+    const centre = vi.spyOn(PhotoMap.prototype, "centre");
+    useMapFocus.setState({ id: 2 });
+    await openMap();
+    await waitFor(() => expect(useMapFocus.getState().id).toBeNull());
+    expect(centre).not.toHaveBeenCalled();
+    centre.mockRestore();
+  });
 });
 
 describe("the map's markers", () => {
@@ -188,6 +216,19 @@ describe("the map's markers", () => {
     map.setPoints([point(1)]);
     expect(map.marker(2)).toBeUndefined();
     expect(map.marker(1)).toBeDefined();
+    map.destroy();
+    el.remove();
+  });
+
+  it("centres a photo's marker, and answers false for one it does not hold", async () => {
+    const el = document.createElement("div");
+    document.body.appendChild(el);
+    const map = new PhotoMap(el, { onPick: () => {}, onTiles: () => {} });
+    map.setPoints([point(1, 10, 20), point(2, -30, 40)]);
+    expect(await map.centre(2)).toBe(true);
+    const c = map.map.getCenter();
+    expect([c.lat, c.lng]).toEqual([-30, 40]);
+    expect(await map.centre(9)).toBe(false);
     map.destroy();
     el.remove();
   });

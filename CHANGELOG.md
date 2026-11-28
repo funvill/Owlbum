@@ -9,6 +9,24 @@ the window's title shows the version that is running.
 
 ## [Unreleased]
 
+### Added
+
+- Show on map: beside Pick on map in the details panel, for a photo with a
+  place. It switches to the map with the photo's marker in the middle.
+
+### Changed
+
+- The window title names the open folder after the version, for example
+  "Owlbum 0.1.3 - C:/Photos/Trip"; the folder is no longer shown in the
+  top bar.
+- The search box moved into the top bar, at its left, in line with Open
+  folder and Close folder.
+- Sort moved beside the Grid / Timeline / Map switch, shown while the grid
+  is the view, the way Day / Month sit there for the timeline.
+- The details panel's Copy button moved into the Photo section, under the
+  photo score. Its buttons have icons as well as words, including
+  Regenerate and the date's "Use the camera's date".
+
 ## [0.1.3] - 2026-11-27
 
 ### Added

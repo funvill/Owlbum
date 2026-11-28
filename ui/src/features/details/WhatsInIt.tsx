@@ -108,13 +108,14 @@ export function WhatsInIt({ detail, disabledReason }: WhatsInItProps) {
       {(tags.can_regenerate || (disabledReason !== null && tags.description !== null)) && (
         <div>
           {disabledReason !== null ? (
-            <Button size="sm" aria-label={t.regenerateLabel} disabledReason={disabledReason}>
+            <Button size="sm" icon="rescan" aria-label={t.regenerateLabel} disabledReason={disabledReason}>
               {t.regenerate}
             </Button>
           ) : (
             <Tooltip text={t.regenerateTooltip(writer ?? "")}>
               <Button
                 size="sm"
+                icon="rescan"
                 aria-label={t.regenerateLabel}
                 busy={busy}
                 onClick={() => void regenerate(detail.id, detail.revision)}

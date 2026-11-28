@@ -5,6 +5,7 @@ import type { PhotoAt } from "../../api/bindings/PhotoAt";
 import { EmptyState } from "../../controls";
 import { mapText as t } from "../../text/map";
 import { gridBlocks, pickById, useBrowseKeys, useGridStore } from "../grid";
+import { useMapFocus } from "./focus";
 import { PhotoMap } from "./photoMap";
 import { TileControls, useMapTiles } from "./tiles";
 import "./MapView.css";
@@ -110,6 +111,19 @@ export function MapView({ album, onOpen }: MapViewProps) {
     map.setCurrent(useGridStore.getState().current?.id ?? null, false);
     if (!fitted.current) fitted.current = map.fit();
   }, [answer]);
+
+  // "Show on map": once an answer holds the asked-for photo, its marker is
+  // centred (after the first fit, which it replaces). An answer without it
+  // drops the request.
+  const focus = useMapFocus((s) => s.id);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (map === null || answer === null || focus === null) return;
+    useMapFocus.setState({ id: null });
+    if (!answer.map.points.some((p) => p[0] === focus)) return;
+    fitted.current = true;
+    void map.centre(focus);
+  }, [answer, focus]);
 
   // The current photo's marker, brought into view when it changes.
   const currentId = current?.id ?? null;

@@ -11,6 +11,8 @@ import { fakeDetail } from "../../api/fake/photo";
 import { seriousFindings } from "../../test/axe";
 import { useAlbumStore } from "../album";
 import { useSettingsStore } from "../app";
+import { resetGrid, useGridStore } from "../grid";
+import { resetMapFocus, useMapFocus } from "../map";
 import { DetailsPanel, type CurrentPhoto } from "./DetailsPanel";
 
 const initialAlbum = useAlbumStore.getState();
@@ -334,6 +336,57 @@ describe("DetailsPanel", () => {
       },
     );
     await screen.findByText("No camera details in this file");
+  });
+
+  it("puts Copy in the Photo section, below the score, not in a head over the panel", async () => {
+    setup({ id: 42 });
+    await screen.findByText("Taken");
+    const copy = screen.getByRole("button", { name: "Copy" });
+    const photo = section("Photo").closest("section")!;
+    expect(photo).toContainElement(copy);
+    expect(panel().querySelector("header")).toBeNull();
+    // The score card comes first.
+    const score = screen.getByText(/Photo score/);
+    expect(score.compareDocumentPosition(copy) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+  });
+
+  it("gives the panel's buttons an icon as well as their words", async () => {
+    setup({ id: 42 });
+    await screen.findByText("Taken");
+    for (const name of ["Copy", "Copy path", "Pick on map", "Show on map"]) {
+      expect(screen.getByRole("button", { name }).querySelector("svg")).not.toBeNull();
+    }
+  });
+
+  it("shows Show on map beside Pick on map, which switches to the map and centres this photo", async () => {
+    resetGrid();
+    resetMapFocus();
+    const { fake } = setup({ id: 42 });
+    await screen.findByText("Taken");
+    const pick = screen.getByRole("button", { name: "Pick on map" });
+    const show = screen.getByRole("button", { name: "Show on map" });
+    expect(pick.parentElement).toBe(show.closest(".ow-details__actions"));
+    await userEvent.click(show);
+    expect(useGridStore.getState().query.view).toBe("map");
+    expect(useMapFocus.getState().id).toBe(42);
+    await waitFor(() =>
+      expect(calls(fake, "app_settings_set").some((c) => JSON.stringify(c.args).includes('"view":"map"'))).toBe(true),
+    );
+    resetGrid();
+    resetMapFocus();
+  });
+
+  it("leaves out Show on map for a photo with no place", async () => {
+    setup(
+      { id: 5 },
+      {
+        photo_detail: ({ id }) =>
+          fakeDetail(id, { place: { lat: null, lon: null, gps: null, typed: false, name: null, country: null } }),
+      },
+    );
+    await screen.findByText("Taken");
+    expect(screen.getByRole("button", { name: "Pick on map" })).toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "Show on map" })).not.toBeInTheDocument();
   });
 
   it("leaves out the Country and Coordinates rows for a photo with no place", async () => {

@@ -10,7 +10,20 @@ import { seriousFindings } from "../../test/axe";
 import { useSettingsStore } from "../app";
 import { resetGrid, useGridStore } from "../grid";
 import { focusOf } from "../../keys/match";
+import { ViewBar } from "../timeline";
 import { FilterBar } from "./FilterBar";
+import { QueryBox } from "./QueryBox";
+import { SortSelect } from "./SortSelect";
+
+/** The search box (in the top bar) with the filter bar, as the window has them. */
+function Bars() {
+  return (
+    <>
+      <QueryBox />
+      <FilterBar />
+    </>
+  );
+}
 
 let fake: FakeApi;
 const runs = () => fake.calls.filter((c) => c.command === "query_run");
@@ -33,10 +46,17 @@ beforeEach(() => {
 afterEach(() => resetGrid());
 
 describe("FilterBar", () => {
-  it("is a search landmark holding the Sort control with its five options", async () => {
-    const { container } = render(<FilterBar />);
-    const bar = screen.getByRole("search", { name: "Sort and filter" });
-    const sort = within(bar).getByRole("combobox", { name: "Sort" });
+  it("is a search landmark without Sort or the search box, which moved out", () => {
+    render(<FilterBar />);
+    const bar = screen.getByRole("search", { name: "Filter photos" });
+    expect(within(bar).queryByRole("combobox", { name: "Sort" })).not.toBeInTheDocument();
+    expect(within(bar).queryByRole("searchbox")).not.toBeInTheDocument();
+    expect(within(bar).getByRole("button", { name: "Filters" })).toBeInTheDocument();
+  });
+
+  it("has the Sort control beside the view switch, with its five options", async () => {
+    const { container } = render(<ViewBar />);
+    const sort = screen.getByRole("combobox", { name: "Sort" });
     expect(sort).toHaveValue("date");
     expect(within(sort).getAllByRole("option").map((o) => o.textContent)).toEqual([
       "Date taken",
@@ -51,7 +71,7 @@ describe("FilterBar", () => {
   it("runs the query in the chosen sort, keeping the selection", async () => {
     await grid().start();
     act(() => grid().setSelection({ current: { id: 2, index: 1 }, anchor: { id: 2, index: 1 }, selection: [2] }));
-    render(<FilterBar />);
+    render(<SortSelect />);
     await userEvent.selectOptions(screen.getByRole("combobox", { name: "Sort" }), "score");
     await vi.waitFor(() => expect(runs()).toHaveLength(2));
     expect(runs()[1]!.args).toMatchObject({
@@ -64,25 +84,19 @@ describe("FilterBar", () => {
     expect(screen.getByRole("combobox", { name: "Sort" })).toHaveValue("score");
   });
 
-  it("shows Sort only in the grid view, keeping the chosen sort for its return", () => {
+  it("shows Sort beside the view switch only in the grid view, keeping the chosen sort for its return", () => {
     for (const view of ["timeline", "map"] as const) {
       useGridStore.setState({ query: { ...defaultQuery(), view, sort: "name" } });
-      const { unmount } = render(<FilterBar />);
+      const { unmount } = render(<ViewBar />);
       expect(screen.queryByRole("combobox", { name: "Sort" })).not.toBeInTheDocument();
-      expect(screen.getByRole("searchbox", { name: "Search photos" })).toBeInTheDocument();
       unmount();
     }
     useGridStore.setState({ query: { ...defaultQuery(), view: "grid", sort: "name" } });
-    render(<FilterBar />);
-    expect(screen.getByRole("combobox", { name: "Sort" })).toHaveValue("name");
-  });
-
-  it("puts the search box first, at the left, before Sort and Filters", () => {
-    render(<FilterBar />);
-    const bar = screen.getByRole("search", { name: "Sort and filter" });
-    const search = within(bar).getByRole("searchbox", { name: "Search photos" });
-    const sort = within(bar).getByRole("combobox", { name: "Sort" });
-    expect(search.compareDocumentPosition(sort) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    render(<ViewBar />);
+    const views = screen.getByRole("tablist");
+    const sort = screen.getByRole("combobox", { name: "Sort" });
+    expect(sort).toHaveValue("name");
+    expect(views.compareDocumentPosition(sort) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
   });
 
   it("opens the panel with its counts, focus on the first control", async () => {
@@ -205,7 +219,7 @@ describe("FilterBar", () => {
   });
 
   it("has the search box with its hint line", async () => {
-    const { container } = render(<FilterBar />);
+    const { container } = render(<Bars />);
     const box = screen.getByRole("searchbox", { name: "Search photos" });
     expect(box).toHaveAttribute("placeholder", "Search names, people, places, notes and keywords");
     expect(screen.getByText("star:yes")).toBeInTheDocument();
@@ -215,7 +229,7 @@ describe("FilterBar", () => {
 
   it("turns query words into chips and the rest into search text", async () => {
     await grid().start();
-    render(<FilterBar />);
+    render(<Bars />);
     const box = screen.getByRole("searchbox", { name: "Search photos" });
     await userEvent.type(box, "ann star:no ");
     await vi.waitFor(() => expect(grid().query.filter).toEqual({ star: "no" }));
@@ -239,7 +253,7 @@ describe("FilterBar", () => {
 
   it("shows a bad query word's error and searches its text", async () => {
     await grid().start();
-    render(<FilterBar />);
+    render(<Bars />);
     const box = screen.getByRole("searchbox", { name: "Search photos" });
     await userEvent.type(box, "star:maybe lake{Enter}");
     expect(await screen.findByText(`"star:maybe" isn't a filter: try star:yes or star:no`)).toBeInTheDocument();
@@ -278,8 +292,8 @@ describe("FilterBar in a narrow window", () => {
 
   it("hides the hint line, keeps its examples in the box's tooltip, and shows the count as the number alone", async () => {
     await grid().start();
-    const { container } = render(<FilterBar />);
-    const bar = screen.getByRole("search", { name: "Sort and filter" });
+    const { container } = render(<Bars />);
+    const bar = screen.getByRole("search", { name: "Filter photos" });
     const box = screen.getByRole("searchbox", { name: "Search photos" });
     expect(screen.queryByText("star:yes")).not.toBeInTheDocument();
     expect(screen.queryByText("Try")).not.toBeInTheDocument();
@@ -299,7 +313,7 @@ describe("FilterBar in a narrow window", () => {
 
   it("still shows a bad query word's error", async () => {
     await grid().start();
-    render(<FilterBar />);
+    render(<Bars />);
     await userEvent.type(screen.getByRole("searchbox", { name: "Search photos" }), "star:maybe{Enter}");
     expect(await screen.findByText(`"star:maybe" isn't a filter: try star:yes or star:no`)).toBeInTheDocument();
   });

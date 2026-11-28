@@ -408,9 +408,11 @@ Bars never wrap onto a second line and never scroll sideways. As the window narr
 
 | Window width | Top bar | Filter bar |
 |---|---|---|
-| 1280 px and wider | Everything shows with its label. | Everything shows, with the query-word hint row. |
-| 1100 to 1279 px | The album path is cut in the middle. | The search box shrinks towards 200 px. |
-| 960 to 1099 px | Buttons other than the primary one become icon buttons with tooltips. The thumbnail-size slider moves into a popover behind the `grid` icon. | The hint row is hidden (a bad query word's error still shows there); the same examples are in the search box's tooltip and in Help. The photo count shows the number alone. |
+| 1280 px and wider | Everything shows with its label, and the search box with the query-word hint row. | Everything shows. |
+| 1100 to 1279 px | The search box shrinks towards 200 px. | Everything shows. |
+| 960 to 1099 px | Buttons other than the primary one become icon buttons with tooltips. The thumbnail-size slider moves into a popover behind the `grid` icon. The search box's hint row is hidden (a bad query word's error still shows there); the same examples are in the box's tooltip and in Help. | The photo count shows the number alone. |
+
+The search box is in the top bar and Sort beside the view switch (owner's feedback, #182). The view switch's bar, at the top of the thumbnail column, is the one bar that may wrap: in a narrow column Sort (or Day / Month) moves onto a second line.
 
 The Filters panel is `min(620px, window width − 24px)` wide. The "Load maps" card is `min(360px, map width − 24px)` wide.
 
@@ -527,7 +529,7 @@ A banner is a full-width strip between the bars and the columns. It has a 20 px 
 
 A banner that can be dismissed has an `x` icon button at its right end.
 
-**A scoped album has no banner.** When a subfolder of a larger album is open, the top bar shows the album root and the scope (see [Browsing](04-browsing.md#top-bar)). The scope is drawn in `--text` after the root in `--muted`.
+**A scoped album has no banner.** When a subfolder of a larger album is open, the window title names the scope folder and the top bar offers **Show whole album** (see [Browsing](04-browsing.md#top-bar)).
 
 ### Progress bars
 
@@ -572,7 +574,7 @@ Every feature meets this baseline before it is called done.
 
 | Part | Roles and properties |
 |---|---|
-| Window regions | `banner` for the top bar, `search` for the filter bar, `main` for the grid and preview, `complementary` labelled "Details" for the details panel. The reading bar is a `region` labelled "Reading progress", so nothing on the page is outside a landmark. |
+| Window regions | `banner` for the top bar (holding the `search` landmark "Photo search" around the search box), `search` labelled "Filter photos" for the filter bar, `main` for the grid and preview, `complementary` labelled "Details" for the details panel. The reading bar is a `region` labelled "Reading progress", so nothing on the page is outside a landmark. |
 | Thumbnail grid | `role="grid"` with `aria-multiselectable="true"`, `aria-rowcount` and `aria-colcount` for the whole result, not only the rows drawn. Each row is `role="row"` with `aria-rowindex`; each tile is `role="gridcell"` with `aria-selected`. One cell has `tabindex="0"`; the rest have `-1`. |
 | A tile's name | The file name, then its state in words: "IMG_0042.jpg, starred, score 55, stack of 3". |
 | Dialogs | `role="dialog"` with `aria-modal="true"` and `aria-labelledby` pointing at the title. Focus is trapped inside. The rest of the page is `inert`. A dialog that only asks to confirm a deletion is `role="alertdialog"`. |

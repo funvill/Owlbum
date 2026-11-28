@@ -52,35 +52,6 @@
   font-weight: var(--weight-heading);
 }
 
-/* The root is cut first, from its start; the scope last. */
-.ow-topbar__path {
-  display: flex;
-  align-items: baseline;
-  gap: var(--space-2);
-  min-width: 0;
-  color: var(--muted);
-}
-
-.ow-topbar__root {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  direction: rtl;
-  text-align: left;
-}
-
-.ow-topbar__sep {
-  flex: none;
-}
-
-.ow-topbar__scope {
-  flex: 0 1 auto;
-  min-width: var(--space-8);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  color: var(--text);
-}
-
 .ow-topbar__whole {
   flex: none;
   padding: 0;

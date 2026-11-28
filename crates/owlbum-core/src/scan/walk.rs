@@ -188,9 +188,9 @@ pub fn in_app_data(folder: &Path, path: &Path) -> bool {
 
 /// True when a listed folder's entries include the app data mark.
 fn lists_app_data(entries: &[std::fs::DirEntry]) -> bool {
-    entries.iter().any(|e| {
-        e.file_name() == APP_DATA_MARK && e.file_type().is_ok_and(|t| t.is_file())
-    })
+    entries
+        .iter()
+        .any(|e| e.file_name() == APP_DATA_MARK && e.file_type().is_ok_and(|t| t.is_file()))
 }
 
 /// A directory entry's type, as the listing reports it (links are not
@@ -887,7 +887,10 @@ pub(crate) mod tests {
         assert!(listed(&w).is_empty());
         // The watcher drops paths inside it, and only those.
         let root = tmp.path();
-        assert!(in_app_data(root, &absolute(root, "check/data/thumbs/ab/abcd-s.jpg")));
+        assert!(in_app_data(
+            root,
+            &absolute(root, "check/data/thumbs/ab/abcd-s.jpg")
+        ));
         assert!(in_app_data(root, &absolute(root, "check/data/thumbs")));
         assert!(!in_app_data(root, &absolute(root, "check/a.jpg")));
         assert!(!in_app_data(root, &absolute(root, "check/data")));

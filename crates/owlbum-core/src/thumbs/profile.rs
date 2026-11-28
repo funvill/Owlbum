@@ -235,7 +235,9 @@ fn stage_profile() {
         .collect();
     let reader = MediaReader;
     let mut stages = [0f64; 6];
-    let names = ["sample", "metadata", "decode", "resize", "encode m", "encode s"];
+    let names = [
+        "sample", "metadata", "decode", "resize", "encode m", "encode s",
+    ];
     let mut bytes = [0usize; 2];
     for path in &files {
         let format = format_of(path.file_name().unwrap().to_str().unwrap()).unwrap();

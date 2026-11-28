@@ -273,9 +273,18 @@ mod tests {
             version: Some("0.2.0".into()),
             percent,
         };
-        assert_eq!(taskbar_percent(&at(UpdateStateKind::Downloading, Some(42))), Some(42));
-        assert_eq!(taskbar_percent(&at(UpdateStateKind::Downloading, None)), Some(0));
-        assert_eq!(taskbar_percent(&at(UpdateStateKind::Ready, Some(100))), None);
+        assert_eq!(
+            taskbar_percent(&at(UpdateStateKind::Downloading, Some(42))),
+            Some(42)
+        );
+        assert_eq!(
+            taskbar_percent(&at(UpdateStateKind::Downloading, None)),
+            Some(0)
+        );
+        assert_eq!(
+            taskbar_percent(&at(UpdateStateKind::Ready, Some(100))),
+            None
+        );
         assert_eq!(taskbar_percent(&at(UpdateStateKind::Available, None)), None);
     }
 
@@ -296,8 +305,11 @@ mod tests {
     fn a_failed_install_is_told_to_the_next_start_once() {
         let tmp = tempfile::tempdir().unwrap();
         assert_eq!(take_install_failed(tmp.path()), None);
-        record_install_failed(tmp.path(), "the installer could not start
-more");
+        record_install_failed(
+            tmp.path(),
+            "the installer could not start
+more",
+        );
         assert_eq!(
             take_install_failed(tmp.path()).as_deref(),
             Some("the installer could not start")

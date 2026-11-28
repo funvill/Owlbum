@@ -3,6 +3,7 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it } from "vitest";
 import { setApi } from "../../api";
 import { createFakeApi, type FakeApi } from "../../api/fake";
+import { appHandlers } from "../../api/fake/app";
 import { aboutText as t } from "../../text/app";
 import { seriousFindings } from "../../test/axe";
 import { AboutDialog } from "./AboutDialog";
@@ -23,10 +24,18 @@ describe("the About box", () => {
     expect(screen.getByText("C:\\Users\\sam\\AppData\\Local\\OwlbumData")).toBeInTheDocument();
     expect(screen.getByText("Copyright (c) 2026 Owlbum contributors")).toBeInTheDocument();
     expect(screen.getByText(t.includes)).toBeInTheDocument();
+    expect(screen.getByText("ONNX Runtime 1.31.1")).toBeInTheDocument();
     expect(dialog.querySelector("img")).not.toBeNull();
     // OK is focused, so Enter or Esc closes the box.
     expect(screen.getByRole("button", { name: t.ok })).toHaveFocus();
     expect(await seriousFindings()).toEqual([]);
+  });
+
+  it("says when the model runtime has not loaded yet", async () => {
+    fake = createFakeApi({ app_about: () => ({ ...appHandlers.app_about({}), onnx_runtime: null }) });
+    setApi(fake);
+    render(<AboutDialog open onClose={() => {}} />);
+    expect(await screen.findByText(t.onnxRuntime(null))).toBeInTheDocument();
   });
 
   it("opens the repository and the feedback page through Rust, never by itself", async () => {

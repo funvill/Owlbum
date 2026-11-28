@@ -34,4 +34,8 @@ repository: string,
  * Whether `THIRD-PARTY-NOTICES.txt` is among the program's resources;
  * the About box shows its button only then.
  */
-has_notices: boolean, };
+has_notices: boolean, 
+/**
+ * The ONNX Runtime version, once tagging has loaded it; None before.
+ */
+onnx_runtime: string | null, };

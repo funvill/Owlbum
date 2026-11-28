@@ -548,6 +548,33 @@ describe("thumbnail size control", () => {
     fireEvent.change(slider, { target: { value: "240" } });
     expect(useGridStore.getState().thumbSize).toBe(240);
   });
+
+  it("below 1100 px is the grid icon, which drops the slider in a popover", () => {
+    vi.stubGlobal("matchMedia", (query: string) => ({
+      matches: query === "(max-width: 1099px)",
+      media: query,
+      addEventListener: () => {},
+      removeEventListener: () => {},
+    }));
+    try {
+      render(<ThumbSize />);
+      expect(screen.queryByRole("slider")).toBeNull();
+      const button = screen.getByRole("button", { name: gridText.thumbSize });
+      expect(button).toHaveAttribute("aria-expanded", "false");
+      fireEvent.click(button);
+      const slider = screen.getByRole("slider", { name: gridText.thumbSize });
+      fireEvent.change(slider, { target: { value: "200" } });
+      expect(useGridStore.getState().thumbSize).toBe(200);
+      fireEvent.keyDown(slider, { key: "Escape" });
+      expect(screen.queryByRole("slider")).toBeNull();
+      expect(button).toHaveFocus();
+      fireEvent.click(button);
+      fireEvent.pointerDown(document.body);
+      expect(screen.queryByRole("slider")).toBeNull();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe("search by meaning", () => {

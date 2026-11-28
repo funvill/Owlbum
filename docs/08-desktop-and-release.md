@@ -92,7 +92,7 @@ One window, titled `Owlbum <version>` (for example `Owlbum 0.1.3`), so a tester 
 | Default size | 1440 × 900 |
 | Minimum size | 960 × 600 |
 | Background while loading | The theme's window colour (see [Visual design](09-visual-design.md)), so there is no white flash. |
-| Webview data folder | `<app data>/webview`. Nothing Owlbum relies on is kept there. (Not built yet: issue 203. The webview keeps Tauri's default folder, named after the identifier.) |
+| Webview data folder | `<app data>/webview`, set on the window builder (`data_directory`). Nothing Owlbum relies on is kept there. Like the rest of the app data folder, it is kept by an uninstall, even with the "delete application data" box ticked (see [Packaging](#packaging)). |
 | Developer tools | Development builds only. |
 | Files dropped on the window | Never navigate the webview. Rust receives the drop; a dropped folder is opened through `open_folder` (see [Browsing](04-browsing.md)). |
 
@@ -564,6 +564,7 @@ The paragraphs, in order:
 3. The network statement, word for word: "Everything stays on this computer. Owlbum uses the network only for OpenStreetMap map tiles, and only after you choose Load maps on the Map tab; to download photo-tagging models from Hugging Face when you ask for one in Settings; and to check GitHub for a new version once a day, unless you turn that off in Settings."
 4. "Its thumbnails, settings and models are kept in:" and the app data folder.
 5. The credits: "Built from the open-source project funvill/Owlbum on GitHub, under the MIT License." then the copyright line from `LICENSE`, then "It includes software from other projects, each under its own licence: see "Third-party notices"."
+6. The model runtime: "ONNX Runtime <version>" once tagging has loaded it, else "ONNX Runtime: loads with the first photo-tagging model" (#202; see [Tagging](07-tagging.md), "Packaging").
 
 As built (#61, `ui/src/features/app/AboutDialog.tsx`): the logo is the owner's gold owl (see [Visual design](09-visual-design.md)), a 128 px copy at `ui/src/assets/owlbum-icon.png` drawn at 64 px and bundled with the page. Under the credits is the repository's address, `https://github.com/funvill/Owlbum`, drawn as a link; choosing it calls `app_open_repository`, and Rust opens the address in the user's browser. The buttons are **Give feedback** (as F2) and **OK** (focused; Esc also closes). The other buttons came with #62 and the rest of #61: **Check for updates** shows while the updater's state is not `unavailable`; **Licence** opens `LICENSE.txt` from the resources (`bundle.resources` copies the repository's `LICENSE` there) or, when a development build has none, a copy of the licence compiled into the program, written to the app data folder; **Third-party notices** shows only when `THIRD-PARTY-NOTICES.txt` is among the resources (`app_about` answers `has_notices`): in an installed copy, whose installer carries the file made by `scripts/notices.mjs` (#66), but not in a development build or the test exe of `scripts/build-test.sh`, which have no such resource. The credits' last sentence ("It includes software from other projects…") is always shown. The package kind is not shown on Linux yet.
 
@@ -814,7 +815,7 @@ At start the shell looks for `onnxruntime.dll` in the resource folder and, when 
 | `bundle.windows.webviewInstallMode` | `downloadBootstrapper`. Windows 11 already has WebView2. On a Windows 10 computer without it, the installer fetches it from Microsoft. The site says so. |
 | Languages | English only. |
 | Code signing | None in version 1. Windows SmartScreen warns on first run; the site explains how to continue. |
-| Uninstall | Removes the program and its shortcuts. It never deletes the app data folder or any `.owlbum` folder. The uninstaller's "delete application data" box, if ticked, removes only the folders Tauri names after the identifier, where Owlbum keeps nothing. |
+| Uninstall | Removes the program and its shortcuts. It never deletes the app data folder or any `.owlbum` folder. The uninstaller's "delete application data" box, if ticked, removes only the folders Tauri names after the identifier, where Owlbum keeps nothing; since #203 that includes the webview's data, which is in `<app data>/webview` and so is kept. |
 | Install folder | The per-user default, `%LOCALAPPDATA%\Owlbum`. The app data folder is deliberately a different one, `%LOCALAPPDATA%\OwlbumData` (see [Data](02-data.md#the-app-data-folder)), so an uninstall or reinstall never touches the cache and settings. |
 
 **Linux `.deb`.**

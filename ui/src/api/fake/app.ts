@@ -152,6 +152,7 @@ export const appHandlers: AreaHandlers<AppCommands> = {
     copyright: "Copyright (c) 2026 Owlbum contributors",
     repository: "https://github.com/funvill/Owlbum",
     has_notices: true,
+    onnx_runtime: "1.31.1",
   }),
   // An empty cache at the default limit. A test that needs a size replaces these.
   app_cache_clear: () => ({ bytes_freed: 0 }),

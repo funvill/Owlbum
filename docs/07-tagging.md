@@ -975,7 +975,7 @@ Owlbum ships Microsoft's `onnxruntime.dll` (Windows) or `libonnxruntime.so` (Lin
 Other notes:
 
 - No model file is ever put in an installer.
-- The release build prints the ONNX Runtime version in the log at the first model load, and About lists it. (Not built yet: issue 202. The log names the library's path when it loads; About does not mention ONNX Runtime.)
+- The release build prints the ONNX Runtime version in the log at the first model load ("ONNX Runtime 1.31.1 loaded from <path>"), and About lists it ("ONNX Runtime 1.31.1", under the credits). The version is read from the library's build info (its `rel-<version>` branch). Before the first model load About says "ONNX Runtime: loads with the first photo-tagging model": opening About does not load the library (#202).
 - The prebuilt ONNX Runtime uses the processor's vector instructions when they exist and works without them. No per-processor build is made.
 
 ## Commands and events

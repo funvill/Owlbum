@@ -263,6 +263,25 @@
   width: 120px;
 }
 
+/* Below 1100 px the slider drops from the grid icon (docs/09, "The bars"). */
+.ow-thumb-size--narrow {
+  position: relative;
+}
+
+.ow-thumb-size__popover {
+  position: absolute;
+  top: calc(100% + var(--space-1));
+  right: 0;
+  z-index: var(--z-popover);
+  display: flex;
+  align-items: center;
+  padding: var(--space-3) var(--space-4);
+  background: var(--panel);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-xl);
+  box-shadow: var(--shadow);
+}
+
 /* The note over the photos found by meaning (docs/04-browsing.md, "Search
    by meaning"): it fills the row before them, its text at the row's foot. */
 .ow-grid__note-cell {

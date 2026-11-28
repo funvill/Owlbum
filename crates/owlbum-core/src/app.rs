@@ -178,6 +178,8 @@ pub struct About {
     /// Whether `THIRD-PARTY-NOTICES.txt` is among the program's resources;
     /// the About box shows its button only then.
     pub has_notices: bool,
+    /// The ONNX Runtime version, once tagging has loaded it; None before.
+    pub onnx_runtime: Option<String>,
 }
 
 /// The About box's facts for a data folder and package kind.
@@ -191,6 +193,7 @@ pub fn about(data_dir: &Path, package: &str, has_notices: bool) -> About {
         copyright: copyright().to_owned(),
         repository: REPOSITORY_URL.to_owned(),
         has_notices,
+        onnx_runtime: crate::tagging::onnx::loaded_version(),
     }
 }
 

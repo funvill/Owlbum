@@ -351,7 +351,13 @@ fn main_window<R: Runtime>(
     let dev_url = tauri::is_dev()
         .then(|| app.config().build.dev_url.clone())
         .flatten();
-    let window = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?
+    let mut builder = tauri::WebviewWindowBuilder::from_config(app.handle(), &config)?;
+    // The webview keeps its own data in `<app data>/webview`, not in
+    // Tauri's folder named after the identifier (docs/08, "The window").
+    if let Some(data) = app.try_state::<AppData>() {
+        builder = builder.data_directory(data.webview_dir());
+    }
+    let window = builder
         .title(window_title(&version, None))
         .user_agent(&user_agent(std::env::consts::OS, &version))
         .on_navigation(move |url| navigation::check(url, dev_url.as_ref()))

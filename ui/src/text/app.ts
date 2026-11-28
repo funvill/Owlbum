@@ -67,6 +67,9 @@ export const aboutText = {
   dataFolder: "Its thumbnails, settings and models are kept in:",
   credits: "Built from the open-source project funvill/Owlbum on GitHub, under the MIT License.",
   includes: "It includes software from other projects, each under its own licence: see Third-party notices.",
+  /** The model runtime's version, or that it has not loaded yet. */
+  onnxRuntime: (version: string | null) =>
+    version === null ? "ONNX Runtime: loads with the first photo-tagging model" : `ONNX Runtime ${version}`,
   repository: "Owlbum on GitHub",
   feedback: "Give feedback",
   checkForUpdates: "Check for updates",

@@ -204,7 +204,7 @@ The bar is 48px high. It has a left group that takes the free space and a right 
 - **More** (always): a `⋯` icon button that opens the menu holding what the menu bar and the Tidy button did (owner's feedback on 0.1.4, #197). Defined in [Desktop](08-desktop-and-release.md#the-more-menu).
 - **Settings** (always): a gear icon button, label and tooltip "Settings". Defined in [Desktop](08-desktop-and-release.md).
 
-The bar never wraps. The window cannot be narrower than 960px, and below 1280px the bar gives up room in the order [Visual design](09-visual-design.md#the-bars) sets: the search box shrinks, then below 1100px the buttons become icon buttons, the slider moves into a popover and the search box's hint row is hidden. (The slider's popover is not built yet: the slider stays in the bar; issue 201.)
+The bar never wraps. The window cannot be narrower than 960px, and below 1280px the bar gives up room in the order [Visual design](09-visual-design.md#the-bars) sets: the search box shrinks, then below 1100px the buttons become icon buttons, the slider moves into a popover and the search box's hint row is hidden.
 
 ## Album banners
 

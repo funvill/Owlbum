@@ -412,7 +412,7 @@ Bars never wrap onto a second line and never scroll sideways. As the window narr
 |---|---|---|
 | 1280 px and wider | Everything shows with its label, and the search box with the query-word hint row. | Everything shows. |
 | 1100 to 1279 px | The search box shrinks towards 200 px. | Everything shows. |
-| 960 to 1099 px | Buttons other than the primary one become icon buttons with tooltips. The thumbnail-size slider moves into a popover behind the `grid` icon (not built yet: issue 201; the slider stays in the bar). The search box's hint row is hidden (a bad query word's error still shows there); the same examples are in the box's tooltip and in the shortcut overlay. | The photo count shows the number alone. |
+| 960 to 1099 px | Buttons other than the primary one become icon buttons with tooltips. The thumbnail-size slider moves into a popover behind the `grid` icon, which becomes an icon button (Esc or a press outside closes the popover). The search box's hint row is hidden (a bad query word's error still shows there); the same examples are in the box's tooltip and in the shortcut overlay. | The photo count shows the number alone. |
 
 The search box, with the Filters button beside it, is in the top bar and Sort beside the view switch (owner's feedback, #182, #196). The filter bar is one 38 px row starting under the search box: the count, or "Showing X of Y", Clear filter and the chips; the chips row is cut at the window's edge rather than wrapping. The top bar has no wordmark; the More menu (`⋯`) and the gear sit at its right end (#197). The view switch's bar, at the top of the thumbnail column, is the one bar that may wrap: in a narrow column Sort (or Day / Month) moves onto a second line.
 

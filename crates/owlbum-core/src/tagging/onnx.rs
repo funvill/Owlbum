@@ -25,6 +25,23 @@ use super::results::{self, Described, Keyworded};
 
 static LIBRARY: OnceLock<PathBuf> = OnceLock::new();
 static ENV: OnceLock<Result<Environment, String>> = OnceLock::new();
+static VERSION: OnceLock<String> = OnceLock::new();
+
+/// The loaded ONNX Runtime's version, such as `1.31.1`; None until the
+/// library has loaded (at the first model load). The About box lists it
+/// (docs/07-tagging.md, "Packaging").
+pub fn loaded_version() -> Option<String> {
+    VERSION.get().cloned()
+}
+
+/// The version in ONNX Runtime's build info, which reads like `ORT Build
+/// Info: git-branch=rel-1.31.1, git-commit-id=…`; the whole line when it
+/// names no release branch.
+fn version_of(info: &str) -> String {
+    info.split([',', ' '])
+        .find_map(|part| part.trim().strip_prefix("git-branch=rel-"))
+        .map_or_else(|| info.trim().to_owned(), str::to_owned)
+}
 
 /// Names the ONNX Runtime library file to load. Only the first call counts.
 pub fn set_library(path: PathBuf) {
@@ -72,7 +89,9 @@ pub fn environment() -> Result<&'static Environment, String> {
             .with_telemetry(false)
             .build()
             .map_err(|e| e.to_string())?;
-        tracing::info!(target: "tagging", "ONNX Runtime loaded from {}", path.display());
+        let version = version_of(ort::info());
+        tracing::info!(target: "tagging", "ONNX Runtime {version} loaded from {}", path.display());
+        let _ = VERSION.set(version);
         Ok(env)
     })
     .as_ref()
@@ -851,6 +870,13 @@ impl TagBackend for OnnxBackend {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_version_is_read_from_the_build_info() {
+        let info = "ORT Build Info: git-branch=rel-1.31.1, git-commit-id=26250ae, build type=Release";
+        assert_eq!(version_of(info), "1.31.1");
+        assert_eq!(version_of(" custom build "), "custom build");
+    }
 
     #[test]
     fn repeated_ngrams_are_banned() {

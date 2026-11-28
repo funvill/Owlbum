@@ -103,6 +103,7 @@ function AboutBody({ onNotices }: { onNotices: (has: boolean) => void }) {
         <p className="ow-about__muted">{t.credits}</p>
         {about !== null && about.copyright !== "" && <p className="ow-about__muted">{about.copyright}</p>}
         <p className="ow-about__muted">{t.includes}</p>
+        {about !== null && <p className="ow-about__muted">{t.onnxRuntime(about.onnx_runtime)}</p>}
       </div>
       <button type="button" className="ow-about__link" onClick={() => openFixed("app_open_repository")}>
         {about?.repository ?? t.repository}

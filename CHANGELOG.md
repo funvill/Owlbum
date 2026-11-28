@@ -9,6 +9,8 @@ the window's title shows the version that is running.
 
 ## [Unreleased]
 
+## [0.1.6] - 2026-11-27
+
 ### Added
 
 - In a view-only album, a key that would change something (star, hide,
@@ -301,7 +303,8 @@ The first test build: milestones 0 (foundation), 1 (browse) and 2
   text search, undo, and Tidy.
 - Timeline and map views, and reopening where you were.
 
-[Unreleased]: https://github.com/funvill/Owlbum/compare/b5d6009...HEAD
+[Unreleased]: https://github.com/funvill/Owlbum/compare/9c97718...HEAD
+[0.1.6]: https://github.com/funvill/Owlbum/tree/9c97718
 [0.1.5]: https://github.com/funvill/Owlbum/tree/b5d6009
 [0.1.4]: https://github.com/funvill/Owlbum/tree/609a21a
 [0.1.3]: https://github.com/funvill/Owlbum/tree/6ffea27

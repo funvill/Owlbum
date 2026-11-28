@@ -34,7 +34,6 @@ export const settingsText = {
   mapsOnline: "Load maps from the internet",
   mapsNote: "Map pictures come from OpenStreetMap. Your photos and their locations are never sent.",
   tagging: "Photo tagging",
-  taggingLater: "Photo tagging is not available in this version yet.",
   updates: "Updates",
   updatesAuto: "Check for a new version once a day",
   versionLine: (version: string, checked: string) => `Owlbum ${version} · last checked ${checked}`,
@@ -59,4 +58,36 @@ export const aboutText = {
   feedback: "Give feedback",
   ok: "OK",
   loading: "…",
+};
+
+/** Settings → Photo tagging (docs/07-tagging.md, "Settings → Photo tagging"). */
+export const taggingSettingsText = {
+  intro:
+    "Runs on this computer. The models are downloaded from Hugging Face only when you ask, and nothing else leaves the computer.",
+  loading: "Loading photo tagging…",
+  parts: {
+    describe: {
+      title: "Descriptions and objects",
+      note: "A sentence about each photo, and the things in it.",
+    },
+    keywords: {
+      title: "Keywords and search by meaning",
+      note: "Keywords for each photo, and search that finds photos by what you mean.",
+    },
+  },
+  off: "Off",
+  sizes: { smaller: "smaller", larger: "larger" },
+  details: (bytes: string, speed: string, licence: string) => `${bytes} · ${speed} · ${licence}`,
+  lessThanASecond: "less than a second a photo",
+  aboutSeconds: (n: number) => `about ${n} s a photo`,
+  download: "Download",
+  continueDownload: "Continue download",
+  downloadAgain: "Not working · Download again",
+  busyDownloading: "Another model is downloading. Wait for it, or cancel it.",
+  cancel: "Cancel",
+  remove: "Remove",
+  checking: "Checking…",
+  downloading: (label: string) => `Downloading ${label}`,
+  percent: (n: number) => `${n}%`,
+  confirm: (label: string, size: string) => `Download ${label}, ${size}, from Hugging Face?`,
 };

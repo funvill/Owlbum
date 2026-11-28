@@ -656,7 +656,7 @@ XMP is written as it was read: a JPEG APP1 XMP segment (a packet over one segmen
 
 ## The photo menu
 
-A right-click on a tile, on the preview or in the viewer opens the menu at the pointer. If the photo is not in the selection, it becomes the selection first; otherwise the selection is kept, so the multi-photo items act on all of it. The webview's own context menu is suppressed. The menu has the role `menu` and the label "Photo".
+A right-click on a tile, on the preview, in the viewer or on a photo's marker on the map opens the menu at the pointer. If the photo is not in the selection, it becomes the selection first; otherwise the selection is kept, so the multi-photo items act on all of it. The webview's own context menu is suppressed. The menu has the role `menu` and the label "Photo".
 
 **Targets.** Items marked "all" act on the selected photos that are shown, in the order of the result, when the clicked photo is one of them. Items marked "one" act on the clicked photo only.
 
@@ -734,7 +734,7 @@ The confirm:
 | Buttons | "Move to Recycle Bin", "Cancel" | "Move to Trash", "Cancel" |
 | Default button and Esc | Cancel | Cancel |
 
-The box is `tauri-plugin-dialog`'s message box with custom buttons. It cannot choose its default button, so the first one ("Move to …") is the default on Windows; Esc still cancels. A follow-up issue tracks making Cancel the default.
+The box is `tauri-plugin-dialog`'s message box with custom buttons. It cannot choose its default button, so the first one ("Move to …") is the default on Windows; Esc still cancels. #188 tracks making Cancel the default.
 
 Results:
 

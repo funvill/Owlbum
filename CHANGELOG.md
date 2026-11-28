@@ -14,6 +14,18 @@ the window's title shows the version that is running.
 - F6 and Shift+F6 move the keyboard focus between the top bar, the filter
   bar, the grid, the preview and the details panel, and back to where it
   was in each.
+- Settings > Photo tagging: choose Off or a model for descriptions and for
+  keywords, download a model from Hugging Face after a yes, follow its
+  progress, cancel it, and remove a model you no longer want.
+- A tagging bar under the top bar while photos are being tagged, with
+  Pause and Resume, the count of photos that could not be tagged and Try
+  failed photos again, and a clear line when tagging stopped or a model is
+  not working.
+- "What's in it" in the details panel: the description of the photo, its
+  keywords and the objects in it. Click a keyword or object to show only
+  photos with it; click again to stop. Regenerate asks the model for a
+  new description.
+- The photos you are looking at are tagged first.
 
 ### Changed
 
@@ -21,6 +33,11 @@ the window's title shows the version that is running.
   map tiles (after you say yes), never leaves its own page or opens new
   windows, and the page can only call Owlbum's own commands. Links such as
   the project page still open in your browser.
+
+### Fixed
+
+- Closing Owlbum stops photo tagging and any model download first, and
+  does not wait forever for a model that hangs.
 
 ## [0.1.2] - 2026-11-27
 

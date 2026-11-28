@@ -371,7 +371,7 @@ A running thread cannot be killed, so a limit is enforced in three steps:
 
 1. **Between steps.** Florence-2 writes one token per decoder run. The deadline is checked before each one, so a slow caption stops cleanly within one step.
 2. **Inside a run.** A watchdog asks ONNX Runtime to end the run in progress when the deadline passes. `ort` exposes this through its run options; the prototype confirms it for the pinned version.
-3. **Stuck.** If the run has not returned 30 s after it was asked to end, the tagging thread is written off. A new tagging thread is started with empty slots. The stuck thread is left to finish or not, and its result is ignored. (Not built yet: steps 1 and 2 are. The prototype saw a run end within about half a second of its deadline through the run options.)
+3. **Stuck.** If the run has not returned 30 s after it was asked to end, the tagging thread is written off. A new tagging thread is started with empty slots. The stuck thread is left to finish or not, and its result is ignored. A watchdog thread checks this: a stuck photo run counts as a timeout (a `failed` row "Tagging this photo took too long." and one loss), a stuck load puts the part in the not-working set, and a stuck Regenerate answers `tagging_timeout`. When Owlbum closes, it waits at most these 30 s for the run in hand and then leaves the thread behind. (The prototype saw a run end within about half a second of its deadline through the run options.)
 
 What a timeout does:
 
@@ -530,7 +530,7 @@ When work starts, one query per active model lists the ids that need work, in ph
 
 ### Ordering
 
-1. **The focus list first**, in order. The page sends `tagging_focus(ids)`: the selected photo, then the photos in the rows on screen, at most 200. It sends it 500 ms after the selection, the scroll position or the query last changed, and only when the list differs from the last one sent. The queue keeps the first 1,000 ids it is given. A focus list sent during a scan is kept for when tagging starts.
+1. **The focus list first**, in order. The page sends `tagging_focus(ids)`: the selected photo, then the photos in the rows on screen, at most 200. The rows on screen are the rows the grid draws, including the two rows of overscan above and below the view, and only those whose rows have arrived. It sends it 500 ms after the selection, the scroll position or the query last changed, and only when the list differs from the last one sent. The queue keeps the first 1,000 ids it is given. A focus list sent during a scan is kept for when tagging starts.
 2. Then **scan order**: the next id in the list.
 
 One photo is tagged at a time. For that photo the active models run one after the other: `describe`, then `keywords`.
@@ -761,6 +761,7 @@ interface PhotoTags {
   objects: { label: string; count: number }[];
   error: string | null;                         // the first failed row's message, when state is 'failed'
   can_regenerate: boolean;
+  waiting_for: string | null;                   // label of the first chosen model with no row, when state is 'waiting'
 }
 ```
 
@@ -773,6 +774,7 @@ How Rust fills it:
 | `description`, `objects` | From the shown describe row, when it is done. |
 | `keywords` | From the shown keywords row, when it is done: the labels, best score first. |
 | `can_regenerate` | True when the shown describe row is done, belongs to the active describe model, and the album is not view-only. |
+| `waiting_for` | When `state` is `waiting`: the label of the first chosen model (describe first) that has no row for the photo, for "Waiting for {label}". Else null. |
 
 Vectors are never sent to the page.
 
@@ -791,7 +793,7 @@ Vectors are never sent to the page.
 
 | Condition | Shown |
 |---|---|
-| `state` is `off` | "Tagging is off." and a **Settings** link that opens Settings at Photo tagging. Nothing else. |
+| `state` is `off` | "Tagging is off." and a **Settings** link that opens Settings at Photo tagging (the dialog scrolls that section into view). Nothing else. |
 | `not_working` is not empty | The error note "Not working: a chosen model is damaged or would not load. See Settings." above whatever else shows. |
 | `state` is `waiting` with no description, keywords or objects | "Not looked at yet" |
 | `state` is `waiting` with results from another model | Those results, and under them the muted note "Waiting for {chosen model label}". |
@@ -812,7 +814,8 @@ Vectors are never sent to the page.
 | Press | Calls `tagging_regenerate(id)`. The reply replaces the photo's tags in the panel. |
 | Busy state | Kept in the store as a set of photo ids. It lasts while the section is folded, another photo is shown or the panel is closed, and a second request for the same photo is not sent. |
 | Failure | A toast shows the error's message. The old sentence stays. If another album was opened meanwhile, the reply is dropped and no toast shows. |
-| View-only | The button is disabled; the tooltip is the first sentence of the view-only banner in force. |
+| View-only | The button is disabled; the tooltip is the first sentence of the view-only banner in force. `can_regenerate` is false in a view-only album, so the page shows the disabled button whenever there is a description. |
+| Model refused the picture | A `Photo` error from the model fails the command with code `tagging_lost` and the model's message. |
 
 ### The tagging bar
 

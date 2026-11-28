@@ -762,7 +762,11 @@ fn regenerate_replaces_only_the_sentence_for_the_photo_and_its_copies() {
     let d = fx.row("lake.jpg", D).unwrap();
     assert_eq!(d.description.as_deref(), Some("Another look at lake (1)."));
     assert_eq!(d.objects[0].label, "lake", "objects are kept");
-    assert_eq!(fx.row("lake.jpg", K).unwrap(), before_k, "keywords are kept");
+    assert_eq!(
+        fx.row("lake.jpg", K).unwrap(),
+        before_k,
+        "keywords are kept"
+    );
     assert_eq!(
         fx.row("lake again.jpg", D).unwrap().description.as_deref(),
         Some("Another look at lake (1).")
@@ -812,7 +816,10 @@ fn regenerate_tries_once_more_after_a_lost_model_and_words_its_errors() {
     let before = fx.row("lost-lake.jpg", D).unwrap().description;
     let e = fx.tagging.regenerate(fx.album(), lake).unwrap_err();
     assert_eq!(e.code, ErrorCode::TaggingLost);
-    assert_eq!(e.message, "Fake describer small stopped working. Try again.");
+    assert_eq!(
+        e.message,
+        "Fake describer small stopped working. Try again."
+    );
     assert_eq!(fx.row("lost-lake.jpg", D).unwrap().description, before);
 }
 

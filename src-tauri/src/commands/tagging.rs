@@ -78,7 +78,10 @@ pub fn tagging<R: Runtime>(app: &AppHandle<R>) -> Option<Tagging> {
 /// Owlbum closes: the download is cancelled, the queue stops and the
 /// models are unloaded. Nothing to do when tagging was never started.
 pub fn shutdown<R: Runtime>(app: &AppHandle<R>) {
-    if let Some(t) = app.try_state::<TaggingState>().and_then(|s| s.0.get().cloned()) {
+    if let Some(t) = app
+        .try_state::<TaggingState>()
+        .and_then(|s| s.0.get().cloned())
+    {
         t.shutdown();
     }
 }

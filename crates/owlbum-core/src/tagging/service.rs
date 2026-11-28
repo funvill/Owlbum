@@ -517,15 +517,25 @@ impl Tagging {
             .ok_or_else(|| AppError::new(ErrorCode::NoDescribeModel, words::NO_DESCRIBE_MODEL))?;
         let (exists, row) = album.db().read(|c| {
             let exists = c
-                .query_row("SELECT 1 FROM photos WHERE id = ?1 AND missing = 0", [id], |_| Ok(()))
+                .query_row(
+                    "SELECT 1 FROM photos WHERE id = ?1 AND missing = 0",
+                    [id],
+                    |_| Ok(()),
+                )
                 .is_ok();
             Ok((exists, store::row(c, id, m.id)?))
         })?;
         if !exists {
-            return Err(AppError::new(ErrorCode::PhotoNotFound, crate::text::photo::NOT_FOUND));
+            return Err(AppError::new(
+                ErrorCode::PhotoNotFound,
+                crate::text::photo::NOT_FOUND,
+            ));
         }
         if row.is_none_or(|r| r.status != store::Status::Done) {
-            return Err(AppError::new(ErrorCode::NotDescribedYet, words::not_described_yet(m.label)));
+            return Err(AppError::new(
+                ErrorCode::NotDescribedYet,
+                words::not_described_yet(m.label),
+            ));
         }
         self.runtime.regenerate(id, m)?;
         self.photo_tags(album, id)

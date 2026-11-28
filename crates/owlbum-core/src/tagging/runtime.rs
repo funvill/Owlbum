@@ -622,9 +622,10 @@ fn watch(shared: &Arc<Shared>) {
         if s.shutdown {
             return;
         }
-        let late = s.in_run.as_ref().is_some_and(|r| {
-            r.epoch == s.epoch && Instant::now() >= r.ends + shared.limits.stuck
-        });
+        let late = s
+            .in_run
+            .as_ref()
+            .is_some_and(|r| r.epoch == s.epoch && Instant::now() >= r.ends + shared.limits.stuck);
         if !late {
             let _ = shared.wake.wait_timeout(s, tick);
             continue;
@@ -653,13 +654,22 @@ fn watch(shared: &Arc<Shared>) {
         s.running = false;
         drop(s);
         if let Some(reply) = &r.reply {
-            answer(reply, Err(AppError::new(ErrorCode::TaggingTimeout, words::tagging_timeout(r.model.label))));
+            answer(
+                reply,
+                Err(AppError::new(
+                    ErrorCode::TaggingTimeout,
+                    words::tagging_timeout(r.model.label),
+                )),
+            );
         }
         if let Some(work) = write {
             // As a timeout: a failed row for the photo.
             let row = TagRow::failed(part, r.model.id, words::TOOK_TOO_LONG, store::now_ms());
             let id = r.id;
-            let _ = work.album.db().write(move |tx| store::write(tx, id, &[row]));
+            let _ = work
+                .album
+                .db()
+                .write(move |tx| store::write(tx, id, &[row]));
             let mut s = shared.lock();
             s.tags_pending = true;
         }
@@ -671,6 +681,7 @@ fn watch(shared: &Arc<Shared>) {
 }
 
 /// Marks what the thread runs now, for the watchdog.
+#[allow(clippy::too_many_arguments)]
 fn running(
     shared: &Shared,
     epoch: u64,
@@ -760,7 +771,13 @@ fn run(shared: &Arc<Shared>, epoch: u64) {
                     s.not_working.extend(Part::ALL);
                     drop(s);
                     if let Next::Regenerate { job, .. } = &next {
-                        answer(&job.reply, Err(AppError::new(ErrorCode::ModelLoadFailed, words::model_load_failed(job.model.label))));
+                        answer(
+                            &job.reply,
+                            Err(AppError::new(
+                                ErrorCode::ModelLoadFailed,
+                                words::model_load_failed(job.model.label),
+                            )),
+                        );
                     }
                     shared.publish(true);
                     continue;
@@ -980,7 +997,16 @@ fn ensure_loaded(
     let (epoch, generation, id) = turn;
     let dir = install::model_dir(&shared.models, model);
     let deadline = Deadline::after(shared.limits.load);
-    running(shared, epoch, generation, RunKind::Load, id, model, shared.limits.load, None);
+    running(
+        shared,
+        epoch,
+        generation,
+        RunKind::Load,
+        id,
+        model,
+        shared.limits.load,
+        None,
+    );
     let loaded = match install::quick_state(&dir, model) {
         install::InstallState::Ok => {
             match catch_unwind(AssertUnwindSafe(|| {
@@ -1112,7 +1138,16 @@ fn tag(
                 Part::Keywords => shared.limits.keywords,
             };
             let deadline = Deadline::new(limit, Arc::clone(stop));
-            running(shared, epoch, generation, RunKind::Photo, id, m, limit, None);
+            running(
+                shared,
+                epoch,
+                generation,
+                RunKind::Photo,
+                id,
+                m,
+                limit,
+                None,
+            );
             let outcome = catch_unwind(AssertUnwindSafe(|| {
                 run_model(b, m, &image, &deadline, made_at)
             }));
@@ -1196,17 +1231,26 @@ fn regenerate(
     let (rgb, name) = match work.pictures.picture(id) {
         Picture::Ready(rgb, name) => (rgb, name),
         Picture::Gone => {
-            return Err(AppError::new(ErrorCode::PhotoNotFound, crate::text::photo::NOT_FOUND));
+            return Err(AppError::new(
+                ErrorCode::PhotoNotFound,
+                crate::text::photo::NOT_FOUND,
+            ));
         }
         Picture::Unreadable(_) => return Err(AppError::internal(words::COULD_NOT_READ_PHOTO)),
     };
-    let image = TagImage { rgb: &rgb, name: &name };
+    let image = TagImage {
+        rgb: &rgb,
+        name: &name,
+    };
     for attempt in 1..=2 {
         if !ensure_loaded(shared, b, m, (epoch, generation, id)) {
             if !current() {
                 return Err(stopped());
             }
-            return Err(AppError::new(ErrorCode::ModelLoadFailed, words::model_load_failed(m.label)));
+            return Err(AppError::new(
+                ErrorCode::ModelLoadFailed,
+                words::model_load_failed(m.label),
+            ));
         }
         let deadline = Deadline::new(shared.limits.caption, Arc::clone(stop));
         running(
@@ -1227,7 +1271,10 @@ fn regenerate(
             Ok(Ok(text)) => {
                 let text = text.trim().to_owned();
                 if text.is_empty() {
-                    return Err(AppError::new(ErrorCode::EmptyDescription, words::empty_description(m.label)));
+                    return Err(AppError::new(
+                        ErrorCode::EmptyDescription,
+                        words::empty_description(m.label),
+                    ));
                 }
                 let model = m.id;
                 let made_at = store::now_ms();
@@ -1245,7 +1292,10 @@ fn regenerate(
             Ok(Err(BackendError::Timeout)) => {
                 b.unload(m.part);
                 shared.set_text(b);
-                return Err(AppError::new(ErrorCode::TaggingTimeout, words::tagging_timeout(m.label)));
+                return Err(AppError::new(
+                    ErrorCode::TaggingTimeout,
+                    words::tagging_timeout(m.label),
+                ));
             }
             Ok(Err(BackendError::Photo(message))) => {
                 return Err(AppError::new(ErrorCode::TaggingLost, message));
@@ -1254,12 +1304,18 @@ fn regenerate(
                 b.unload(m.part);
                 shared.set_text(b);
                 if attempt == 2 {
-                    return Err(AppError::new(ErrorCode::TaggingLost, words::tagging_lost(m.label)));
+                    return Err(AppError::new(
+                        ErrorCode::TaggingLost,
+                        words::tagging_lost(m.label),
+                    ));
                 }
             }
         }
     }
-    Err(AppError::new(ErrorCode::TaggingLost, words::tagging_lost(m.label)))
+    Err(AppError::new(
+        ErrorCode::TaggingLost,
+        words::tagging_lost(m.label),
+    ))
 }
 
 /// Done and failed, for each photo that counts (eligible, in scope).

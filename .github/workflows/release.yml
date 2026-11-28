@@ -1,0 +1,127 @@
+# Builds the installers and a DRAFT release when a person pushes a version
+# tag (docs/08-desktop-and-release.md, "release.yml"). It never publishes:
+# a person reads the draft, tests it and publishes it by hand. It runs no
+# tests; they run in checks.yml and locally before the tag is pushed.
+#
+# Windows only for now: the owner paused Linux work on 2026-11-26. The
+# ubuntu-22.04 job (deb and AppImage) goes back in when that pause ends.
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Windows installer
+    runs-on: windows-latest
+    timeout-minutes: 90
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+      TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Version check
+        shell: bash
+        run: |
+          version=$(cargo metadata --no-deps --format-version 1 \
+            | node -e 'let s="";process.stdin.on("data",d=>s+=d).on("end",()=>console.log(JSON.parse(s).packages.find(p=>p.name==="owlbum").version))')
+          if [ "v$version" != "$TAG" ]; then
+            echo "::error::The tag $TAG does not match the version $version in Cargo.toml."
+            exit 1
+          fi
+
+      - name: Secrets check
+        shell: bash
+        run: |
+          if [ -z "$TAURI_SIGNING_PRIVATE_KEY" ]; then
+            echo "::error::The updater signing key is not set. Create it and add the secrets TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD (see docs/08-desktop-and-release.md, The signing key)."
+            exit 1
+          fi
+          pubkey=$(node -e 'const c=require("./src-tauri/tauri.conf.json");console.log((c.plugins&&c.plugins.updater&&c.plugins.updater.pubkey)||"")')
+          if [ -z "$pubkey" ]; then
+            echo "::error::The updater's public key (plugins.updater.pubkey in src-tauri/tauri.conf.json) is empty. Create the key and add the secrets TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD (see docs/08-desktop-and-release.md, The signing key)."
+            exit 1
+          fi
+
+      - name: No published release for this tag
+        shell: bash
+        run: |
+          draft=$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft 2>/dev/null || echo none)
+          if [ "$draft" = "false" ]; then
+            echo "::error::The release $TAG is already published; this workflow never changes a published release."
+            exit 1
+          fi
+
+      - uses: actions/setup-node@v5
+        with:
+          node-version-file: ui/.nvmrc
+          cache: npm
+          cache-dependency-path: ui/package-lock.json
+
+      # rustup reads rust-toolchain.toml and installs the pinned version.
+      - name: Rust toolchain
+        shell: bash
+        run: rustup show active-toolchain || rustup toolchain install
+
+      - uses: taiki-e/install-action@v2
+        with:
+          tool: cargo-about
+
+      - name: Page packages
+        run: npm ci
+        working-directory: ui
+
+      - name: ONNX Runtime
+        run: node scripts/fetch-ort.mjs
+
+      - name: Third-party notices
+        run: node scripts/notices.mjs --strict
+
+      - uses: tauri-apps/tauri-action@v0
+        with:
+          tauriScript: npm --prefix ui run tauri --
+          args: --bundles nsis --config src-tauri/tauri.bundle.conf.json --config src-tauri/tauri.release.conf.json
+          tagName: ${{ github.ref_name }}
+          releaseName: Owlbum ${{ github.ref_name }}
+          releaseBody: See CHANGELOG.md for what changed in this version.
+          releaseDraft: true
+          prerelease: false
+          includeUpdaterJson: true
+
+  check:
+    name: Check the draft
+    needs: [windows]
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TAG: ${{ github.ref_name }}
+      GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Every file is in the draft
+        shell: bash
+        run: |
+          version=${TAG#v}
+          gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft,assets > release.json
+          missing=0
+          for f in "Owlbum_${version}_x64-setup.exe" "Owlbum_${version}_x64-setup.exe.sig" latest.json; do
+            if ! jq -e --arg f "$f" '.assets[] | select(.name == $f)' release.json > /dev/null; then
+              echo "::error::The draft release $TAG has no $f."
+              missing=1
+            fi
+          done
+          [ "$missing" = 0 ] || exit 1
+          [ "$(jq -r .isDraft release.json)" = true ] || { echo "::error::$TAG is not a draft."; exit 1; }
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --pattern latest.json
+          jq -e '.platforms["windows-x86_64"].url and .platforms["windows-x86_64"].signature' latest.json > /dev/null \
+            || { echo "::error::latest.json has no entry for Windows."; exit 1; }

@@ -189,6 +189,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(move |app| {
+            use_bundled_ort(app.handle());
             // Step 6: the menu.
             let menu = menu::build(app.handle(), dev, auto)?;
             app.set_menu(menu)?;
@@ -264,6 +265,25 @@ fn configure_updates<R: Runtime>(app: &AppHandle<R>, dev: bool, pubkey: Option<&
             tracing::warn!(target: "update", "{e}");
             updates.configure(None, dev);
         }
+    }
+}
+
+/// Points tagging at the ONNX Runtime library the installer put among the
+/// program's resources (docs/07-tagging.md, "Packaging"). A build without
+/// it (`cargo build`, `tauri dev`) keeps the other places: the file named
+/// by `OWLBUM_ORT_DYLIB`, then the file next to the program.
+fn use_bundled_ort<R: Runtime>(app: &AppHandle<R>) {
+    let found = app
+        .path()
+        .resource_dir()
+        .ok()
+        .and_then(|dir| owlbum_core::tagging::onnx::library_in(&dir));
+    match found {
+        Some(path) => {
+            tracing::info!(target: "tagging", "onnx runtime library={}", path.display());
+            owlbum_core::tagging::onnx::set_library(path);
+        }
+        None => tracing::info!(target: "tagging", "onnx runtime is not among the resources"),
     }
 }
 

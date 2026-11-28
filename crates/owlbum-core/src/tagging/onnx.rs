@@ -31,6 +31,21 @@ pub fn set_library(path: PathBuf) {
     let _ = LIBRARY.set(path);
 }
 
+/// The platform's file name for the library.
+pub const LIBRARY_FILE: &str = if cfg!(windows) {
+    "onnxruntime.dll"
+} else {
+    "libonnxruntime.so"
+};
+
+/// The library in a folder (the program's resource folder, where the
+/// installers put it; docs/08-desktop-and-release.md, "Bundle
+/// configuration"), when it is there.
+pub fn library_in(dir: &Path) -> Option<PathBuf> {
+    let path = dir.join(LIBRARY_FILE);
+    path.is_file().then_some(path)
+}
+
 /// The library: the one set, else `OWLBUM_ORT_DYLIB`, else the platform's
 /// file name next to the program.
 fn library() -> Result<PathBuf, String> {
@@ -40,13 +55,8 @@ fn library() -> Result<PathBuf, String> {
     if let Some(p) = std::env::var_os("OWLBUM_ORT_DYLIB") {
         return Ok(PathBuf::from(p));
     }
-    let name = if cfg!(windows) {
-        "onnxruntime.dll"
-    } else {
-        "libonnxruntime.so"
-    };
     let exe = std::env::current_exe().map_err(|e| e.to_string())?;
-    Ok(exe.with_file_name(name))
+    Ok(exe.with_file_name(LIBRARY_FILE))
 }
 
 /// Starts ONNX Runtime once; the reason when it cannot start.
@@ -855,6 +865,17 @@ mod tests {
         let mut rng = 1;
         assert_eq!(choose(&[0.1, 3.0, 2.0], &[], Pick::Greedy, &mut rng), 1);
         assert_eq!(choose(&[0.1, 3.0, 2.0], &[1], Pick::Greedy, &mut rng), 2);
+    }
+
+    #[test]
+    fn the_library_is_found_in_a_folder_only_when_it_is_there() {
+        let dir = tempfile::tempdir().unwrap();
+        assert_eq!(library_in(dir.path()), None);
+        std::fs::create_dir(dir.path().join(LIBRARY_FILE)).unwrap();
+        assert_eq!(library_in(dir.path()), None, "a folder is not the library");
+        std::fs::remove_dir(dir.path().join(LIBRARY_FILE)).unwrap();
+        std::fs::write(dir.path().join(LIBRARY_FILE), b"x").unwrap();
+        assert_eq!(library_in(dir.path()), Some(dir.path().join(LIBRARY_FILE)));
     }
 
     #[test]

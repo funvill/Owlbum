@@ -757,15 +757,33 @@ A shell test reads the capability file and fails if it grants anything outside t
 | `productName` | `Owlbum` |
 | `identifier` | `com.funvill.owlbum` |
 | `mainBinaryName` | `owlbum` |
-| `bundle.targets` | `nsis` on Windows; `deb` and `appimage` on Linux |
+| `bundle.targets` | `nsis` on Windows; `deb` and `appimage` on Linux. The installer builds pass `--bundles nsis` on Windows. |
 | `bundle.category` | `Photography` |
 | `bundle.shortDescription` | The product description |
 | `bundle.licenseFile` | `LICENSE` |
-| `bundle.resources` | `LICENSE.txt`, `THIRD-PARTY-NOTICES.txt`, and the ONNX Runtime library if it is not linked in |
+| `bundle.resources` | Not in this file: see below. |
 | `bundle.icon` | The files in `src-tauri/icons/` |
 | `bundle.createUpdaterArtifacts` | `false` (set true by `tauri.release.conf.json`) |
 | `plugins.updater.endpoints` | The feed address above |
 | `plugins.updater.pubkey` | Empty until final review |
+
+**Resources (as built, #66 and #171).** Three files ship at the root of the program's resource folder, which on Windows (NSIS) is the install folder, beside `owlbum.exe`:
+
+| File in the program | Comes from |
+|---|---|
+| `LICENSE.txt` | The repository's `LICENSE`. |
+| `THIRD-PARTY-NOTICES.txt` | `resources/THIRD-PARTY-NOTICES.txt`, made by `scripts/notices.mjs` (below). |
+| `onnxruntime.dll` | `resources/onnxruntime.dll`, put there by `scripts/fetch-ort.mjs` (below). |
+
+They are listed in `src-tauri/tauri.bundle.conf.json`, not in `tauri.conf.json`, because Tauri's build script copies the resources on every `cargo build` and fails when one is missing: a plain build, `tauri dev` and the tests must not need the generated or downloaded files. The installer builds merge it with `--config src-tauri/tauri.bundle.conf.json`. The repository's `resources/` folder holds only generated and downloaded files and is ignored by git. The About box (#61) finds the two text files with `BaseDirectory::Resource`; a build made without the bundle configuration has neither, and the About box treats that as no file.
+
+**Building an installer on this computer.** `./scripts/build-installer.sh` fetches ONNX Runtime, builds the notices with `--strict` (it needs `cargo install cargo-about --locked --features cli`) and runs `tauri build --bundles nsis --config src-tauri/tauri.bundle.conf.json`. The installer lands in `<target>/release/bundle/nsis/`. It has no updater files, so it needs no signing key. `scripts/build-test.sh` builds only the exe; it copies `onnxruntime.dll` beside `owlbum-test.exe`, where tagging finds it.
+
+### ONNX Runtime
+
+Tagging loads Microsoft's ONNX Runtime by full path ([Tagging](07-tagging.md), Packaging). The library is never committed. `scripts/fetch-ort.mjs` downloads the NuGet package `Microsoft.ML.OnnxRuntime` 1.31.1 from nuget.org, checks the package's SHA-256 (`6871ccbc97f3d5bdb4095a1dcec33aa78d56f6ed8de5980ef5fa1d9f2e7c679a`), takes out `runtimes/win-x64/native/onnxruntime.dll` and checks its size and SHA-256 (17,253,728 bytes, `cb2fa518b18356617f6f9f460c012501da2819ec7e5c1d80bd8f5de20492db0c`), and writes it to `resources/onnxruntime.dll` with the package's `LICENSE` and `ThirdPartyNotices.txt` beside it (for the notices). Any mismatch fails. A library already there with the right hash is kept, and nothing is downloaded. Linux (`libonnxruntime.so` from the same package) waits for the end of the pause on Linux work.
+
+At start the shell looks for `onnxruntime.dll` in the resource folder and, when it is there, hands its full path to tagging (`owlbum_core::tagging::onnx::set_library`) and logs it. When it is not (a development build), tagging keeps its other places: the file named by `OWLBUM_ORT_DYLIB`, then the file beside the program.
 
 **Windows (NSIS).**
 
@@ -820,16 +838,16 @@ Two text files ship in the program's resources and are opened from the About box
 - `LICENSE.txt` is a copy of the repository's `LICENSE` (MIT).
 - `THIRD-PARTY-NOTICES.txt` is generated; it is never edited by hand and is not committed.
 
-`scripts/notices.mjs` builds the notices from four sources:
+`scripts/notices.mjs` writes `resources/THIRD-PARTY-NOTICES.txt` (with Windows line ends) from four sources:
 
 | Source | How |
 |---|---|
-| Rust crates | `cargo about generate`, with `about.toml` listing the accepted licences. A crate under a licence not on the list fails the build, so a new licence is always a decision. |
+| Rust crates | `cargo about generate --format json` on `src-tauri/Cargo.toml`, without dev and build dependencies, for Windows and Linux x64, with `about.toml` listing the accepted licences. A crate under a licence not on the list fails the build, so a new licence is always a decision. The crates are grouped by licence, each licence's text once. |
 | npm packages | The production dependencies of `ui/package.json` and everything they depend on, read from `ui/node_modules`. Build-only tools are left out. |
-| Things that ship but are neither | Hand-written files in `notices/`: ONNX Runtime (MIT) and the libraries inside it, WebView2 and WebKitGTK as system components, and OpenStreetMap's data credit. |
-| Models | The tagging models are downloaded on request and are not in the installer. The notices list each model in the catalogue with its licence and source, under the heading "Downloaded only when you ask". [Tagging](07-tagging.md) owns the catalogue. |
+| Things that ship but are neither | Hand-written files in `notices/`: ONNX Runtime (`onnxruntime.txt`, followed by the package's own `LICENSE` and `ThirdPartyNotices.txt` for the libraries inside it, word for word), WebView2 and WebKitGTK as system components (`webview2.txt`), OpenStreetMap's data credit, Lucide's icons, Natural Earth's borders and rawler. |
+| Models | The tagging models are downloaded on request and are not in the installer. The notices list each model in the catalogue with its licence and source, under the heading "Downloaded only when you ask". [Tagging](07-tagging.md) owns the catalogue; the script reads the labels, repositories, revisions and licences from `crates/owlbum-core/src/tagging/catalogue.rs`. |
 
-A missing licence text fails the release build.
+A missing licence text fails the release build: `--strict`, used by the release workflow and `scripts/build-installer.sh`, turns every problem the script reports into a failure. Without it the file is still written and the problems are listed.
 
 **The LGPL notice.** `rawler`, the camera RAW decoder, is under LGPL-2.1 and is linked into the program. The notices carry this entry, with the exact version taken from `Cargo.lock`:
 
@@ -863,8 +881,8 @@ It was added at the owner's request during the build (2026-11-26); earlier versi
 |---|---|
 | Trigger | A pushed tag matching `v*`. Nothing else. |
 | Permissions | `contents: write`. |
-| Matrix | `windows-latest` and `ubuntu-22.04`, `fail-fast: false`. |
-| Result | A **draft** release named after the tag, holding the three installers, their `.sig` files and `latest.json`. |
+| Matrix | `windows-latest` and `ubuntu-22.04`, `fail-fast: false`. As built (#67): a single `windows-latest` job while Linux work is paused; the Ubuntu job returns with it. |
+| Result | A **draft** release named after the tag, holding the three installers, their `.sig` files and `latest.json`. While Linux is paused: the Windows installer, its `.sig` and `latest.json`. |
 
 Steps on each runner:
 
@@ -873,10 +891,12 @@ Steps on each runner:
 3. **Secrets check.** If `TAURI_SIGNING_PRIVATE_KEY` is empty, fail with: "The updater signing key is not set. Create it and add the secrets TAURI_SIGNING_PRIVATE_KEY and TAURI_SIGNING_PRIVATE_KEY_PASSWORD (see docs/08-desktop-and-release.md, The signing key)." The same check fails if `plugins.updater.pubkey` is empty. This runs before any build, so the failure takes seconds and says what to do.
 4. Install Rust (stable) and Node (the version in `ui/.nvmrc`). On Ubuntu, install the Tauri build packages (`libwebkit2gtk-4.1-dev`, `build-essential`, `libssl-dev`, `librsvg2-dev`, `patchelf` and the others Tauri lists).
 5. `npm ci` in `ui/`.
-6. Build the notices (`node scripts/notices.mjs --strict`).
-7. Run `tauri-apps/tauri-action` with `tagName` set to the tag, `releaseDraft: true`, `includeUpdaterJson: true`, and `args: --config src-tauri/tauri.release.conf.json`. It builds the page and the program, signs the updater artefacts, creates the draft release if it does not exist, and uploads the installers and `latest.json`.
+6. Fetch ONNX Runtime (`node scripts/fetch-ort.mjs`), then build the notices (`node scripts/notices.mjs --strict`; `cargo-about` comes from `taiki-e/install-action`).
+7. Run `tauri-apps/tauri-action` with `tagName` set to the tag, `releaseDraft: true`, `includeUpdaterJson: true`, `tauriScript: npm --prefix ui run tauri --` and `args: --bundles nsis --config src-tauri/tauri.bundle.conf.json --config src-tauri/tauri.release.conf.json`. It builds the page and the program, signs the updater artefacts, creates the draft release if it does not exist, and uploads the installers and `latest.json`.
 
-A final job, after both runners, lists the draft's files and fails if any of the three installers, a `.sig` file or `latest.json` is missing, or if `latest.json` lacks an entry for Windows or Linux.
+A final job, after both runners, lists the draft's files and fails if any of the three installers, a `.sig` file or `latest.json` is missing, or if `latest.json` lacks an entry for Windows or Linux. While Linux is paused it checks only the Windows files and the `windows-x86_64` entry.
+
+The workflow has been checked with `actionlint` but has never run: no version tag has been pushed. Its first real run is the owner's, after the signing key exists.
 
 The workflow never publishes. If a release for the tag is already published, it fails rather than change files that installed copies may be downloading.
 

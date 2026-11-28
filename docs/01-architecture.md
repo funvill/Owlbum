@@ -53,11 +53,13 @@ Owlbum/
     src/icons/            the icon set, inline SVG
     src/keys/keymap.json  the one table of keyboard shortcuts
   e2e/                    the thin WebdriverIO smoke test, run by hand before a release
-  scripts/                check.sh (the gate, on Windows under Git Bash and on Linux), bindings.sh, and the notices generator
+  scripts/                check.sh (the gate, on Windows under Git Bash and on Linux), bindings.sh, the notices generator (notices.mjs), fetch-ort.mjs and build-installer.sh
   site/                   the marketing page (static HTML), deployed to GitHub Pages by a workflow
   docs/                   these documents; docs/archive holds the old program's
   .github/workflows/      checks.yml (the gate on pushes and pull requests), release.yml (installers on a tag), pages.yml (site)
   notices/                hand-written third-party notices for things that are not packages
+  about.toml              the licences cargo-about accepts for the notices
+  resources/              generated and downloaded files the installers ship (ignored by git)
   LICENSE                 MIT
 ```
 
@@ -245,7 +247,7 @@ These are the starting choices. A prototype may replace one; the replacement is 
 | JPEG encode | `jpeg-encoder` | Pure Rust, writes 4:2:0 (which `image`'s encoder cannot); `mozjpeg` was not taken because it needs a C and assembler toolchain on every build machine (#11). |
 | EXIF and video metadata | EXIF: Owlbum's own reader (`media::exif`); video containers: Owlbum's own walk of MP4, MOV and AVI headers, and `nom-exif` for dates, places, cameras and Matroska | Read only. Why EXIF is read by hand is in [Media and scanning](03-media-and-scanning.md#metadata-reading). |
 | JPEG XL | `jxl-oxide` | |
-| Camera RAW | `rawler` 0.8 (LGPL-2.1) | Reads the embedded previews and develops the sensor data (#49). Listed in `notices/rawler.txt` until the notices generator lists crates; `about.toml` must accept LGPL-2.1 for it. |
+| Camera RAW | `rawler` 0.8 (LGPL-2.1) | Reads the embedded previews and develops the sensor data (#49). Listed in `notices/rawler.txt` and, with its licence text, among the crates in the generated notices; `about.toml` accepts LGPL-2.1 for it. |
 | Model runtime | `ort` (ONNX Runtime, loaded from Microsoft's library by full path), `tokenizers` | Driven directly, without `usls` (#52). |
 | Model downloads | `ureq` (rustls with the webpki roots, redirects handled by hand), `sha2` | `ureq` is the client `ort` already builds with; blocking suits the one download thread. |
 | Colour profiles | `moxcms` | Converting embedded profiles to sRGB (`media::colour`). Chosen by measurement in #7 over `lcms2` and `qcms` ([Media and scanning](03-media-and-scanning.md#open-questions), question 8). `image` already depends on it. |

@@ -38,6 +38,11 @@ the window's title shows the version that is running.
   photos with it; click again to stop. Regenerate asks the model for a
   new description.
 - The photos you are looking at are tagged first.
+- A Windows installer (Owlbum_<version>_x64-setup.exe) that installs for
+  the current user without an administrator prompt, fetches WebView2 from
+  Microsoft if Windows 10 lacks it, and carries the licence, the
+  third-party notices and ONNX Runtime, so photo tagging works in an
+  installed Owlbum.
 
 ### Changed
 

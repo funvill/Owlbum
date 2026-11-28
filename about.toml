@@ -1,0 +1,34 @@
+# cargo-about's settings for scripts/notices.mjs (docs/08-desktop-and-release.md,
+# "Licence and third-party notices"). A crate under a licence not accepted
+# here fails the notices build, so adding a licence is always a decision.
+accepted = [
+    "MIT",
+    "Apache-2.0",
+    "Apache-2.0 WITH LLVM-exception",
+    "BSD-2-Clause",
+    "BSD-3-Clause",
+    "ISC",
+    "Zlib",
+    "Unicode-3.0",
+    "BSL-1.0",
+    "CC0-1.0",
+    "MPL-2.0",
+    "CDLA-Permissive-2.0",
+    # The Independent JPEG Group's licence, beside MIT OR Apache-2.0, for
+    # jpeg-encoder's code derived from libjpeg.
+    "IJG",
+    # rawler, the camera RAW decoder, linked unmodified (notices/rawler.txt).
+    "LGPL-2.1",
+]
+# Only what ships in the program: no tests, no build scripts' helpers.
+ignore-dev-dependencies = true
+ignore-build-dependencies = true
+targets = ["x86_64-pc-windows-msvc", "x86_64-unknown-linux-gnu"]
+
+# nom-exif names its licence only as a file (license-file = "LICENSE").
+[nom-exif.clarify]
+license = "MIT"
+[[nom-exif.clarify.files]]
+path = "LICENSE"
+license = "MIT"
+checksum = "9cfbbedc535b1a4b73b2f7f51fd683ac6cae914f6d4bc7f271b9b230dd4e2808"

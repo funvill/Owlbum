@@ -10,8 +10,9 @@ node_modules/
 /ui/dist/
 *.tsbuildinfo
 
-# Generated at release time, never committed
-/THIRD-PARTY-NOTICES.txt
+# Generated or downloaded for the installers, never committed
+# (scripts/notices.mjs, scripts/fetch-ort.mjs)
+/resources/
 
 # Local files
 .env

@@ -1,0 +1,12 @@
+Microsoft Edge WebView2
+
+On Windows, Owlbum draws its window with Microsoft Edge WebView2
+(https://developer.microsoft.com/microsoft-edge/webview2/), a part of
+Windows that Owlbum uses but does not include. Windows 11 already has it.
+On a Windows 10 computer without it, the Owlbum installer downloads
+Microsoft's WebView2 installer from Microsoft and runs it. WebView2 is
+under Microsoft's own licence terms, shown by that installer.
+
+On Linux, Owlbum draws its window with WebKitGTK (https://webkitgtk.org),
+a system library under the GNU Lesser General Public License, installed
+by the system's package manager and not included with Owlbum.

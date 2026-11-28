@@ -1,0 +1,8 @@
+ONNX Runtime
+
+Owlbum's photo tagging runs its models on Microsoft ONNX Runtime 1.31.1
+(https://github.com/microsoft/onnxruntime), shipped as onnxruntime.dll from
+the NuGet package Microsoft.ML.OnnxRuntime 1.31.1, unmodified. ONNX Runtime
+is under the MIT License, copyright (c) Microsoft Corporation. Its licence
+and its own third-party notices, for the libraries built into it, follow
+word for word as they come in that package.

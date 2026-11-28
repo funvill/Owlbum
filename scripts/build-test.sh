@@ -6,7 +6,9 @@
 #    and opens a new, empty "Unreleased" above it.
 # 3. Commits both (no tag: tags are for real releases, made by a person) and
 #    pushes main, so the next build on any computer takes the next number.
-# 4. Builds the release exe (no installer) and copies it to the test folder.
+# 4. Builds the release exe (no installer) and copies it to the test folder,
+#    with ONNX Runtime beside it (scripts/fetch-ort.mjs), where tagging
+#    looks for it when it is not among the program's resources.
 #
 # Usage: ./scripts/build-test.sh
 #   OWLBUM_TEST_DIR  where the exe goes (default ~/Documents/OwlbumDemo)
@@ -28,6 +30,7 @@ if [ -n "$(git status --porcelain)" ]; then
   exit 1
 fi
 git pull -q --ff-only
+node scripts/fetch-ort.mjs
 
 old=$(sed -n 's/^version = "\(.*\)"$/\1/p' Cargo.toml | head -1)
 IFS=. read -r major minor patch <<<"$old"
@@ -76,4 +79,5 @@ npm --prefix ui ci --silent
 npm --prefix ui run tauri -- build --no-bundle
 mkdir -p "$test_dir"
 cp "$CARGO_TARGET_DIR/release/owlbum.exe" "$test_dir/owlbum-test.exe"
+cp resources/onnxruntime.dll "$test_dir/onnxruntime.dll"
 echo "Owlbum $new is at $test_dir/owlbum-test.exe"

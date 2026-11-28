@@ -111,6 +111,26 @@ export class BlockStore {
     if (this.last !== null) this.want(this.last);
   }
 
+  /**
+   * The same result grew at its end (a meaning segment was added): the
+   * block that held the old end and those after it are asked for again,
+   * drawing what they held meanwhile.
+   */
+  grow(count: number): void {
+    const from = this.count === 0 ? 0 : blockOf(this.count - 1);
+    for (const [b, rows] of this.blocks) {
+      if (b < from) continue;
+      this.stale.set(b, rows);
+      this.blocks.delete(b);
+    }
+    this.staleCount = this.count;
+    this.count = count;
+    this.asking = new Set();
+    this.queue = [];
+    this.changed();
+    if (this.last !== null) this.want(this.last);
+  }
+
   /** The row at `index`, from this result or, until it arrives, the one drawn there before. */
   row(index: number): Row | undefined {
     if (index < 0 || index >= this.count) return undefined;

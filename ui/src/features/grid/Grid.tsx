@@ -27,7 +27,7 @@ import {
   type VisibleRange,
 } from "./layout";
 import { reportShown, startFocus } from "./focus";
-import { HEAD, groupOfRow, rowAt, rowTiles, rowTop } from "./groups";
+import { HEAD, groupOfRow, rowAt, rowTiles, rowTop, tileEnd, tileFrom } from "./groups";
 import { MonthRail } from "./MonthRail";
 import { railFits, railShown, railYears } from "./rail";
 import { selectGroup } from "./selection";
@@ -90,6 +90,7 @@ export function Grid(props: GridProps) {
   const pending = useGridStore((s) => s.pending);
   const scroll = useGridStore((s) => s.scroll);
   const follow = useGridStore((s) => s.follow);
+  const meaningStart = useGridStore((s) => s.meaningStart);
   useGridStore((s) => s.formats);
   const editTarget = useSettingsStore(
     (s) => s.settings?.edit_target ?? "album",
@@ -119,8 +120,8 @@ export function Grid(props: GridProps) {
   const layerRef = useRef<HTMLDivElement>(null);
   const [size, setSize] = useState({ width: 0, height: 0 });
   const layout = useMemo(
-    () => gridLayout(size.width, count, thumbSize, groups),
-    [size.width, count, thumbSize, groups],
+    () => gridLayout(size.width, count, thumbSize, groups, meaningStart),
+    [size.width, count, thumbSize, groups, meaningStart],
   );
   // The timeline's month rail: a column beside the box, which narrows it.
   const years = useMemo(
@@ -433,9 +434,31 @@ export function Grid(props: GridProps) {
     );
   };
   for (let r = range.firstRow; r < range.endRow; r++) {
+    if (r === layout.meaning?.noteRow) {
+      // The note over the photos found by meaning (docs/04-browsing.md, "Search by meaning").
+      rows.push(
+        <div
+          key={r}
+          role="row"
+          aria-rowindex={r + 1}
+          className="ow-grid__row ow-grid__note-row"
+          style={{
+            height: layout.side,
+            transform: `translateY(${rowTop(layout, r) - firstTop}px)`,
+          }}
+        >
+          <div role="rowheader" className="ow-grid__note-cell">
+            <div role="note" className="ow-grid__note">
+              {gridText.alsoMeaning}
+            </div>
+          </div>
+        </div>,
+      );
+      continue;
+    }
     const tiles: [number, number] | null =
       layout.groups === null
-        ? [r * layout.cols, Math.min(count, (r + 1) * layout.cols)]
+        ? [tileFrom(layout, r, count), tileEnd(layout, r, count)]
         : rowTiles(layout, r);
     if (tiles === null) {
       // A timeline heading: a click selects its group.

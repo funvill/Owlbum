@@ -11,12 +11,16 @@ import type { EditPlan } from "../bindings/EditPlan";
 import type { AppError } from "../bindings/AppError";
 import type { Group } from "../bindings/Group";
 import type { GroupUnit } from "../bindings/GroupUnit";
+import type { MeaningResult } from "../bindings/MeaningResult";
 import type { AreaHandlers } from "./types";
 import { chips, folderOf, normalised, pass, validate } from "./queryFilter";
 import { isSearch, parseBox, textMatches } from "./querySearch";
 
 /** How many results are kept, as in Rust. An older token answers `query_expired`. */
 export const TOKENS_KEPT = 4;
+
+/** The most photos one search by meaning adds, as in Rust. */
+export const MEANING_MOST = 200;
 
 /** The most rows one `query_window` answers, as in Rust. */
 export const WINDOW_MAX = 500;
@@ -131,6 +135,13 @@ export interface QueryFake {
   readonly handlers: AreaHandlers<QueryCommands>;
   /** Replaces the album's photos and moves the revision on; returns the new revision. */
   change(edit: (photos: FakePhoto[]) => FakePhoto[]): number;
+  /**
+   * `search_meaning` as Rust answers it when `hits` (best first) are found:
+   * appends those that are not already in the list (stacks folded in
+   * included) and pass the filter, at most 200, after the query's own tiles,
+   * replacing any segment added before.
+   */
+  meaning(token: string, hits: number[]): MeaningResult;
 }
 
 function appError(code: AppError["code"], message: string): AppError {
@@ -345,8 +356,17 @@ function row(id: number, p: FakePhoto | undefined): Row {
 export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
   let list = [...photos];
   let revision = 0;
-  const held: { token: string; tiles: number[]; stacks: Stacks; filter: Query["filter"]; text: Set<number> | null }[] =
-    [];
+  const held: {
+    token: string;
+    tiles: number[];
+    stacks: Stacks;
+    filter: Query["filter"];
+    text: Set<number> | null;
+    /** How many tiles came from the query; any after them are its meaning segment. */
+    base: number;
+    /** X for the query alone. */
+    photos: number;
+  }[] = [];
 
   const heldOf = (token: string) => {
     const h = held.find((x) => x.token === token);
@@ -371,7 +391,7 @@ export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
           ? fold(shown, query.open_stacks)
           : { tiles: shown.map((p) => p.id), stacks: noStacks() };
       const token = `q${nextToken++}`;
-      held.push({ token, tiles, stacks, filter, text });
+      held.push({ token, tiles, stacks, filter, text, base: tiles.length, photos: shown.length });
       while (held.length > TOKENS_KEPT) held.shift();
       const chipList = chips(filter, "");
       const byId = new Map(shown.map((p) => [p.id, p]));
@@ -430,6 +450,20 @@ export function createQueryFake(photos: FakePhoto[] = []): QueryFake {
 
   return {
     handlers,
+    meaning(token, hits) {
+      const h = heldOf(token);
+      const base = h.tiles.slice(0, h.base);
+      const present = new Set([...base, ...h.stacks.folded.keys()]);
+      const passing = new Set(pass(list, h.filter, "", false, null).shown.map((p) => p.id));
+      const added = hits.filter((id) => !present.has(id) && passing.has(id)).slice(0, MEANING_MOST);
+      h.tiles = [...base, ...added];
+      return {
+        state: "ok",
+        count: h.tiles.length,
+        photos: h.photos + added.length,
+        meaning_start: added.length > 0 ? h.base : null,
+      };
+    },
     change(edit) {
       list = edit([...list]);
       revision += 1;

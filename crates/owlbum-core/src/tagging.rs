@@ -11,6 +11,7 @@
 //! - [`store`]: the `tags`, `vectors` and `photo_labels` rows.
 //! - [`runtime`]: the tagging thread, its queue and its status.
 //! - [`tags`]: one photo's tags as the details panel shows them.
+//! - [`meaning`]: search by meaning and its vector cache.
 //! - [`service`]: everything above for one program: settings, the
 //!   download thread, the runtime.
 
@@ -20,6 +21,7 @@ pub mod download;
 pub mod fake;
 pub mod hosts;
 pub mod install;
+pub mod meaning;
 pub mod onnx;
 pub mod results;
 pub mod runtime;

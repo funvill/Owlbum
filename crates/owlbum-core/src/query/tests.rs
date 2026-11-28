@@ -14,6 +14,7 @@ use crate::text;
 
 mod filters;
 mod map;
+mod meaning;
 mod search;
 mod stacks;
 mod timeline;

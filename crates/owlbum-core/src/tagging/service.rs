@@ -13,9 +13,11 @@ use std::time::{Duration, Instant};
 use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
+use super::backend::Deadline;
 use super::catalogue::{Catalogue, ModelChoice, Part, Size};
 use super::download::{self, Fetch, Job, Outcome};
 use super::install::{self, InstallState};
+use super::meaning::{self, MeaningResult, MeaningState};
 use super::runtime::Runtime;
 use super::store;
 use super::tags::{self, PhotoTags, TagsContext};
@@ -23,6 +25,7 @@ use crate::album::Album;
 use crate::appdata::AppData;
 use crate::error::AppResult;
 use crate::events::{Emitter, Event, emit};
+use crate::query::QueryEngine;
 use crate::text::tagging as words;
 use crate::{AppError, ErrorCode};
 
@@ -539,6 +542,67 @@ impl Tagging {
         }
         self.runtime.regenerate(id, m)?;
         self.photo_tags(album, id)
+    }
+
+    /// `search_meaning` (docs/07-tagging.md, "Search by meaning"): finds
+    /// the photos close in meaning to the free text of the result `token`
+    /// names and appends them to it as its meaning segment. A result of the
+    /// timeline or the map, or one with no free text, answers `too_short`.
+    /// `query_expired` for a token that was dropped.
+    pub fn search_meaning(
+        &self,
+        album: &Album,
+        queries: &QueryEngine,
+        token: &str,
+    ) -> AppResult<MeaningResult> {
+        let Some(q) = queries
+            .meaning_text(token)?
+            .filter(|q| meaning::letters(q) >= meaning::MIN_LETTERS)
+        else {
+            return Ok(MeaningResult::nothing(MeaningState::TooShort));
+        };
+        let Some(m) = self.runtime.active(Part::Keywords) else {
+            return Ok(MeaningResult::nothing(MeaningState::Off));
+        };
+        let (Some(dim), Some(threshold)) = (m.dim, m.meaning_threshold) else {
+            return Ok(MeaningResult::nothing(MeaningState::Off));
+        };
+        let started = Instant::now();
+        let vector = self
+            .runtime
+            .text_for(m, meaning::TEXT_LIMIT)
+            .ok_or_else(|| format!("{} would not load in time", m.label))
+            .and_then(|t| {
+                let left = meaning::TEXT_LIMIT.saturating_sub(started.elapsed());
+                t.embed(&q, &Deadline::after(left))
+                    .map_err(|e| e.to_string())
+            })
+            .and_then(|v| {
+                meaning::unit(v)
+                    .filter(|v| v.len() == dim as usize)
+                    .ok_or_else(|| "the text vector is unusable".to_owned())
+            });
+        let vector = match vector {
+            Ok(v) => v,
+            Err(e) => {
+                tracing::warn!(target: "tagging", "search by meaning could not turn the text into a vector: {e}");
+                return Ok(MeaningResult::nothing(MeaningState::Unavailable));
+            }
+        };
+        let hits: Vec<u32> = album
+            .vectors()
+            .scores(album, m.id, &vector, threshold)?
+            .into_iter()
+            .map(|(id, _)| id)
+            .collect();
+        let (count, photos, meaning_start) = queries.append_meaning(album, token, &hits)?;
+        tracing::debug!(target: "tagging", "search by meaning took {:?}", started.elapsed());
+        Ok(MeaningResult {
+            state: MeaningState::Ok,
+            count: Some(count),
+            photos: Some(photos),
+            meaning_start,
+        })
     }
 
     /// Owlbum closes: the download is cancelled and the models unloaded.

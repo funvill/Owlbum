@@ -135,6 +135,8 @@ struct Job {
     id: i64,
     model: &'static ModelChoice,
     reply: Reply,
+    /// Only load the model (for search by meaning's text side); no photo.
+    load_only: bool,
 }
 
 /// What the tagging thread is running now, for the watchdog.
@@ -455,12 +457,49 @@ impl Runtime {
                 id,
                 model,
                 reply: Arc::clone(&reply),
+                load_only: false,
             });
         });
         if self.state().shutdown {
             answer(&reply, Err(stopped()));
         }
         rx.recv().unwrap_or_else(|_| Err(stopped()))
+    }
+
+    /// Search by meaning's text side for `model`, loading the model on the
+    /// tagging thread when it is not loaded (it unloads after five idle
+    /// minutes). The load waits behind the run in hand, and at most
+    /// `limit`; None when the model will not load in time.
+    pub fn text_for(
+        &self,
+        model: &'static ModelChoice,
+        limit: Duration,
+    ) -> Option<Arc<dyn TextEmbedder>> {
+        let loaded = || {
+            self.text_embedder()
+                .filter(|(id, _)| *id == model.id)
+                .map(|(_, t)| t)
+        };
+        if let Some(t) = loaded() {
+            return Some(t);
+        }
+        let (tx, rx) = mpsc::channel();
+        let reply: Reply = Arc::new(Mutex::new(Some(tx)));
+        self.change(|s| {
+            s.jobs.push_back(Job {
+                id: 0,
+                model,
+                reply: Arc::clone(&reply),
+                load_only: true,
+            });
+        });
+        if self.state().shutdown {
+            answer(&reply, Err(stopped()));
+        }
+        match rx.recv_timeout(limit) {
+            Ok(Ok(())) => loaded(),
+            _ => None,
+        }
     }
 
     /// Stops the thread and unloads the models (Owlbum closes). Waits for
@@ -666,10 +705,13 @@ fn watch(shared: &Arc<Shared>) {
             // As a timeout: a failed row for the photo.
             let row = TagRow::failed(part, r.model.id, words::TOOK_TOO_LONG, store::now_ms());
             let id = r.id;
-            let _ = work
+            if let Ok(ids) = work
                 .album
                 .db()
-                .write(move |tx| store::write(tx, id, &[row]));
+                .write(move |tx| store::write(tx, id, &[row]))
+            {
+                work.album.vectors().stale(ids);
+            }
             let mut s = shared.lock();
             s.tags_pending = true;
         }
@@ -826,7 +868,11 @@ fn run(shared: &Arc<Shared>, epoch: u64) {
             } => {
                 last_work = Instant::now();
                 let Some(b) = backend.as_mut() else { continue };
-                let result = regenerate(shared, &mut **b, &work, &job, generation, &stop, epoch);
+                let result = if job.load_only {
+                    load_text(shared, &mut **b, job.model, (epoch, generation, 0))
+                } else {
+                    regenerate(shared, &mut **b, &work, &job, generation, &stop, epoch)
+                };
                 if shared.lock().epoch != epoch {
                     return;
                 }
@@ -1075,7 +1121,13 @@ fn tag(
         s.generation == generation && s.epoch == epoch && !stop.load(Ordering::Relaxed)
     };
     // Copies' rows first: no model runs for them.
-    let _ = album.db().write(move |tx| store::take_from_copies(tx, id));
+    if album
+        .db()
+        .write(move |tx| store::take_from_copies(tx, id))
+        .is_ok_and(|taken| !taken.is_empty())
+    {
+        album.vectors().stale([id]);
+    }
     let mut todo = Vec::new();
     for m in models {
         let has = album
@@ -1182,6 +1234,9 @@ fn tag(
     }
     if !rows.is_empty() {
         let written = album.db().write(move |tx| store::write(tx, id, &rows));
+        if let Ok(ids) = &written {
+            album.vectors().stale(ids.iter().copied());
+        }
         if let Err(e) = written {
             let mut s = shared.lock();
             s.problem = Some(e.message);
@@ -1316,6 +1371,24 @@ fn regenerate(
         ErrorCode::TaggingLost,
         words::tagging_lost(m.label),
     ))
+}
+
+/// Loads `model` for search by meaning's text side.
+fn load_text(
+    shared: &Shared,
+    b: &mut dyn TagBackend,
+    model: &'static ModelChoice,
+    turn: (u64, u64, i64),
+) -> AppResult<()> {
+    if ensure_loaded(shared, b, model, turn) {
+        shared.set_text(b);
+        Ok(())
+    } else {
+        Err(AppError::new(
+            ErrorCode::ModelLoadFailed,
+            words::model_load_failed(model.label),
+        ))
+    }
 }
 
 /// Done and failed, for each photo that counts (eligible, in scope).

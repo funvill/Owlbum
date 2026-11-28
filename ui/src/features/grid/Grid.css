@@ -227,6 +227,23 @@
   width: 120px;
 }
 
+/* The note over the photos found by meaning (docs/04-browsing.md, "Search
+   by meaning"): it fills the row before them, its text at the row's foot. */
+.ow-grid__note-cell {
+  height: 100%;
+}
+
+.ow-grid__note {
+  display: flex;
+  align-items: flex-end;
+  height: 100%;
+  margin: 0 var(--space-4);
+  padding-bottom: var(--space-2);
+  border-bottom: 1px solid var(--line-soft);
+  color: var(--muted);
+  font: var(--text-sm);
+}
+
 /* The timeline's headings (docs/04-browsing.md, "Timeline view"): a row of
    HEAD (32 px) over each group, and a copy that stays at the top while its
    group scrolls. */

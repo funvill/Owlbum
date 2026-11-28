@@ -23,6 +23,15 @@ export const RERUN_BUSY_MS = 1000;
 export const RERUN_IDLE_MS = 100;
 /** The thumbnail size is saved this long after the slider last moved. */
 export const SAVE_SIZE_MS = 300;
+/** Search by meaning is asked for this long after a result with search text arrives. */
+export const MEANING_WAIT_MS = 300;
+/** The fewest Unicode letters the search text needs for search by meaning, as in Rust. */
+export const MEANING_LETTERS = 3;
+
+/** Whether `search` has enough letters to be searched by meaning. */
+export function searchesMeaning(search: string | null | undefined): boolean {
+  return (search?.match(/\p{L}/gu)?.length ?? 0) >= MEANING_LETTERS;
+}
 
 /** The current photo, the anchor and the selection. */
 export interface Selected {
@@ -81,6 +90,11 @@ export interface GridOptions {
 export interface GridState extends Selected {
   /** The newest result, once one arrived. */
   result: QueryResult | null;
+  /**
+   * Where the photos found by meaning start in the result; null until
+   * `search_meaning` adds some (docs/04-browsing.md, "Search by meaning").
+   */
+  meaningStart: number | null;
   /** The query of the newest call. */
   query: Query;
   /** The counts beside the filter panel's options, while the panel asks for them. */
@@ -164,6 +178,8 @@ interface Session {
   pickFirst: boolean;
   /** The saved session to restore with the first result; see `restoreSession`. */
   restore: SavedSession | null;
+  /** The wait before asking for search by meaning. */
+  meaningTimer: ReturnType<typeof setTimeout> | undefined;
 }
 
 let session: Session | null = null;
@@ -326,6 +342,7 @@ export const useGridStore = create<GridState>()((set, get) => {
       result.facets ?? (get().query.want_facets ? get().facets : null);
     set({
       result,
+      meaningStart: null,
       error: null,
       ...selected,
       scroll,
@@ -333,6 +350,7 @@ export const useGridStore = create<GridState>()((set, get) => {
       pending: null,
       facets,
     });
+    searchMeaning(s, result);
     // The panel opened while this run was on its way: ask for its facets now.
     if (get().query.want_facets && result.facets === undefined)
       void get().wantFacets(true);
@@ -352,6 +370,40 @@ export const useGridStore = create<GridState>()((set, get) => {
     }
     // With no photo to restore, saving starts with the first result.
     if (!get().restored) set({ restored: true });
+  };
+
+  /**
+   * Asks for the photos found by meaning 300 ms after a grid result with
+   * search text of 3 letters or more arrives (docs/07-tagging.md, "How
+   * results appear"). They are appended to the same token's list; a reply
+   * for a result no longer shown is dropped, and one that fails or adds
+   * nothing leaves the result as it is.
+   */
+  const searchMeaning = (s: Session, result: QueryResult) => {
+    clearTimeout(s.meaningTimer);
+    s.meaningTimer = undefined;
+    const query = s.client.query;
+    if (query === null || query.view !== "grid" || !searchesMeaning(query.search)) return;
+    s.meaningTimer = setTimeout(() => {
+      s.meaningTimer = undefined;
+      const token = result.token;
+      api()
+        .invoke("search_meaning", { token })
+        .then((reply) => {
+          const held = get().result;
+          if (session !== s || held?.token !== token) return;
+          if (reply.state !== "ok" || reply.meaning_start === null) return;
+          const count = reply.count ?? held.count;
+          blocks.grow(count);
+          set({
+            result: { ...held, count, photos: reply.photos ?? held.photos },
+            meaningStart: reply.meaning_start,
+          });
+        })
+        .catch(() => {
+          // The text matches show alone.
+        });
+    }, MEANING_WAIT_MS);
   };
 
   /** The photo at `index` becomes current once its row arrives; `show` scrolls to it. */
@@ -468,6 +520,7 @@ export const useGridStore = create<GridState>()((set, get) => {
 
   return {
     result: null,
+    meaningStart: null,
     query: defaultQuery(),
     facets: null,
     error: null,
@@ -509,6 +562,7 @@ export const useGridStore = create<GridState>()((set, get) => {
         queued: "user",
         pickFirst: true,
         restore: toRestore,
+        meaningTimer: undefined,
       };
       toRestore = null;
       session = s;
@@ -561,12 +615,14 @@ export const useGridStore = create<GridState>()((set, get) => {
         s.unlisten?.();
         s.unwatch();
         clearTimeout(s.rerunTimer);
+        clearTimeout(s.meaningTimer);
         if (s.frame !== undefined) cancelAnimationFrame(s.frame);
       }
       blocks.clear();
       gridView = () => null;
       set({
         result: null,
+        meaningStart: null,
         error: null,
         query: defaultQuery(),
         facets: null,

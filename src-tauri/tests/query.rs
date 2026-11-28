@@ -63,6 +63,7 @@ fn the_query_commands_without_an_album_answer_no_album() {
             "query_ids",
             json!({ "token": "q1", "offset": 0, "limit": 10 }),
         ),
+        ("search_meaning", json!({ "token": "q1" })),
     ] {
         let err = invoke(&window, command, args).unwrap_err();
         assert_eq!(err["code"], "no_album", "{command}");
@@ -271,5 +272,30 @@ fn tokens_do_not_outlive_their_album() {
     )
     .unwrap_err();
     assert_eq!(err["code"], "query_expired");
+    app.state::<owlbum_lib::session::Session>().close();
+}
+
+#[test]
+fn search_meaning_without_tagging_answers_off_and_adds_nothing() {
+    let tmp = tempfile::tempdir().unwrap();
+    let (app, window) = app_window();
+    open_trip(&app, tmp.path());
+    let mut q = default_query();
+    q["search"] = json!("sunset beach");
+    let r = run(&window, json!({ "query": q }));
+    let reply = invoke(&window, "search_meaning", json!({ "token": r.token })).unwrap();
+    assert_eq!(
+        reply.deserialize::<Value>().unwrap(),
+        json!({ "state": "off", "meaning_start": null })
+    );
+    let ids: Vec<i64> = invoke(
+        &window,
+        "query_ids",
+        json!({ "token": r.token, "offset": 0, "limit": 1000 }),
+    )
+    .unwrap()
+    .deserialize()
+    .unwrap();
+    assert_eq!(ids.len() as u32, r.count);
     app.state::<owlbum_lib::session::Session>().close();
 }

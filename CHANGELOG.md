@@ -13,6 +13,11 @@ the window's title shows the version that is running.
 
 ### Added
 
+- Search by meaning: when a keywords model is chosen, searching for words
+  of 3 letters or more also finds photos whose picture is close to what you
+  typed, even when no word matches. They follow the word matches on a fresh
+  row under "Also matching by meaning", best match first, at most 200, and
+  respect the other filters. Copies of one picture show once.
 - After an update, Owlbum shows what changed since the version you last
   ran. Help > What's new shows this version's notes at any time.
 - Updates: Help > Check for updates, Check now in Settings and the About

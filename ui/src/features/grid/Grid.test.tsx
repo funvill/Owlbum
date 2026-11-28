@@ -512,3 +512,26 @@ describe("thumbnail size control", () => {
     expect(useGridStore.getState().thumbSize).toBe(240);
   });
 });
+
+describe("search by meaning", () => {
+  it("shows the photos found by meaning on a fresh row under a note", async () => {
+    useAlbum(photos(3), (album) => ({
+      search_meaning: ({ token }) => album.meaning(token, [3, 2]),
+    }));
+    render(<Grid />);
+    await waitFor(() => expect(tiles().length).toBe(3));
+    expect(screen.queryByRole("note")).toBeNull();
+    // Only IMG_1 matches the words; 3 and 2 are found by meaning.
+    act(() => useGridStore.getState().setQuery({ ...useGridStore.getState().query, search: "IMG_1" }));
+    await waitFor(() => expect(screen.getByRole("note")).toHaveTextContent(gridText.alsoMeaning));
+    await waitFor(() => expect(tiles().length).toBe(3));
+    const l = gridLayout(420, 3, 160, null, 1);
+    const rows = screen.getAllByRole("row");
+    // Word match, the note row, then the two found by meaning together.
+    expect(rows.map((r) => r.getAttribute("aria-rowindex"))).toEqual(["1", "2", "3"]);
+    expect(rows[1]).toHaveClass("ow-grid__note-row");
+    expect(within(rows[2]!).getAllByRole("gridcell")).toHaveLength(2);
+    expect(rows[2]!.style.transform).toBe(`translateY(${2 * l.stride}px)`);
+    expect(await seriousFindings()).toEqual([]);
+  });
+});

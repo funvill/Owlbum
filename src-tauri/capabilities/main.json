@@ -84,6 +84,7 @@
     "allow-query-parse",
     "allow-query-run",
     "allow-query-window",
+    "allow-search-meaning",
     "allow-tagging-download",
     "allow-tagging-download-cancel",
     "allow-tagging-focus",

@@ -9,12 +9,14 @@ import {
 import { defaultQuery } from "../../api/query";
 import { useSettingsStore } from "../app/settings";
 import {
+  MEANING_WAIT_MS,
   RERUN_BUSY_MS,
   RERUN_IDLE_MS,
   SAVE_SIZE_MS,
   gridBlocks,
   resetGrid,
   restoreSession,
+  searchesMeaning,
   setGridView,
   useGridStore,
 } from "./store";
@@ -435,5 +437,76 @@ describe("expired tokens", () => {
     expect(runs().length).toBeGreaterThan(1);
     expect(runs().length).toBeLessThanOrEqual(5);
     expect(grid().error).toBeNull();
+  });
+});
+
+describe("search by meaning", () => {
+  const meaningCalls = () => fake.calls.filter((c) => c.command === "search_meaning");
+  const search = async (text: string, view: "grid" | "timeline" = "grid") => {
+    grid().setQuery({ ...defaultQuery(), view, search: text });
+    await vi.advanceTimersByTimeAsync(20);
+  };
+
+  beforeEach(async () => {
+    vi.useFakeTimers();
+    fake.handle("search_meaning", ({ token }) => album.meaning(token, [4, 2]));
+    const started = grid().start();
+    await vi.advanceTimersByTimeAsync(0);
+    await started;
+  });
+
+  it("asks 300 ms after a grid result with 3 letters and appends the segment", async () => {
+    await search("sunset");
+    expect(grid().result?.count).toBe(0);
+    await vi.advanceTimersByTimeAsync(MEANING_WAIT_MS - 50);
+    expect(meaningCalls()).toHaveLength(0);
+    await vi.advanceTimersByTimeAsync(60);
+    expect(meaningCalls()).toHaveLength(1);
+    expect(meaningCalls()[0]!.args).toEqual({ token: grid().result?.token });
+    expect(grid().meaningStart).toBe(0);
+    expect(grid().result?.count).toBe(2);
+    expect(grid().result?.photos).toBe(2);
+    expect(gridBlocks().count).toBe(2);
+    // A new run drops the segment until it is asked for again.
+    await search("sunsets");
+    expect(grid().meaningStart).toBeNull();
+    await vi.advanceTimersByTimeAsync(MEANING_WAIT_MS);
+    expect(grid().meaningStart).toBe(0);
+  });
+
+  it("makes no call for fewer than 3 letters, or outside the grid", async () => {
+    await search("se");
+    await search(" a 1 2 b ");
+    await search("sunset", "timeline");
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(meaningCalls()).toHaveLength(0);
+    expect(searchesMeaning("été")).toBe(true);
+  });
+
+  it("ignores a reply for an older result, and one that adds nothing", async () => {
+    let answer: (() => void) | undefined;
+    fake.handle(
+      "search_meaning",
+      ({ token }) =>
+        new Promise((resolve) => {
+          answer = () => resolve(album.meaning(token, [4]));
+        }),
+    );
+    await search("sunset");
+    await vi.advanceTimersByTimeAsync(MEANING_WAIT_MS);
+    expect(meaningCalls()).toHaveLength(1);
+    await search("se");
+    const shown = grid().result?.token;
+    answer!();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(grid().result?.token).toBe(shown);
+    expect(grid().meaningStart).toBeNull();
+
+    fake.handle("search_meaning", ({ token }) => album.meaning(token, []));
+    await search("night");
+    await vi.advanceTimersByTimeAsync(MEANING_WAIT_MS);
+    expect(meaningCalls()).toHaveLength(2);
+    expect(grid().meaningStart).toBeNull();
+    expect(grid().result?.count).toBe(0);
   });
 });

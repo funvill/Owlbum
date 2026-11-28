@@ -17,6 +17,7 @@ use crate::error::{AppError, AppResult, ErrorCode};
 use crate::index::Kind;
 use crate::media::MediaKind;
 use crate::scan::memory::Overlay;
+use crate::tagging::meaning::MOST;
 use crate::text;
 
 /// How many results are kept. An older token answers `query_expired`.
@@ -37,13 +38,22 @@ struct Held {
     /// Photo ids, one per tile, in order.
     tiles: Vec<u32>,
     /// The stacks of the tiles, and the photos folded inside closed ones.
-    stacks: Stacks,
+    /// Shared with the same result after a meaning segment is added.
+    stacks: Arc<Stacks>,
     /// The normalised filter the result was made with, and its people and
     /// tag ids, for `query_facets`.
     filter: Filter,
     content: Content,
     /// The photos its search text matched; None without search text.
     text: Option<HashSet<u32>>,
+    /// The search text as sent, and the view, for search by meaning.
+    search: Option<String>,
+    view: QueryView,
+    /// How many tiles came from the query; any after them are its meaning
+    /// segment.
+    base: usize,
+    /// X of "Showing X of Y" for the query alone: photos, stacks unfolded.
+    photos: u32,
 }
 
 /// Runs queries for one open album and keeps the last [`TOKENS_KEPT`]
@@ -154,7 +164,7 @@ impl QueryEngine {
         let kept = keep.map(|k| {
             settle_stacked(
                 k,
-                old.as_deref().map(|h| (h.tiles.as_slice(), &h.stacks)),
+                old.as_deref().map(|h| (h.tiles.as_slice(), &*h.stacks)),
                 (&tiles, &stacks),
             )
         });
@@ -162,11 +172,15 @@ impl QueryEngine {
         let token = format!("q{}", NEXT_TOKEN.fetch_add(1, Ordering::Relaxed));
         self.store(Held {
             token: token.clone(),
+            base: tiles.len(),
             tiles,
-            stacks,
+            stacks: Arc::new(stacks),
             filter,
             content,
             text,
+            search: query.search.clone(),
+            view: query.view,
+            photos,
         });
         Ok(QueryResult {
             token,
@@ -341,6 +355,87 @@ impl QueryEngine {
             .map(|stack| Located::Folded { folded_in: stack }))
     }
 
+    /// The free text `search_meaning` searches for the result `token`
+    /// names: its search text, trimmed. None for a result of the timeline
+    /// or the map, which take no meaning segment, and without search text.
+    /// `query_expired` for a token that was dropped.
+    pub fn meaning_text(&self, token: &str) -> AppResult<Option<String>> {
+        let held = self.held(token)?;
+        Ok(held
+            .search
+            .as_deref()
+            .map(str::trim)
+            .filter(|s| held.view == QueryView::Grid && !s.is_empty())
+            .map(str::to_owned))
+    }
+
+    /// `search_meaning`'s last step (docs/07-tagging.md, "Algorithm"):
+    /// appends `hits` (photo ids, best first) to the list held under
+    /// `token` as its meaning segment, replacing any segment added before.
+    /// A hit is dropped when it is not in the album index (missing, outside
+    /// the scope), is a text match, fails another filter, or is a copy of a
+    /// photo in the result or of an earlier hit; at most
+    /// [`MOST`](crate::tagging::meaning::MOST) are kept. Answers the new
+    /// count, the new X and where the segment starts (None when empty).
+    pub fn append_meaning(
+        &self,
+        album: &Album,
+        token: &str,
+        hits: &[u32],
+    ) -> AppResult<(u32, u32, Option<u32>)> {
+        let held = self.held(token)?;
+        let none = HashSet::new();
+        let matched = held.text.as_ref().unwrap_or(&none);
+        let (candidates, shown_text) = album.index().read(|v| {
+            let matcher = Matcher::new(v, &held.filter, &held.content, &held.text);
+            let passes = |id: u32| v.get(id).is_some_and(|p| matcher.passes_but_text(p));
+            let candidates: Vec<u32> = hits
+                .iter()
+                .copied()
+                .filter(|id| !matched.contains(id) && passes(*id))
+                .collect();
+            let shown: HashSet<u32> = if candidates.is_empty() {
+                HashSet::new()
+            } else {
+                matched.iter().copied().filter(|&id| passes(id)).collect()
+            };
+            (candidates, shown)
+        });
+        let kept = if candidates.is_empty() {
+            Vec::new()
+        } else {
+            album
+                .db()
+                .read(|conn| unique_pictures(conn, &candidates, &shown_text))?
+        };
+        let base = held.base;
+        let start = (!kept.is_empty()).then(|| count(base));
+        let added = kept.len();
+        let mut tiles = Vec::with_capacity(base + added);
+        tiles.extend_from_slice(&held.tiles[..base]);
+        tiles.extend(kept);
+        let photos = held.photos.saturating_add(count(added));
+        let total = count(tiles.len());
+        let new = Held {
+            token: held.token.clone(),
+            tiles,
+            stacks: Arc::clone(&held.stacks),
+            filter: held.filter.clone(),
+            content: held.content.clone(),
+            text: held.text.clone(),
+            search: held.search.clone(),
+            view: held.view,
+            base,
+            photos: held.photos,
+        };
+        let mut all = self.lock();
+        let Some(slot) = all.iter_mut().find(|h| h.token == token) else {
+            return Err(AppError::new(ErrorCode::QueryExpired, text::query::EXPIRED));
+        };
+        *slot = Arc::new(new);
+        Ok((total, photos, start))
+    }
+
     fn lock(&self) -> MutexGuard<'_, VecDeque<Arc<Held>>> {
         self.held.lock().unwrap_or_else(|p| p.into_inner())
     }
@@ -361,6 +456,60 @@ impl QueryEngine {
             all.pop_front();
         }
     }
+}
+
+/// The first [`MOST`] of `candidates` (in order) that are not a copy of a
+/// photo in `shown` or of an earlier candidate (docs/07-tagging.md,
+/// "Copies of the same picture": the same `file_key` and `dHash`). A photo
+/// with no `dHash` is a picture of its own.
+fn unique_pictures(
+    conn: &rusqlite::Connection,
+    candidates: &[u32],
+    shown: &HashSet<u32>,
+) -> AppResult<Vec<u32>> {
+    let failed = sqlite_error(text::query::READING_ROWS);
+    let mut key = conn
+        .prepare_cached(
+            "SELECT file_key, json_extract(analysis, '$.dhash') FROM photos WHERE id = ?1",
+        )
+        .map_err(&failed)?;
+    let mut twins = conn
+        .prepare_cached(
+            "SELECT id FROM photos
+              WHERE file_key = ?1 AND json_extract(analysis, '$.dhash') = ?2 AND id != ?3",
+        )
+        .map_err(&failed)?;
+    let mut seen = HashSet::new();
+    let mut kept = Vec::new();
+    for &id in candidates {
+        if kept.len() == MOST {
+            break;
+        }
+        let picture: Option<(String, Option<String>)> = key
+            .query_row([i64::from(id)], |r| Ok((r.get(0)?, r.get(1)?)))
+            .optional()
+            .map_err(&failed)?;
+        if let Some((file_key, Some(dhash))) = picture {
+            if !seen.insert((file_key.clone(), dhash.clone())) {
+                continue;
+            }
+            let ids = twins
+                .query_map(rusqlite::params![file_key, dhash, i64::from(id)], |r| {
+                    r.get::<_, i64>(0)
+                })
+                .map_err(&failed)?
+                .collect::<Result<Vec<_>, _>>()
+                .map_err(&failed)?;
+            if ids
+                .iter()
+                .any(|&t| u32::try_from(t).is_ok_and(|t| shown.contains(&t)))
+            {
+                continue;
+            }
+        }
+        kept.push(id);
+    }
+    Ok(kept)
 }
 
 /// Builds one row. The album index is preferred for what it holds, so a

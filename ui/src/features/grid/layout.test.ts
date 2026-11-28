@@ -182,3 +182,43 @@ describe("scroll while resizing", () => {
     expect(anchorAfterResize(before, after, 0)).toBe(0);
   });
 });
+
+describe("the meaning segment", () => {
+  // 420 px wide: 2 columns at 160.
+  it("starts on a fresh row under a note row (docs/04, Search by meaning)", () => {
+    const l = gridLayout(420, 8, 160, null, 3);
+    expect(l.cols).toBe(2);
+    // m = 3: pad = ((2 − 1) mod 2) + 2 = 3; slot 3 is empty, row 2 is the note.
+    expect(l.meaning).toEqual({ start: 3, pad: 3, noteRow: 2 });
+    expect(l.rows).toBe(Math.ceil((8 + 3) / 2));
+    expect(tilePlace(2, l)).toEqual({ x: 0, y: l.stride });
+    expect(tilePlace(3, l)).toEqual({ x: 0, y: 3 * l.stride });
+    expect(tilePlace(4, l)).toEqual({ x: l.stride, y: 3 * l.stride });
+    expect(tilePlace(7, l)).toEqual({ x: 0, y: 5 * l.stride });
+  });
+
+  it("puts a whole row of word matches straight above the note", () => {
+    const l = gridLayout(420, 6, 160, null, 4);
+    expect(l.meaning).toEqual({ start: 4, pad: 2, noteRow: 2 });
+    expect(tilePlace(4, l).y).toBe(3 * l.stride);
+    const none = gridLayout(420, 6, 160, null, 0);
+    expect(none.meaning).toEqual({ start: 0, pad: 2, noteRow: 0 });
+    expect(tilePlace(0, none).y).toBe(l.stride);
+  });
+
+  it("maps the rows in view, the place kept and a resize through the slots", () => {
+    const l = gridLayout(420, 8, 160, null, 3);
+    const r = visibleRange(l, 0, 10_000, 8);
+    expect(r).toMatchObject({ firstRow: 0, endRow: l.rows, firstIndex: 0, lastIndex: 7 });
+    // The note row holds no tile: the first tile at or after it is the segment's.
+    expect(viewIndex(l, PAD + 2 * l.stride, 600, 8, null)).toBe(3);
+    expect(followScroll(l, 0, 2, 3)).toBe(2 * l.stride);
+    expect(scrollToShow(5, l, 0, 100)).toBe(PAD + 4 * l.stride + l.side + PAD - 100);
+    expect(anchorAfterResize(l, gridLayout(420, 8, 160), 3 * l.stride)).toBe(l.stride);
+  });
+
+  it("is ignored outside the result", () => {
+    expect(gridLayout(420, 3, 160, null, 3).meaning).toBeNull();
+    expect(gridLayout(420, 3, 160).meaning).toBeNull();
+  });
+});

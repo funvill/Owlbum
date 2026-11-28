@@ -51,18 +51,49 @@ export interface GridLayout {
   height: number;
   /** The timeline's rows, with a heading over each group; null in the grid, where every row is one stride. */
   groups: GroupRows | null;
+  /**
+   * In the grid, the photos found by meaning: they start at tile `start`, on
+   * a fresh row under the note row, `pad` empty slots after the tile before
+   * them (docs/04-browsing.md, "Search by meaning"). Null without them.
+   */
+  meaning: MeaningRows | null;
+}
+
+/** Where the meaning segment sits in the grid's slots. */
+export interface MeaningRows {
+  /** The index of its first tile. */
+  start: number;
+  /** Empty slots before it: the rest of the last row of word matches, then the note row. */
+  pad: number;
+  /** The note row. */
+  noteRow: number;
+}
+
+/** The grid's slot of tile `index`: the segment's tiles sit `pad` slots further on. */
+export function slotOf(l: GridLayout, index: number): number {
+  const m = l.meaning;
+  return m === null || index < m.start ? index : index + m.pad;
+}
+
+/** The tile at or after `slot`, as an index (the segment's start for the empty slots before it). */
+export function indexOfSlot(l: GridLayout, slot: number): number {
+  const m = l.meaning;
+  if (m === null || slot <= m.start) return slot;
+  return slot < m.start + m.pad ? m.start : slot - m.pad;
 }
 
 /**
  * The layout of `count` tiles at a thumbnail size of `tile`. With `groups`
  * (the timeline), each group has a heading row of HEAD pixels, then its
- * tile rows, then GROUP_GAP pixels.
+ * tile rows, then GROUP_GAP pixels. Without, `meaningStart` is where the
+ * photos found by meaning start, or null.
  */
 export function gridLayout(
   clientWidth: number,
   count: number,
   tile: number,
   groups: readonly GroupSpan[] | null = null,
+  meaningStart: number | null = null,
 ): GridLayout {
   const width = Math.max(0, clientWidth - 2 * PAD);
   const cols = Math.max(1, Math.floor((width + GAP) / (tile + GAP)));
@@ -71,12 +102,18 @@ export function gridLayout(
   if (groups !== null) {
     const { rows, total } = groupRows(groups, cols, stride);
     const height = Math.min(total, MAX_SCROLL) + 2 * PAD;
-    return { width, cols, side, stride, rows: rows.tops.length, total, height, groups: rows };
+    return { width, cols, side, stride, rows: rows.tops.length, total, height, groups: rows, meaning: null };
   }
-  const rows = Math.ceil(count / cols);
+  let meaning: MeaningRows | null = null;
+  if (meaningStart !== null && meaningStart >= 0 && meaningStart < count) {
+    const m = meaningStart;
+    const pad = ((cols - (m % cols)) % cols) + cols;
+    meaning = { start: m, pad, noteRow: (m + pad) / cols - 1 };
+  }
+  const rows = Math.ceil((count + (meaning?.pad ?? 0)) / cols);
   const total = rows > 0 ? rows * stride - GAP : 0;
   const height = Math.min(total, MAX_SCROLL) + 2 * PAD;
-  return { width, cols, side, stride, rows, total, height, groups: null };
+  return { width, cols, side, stride, rows, total, height, groups: null, meaning };
 }
 
 /** Where tile `i` sits within the rows (add PAD for the box). */
@@ -124,7 +161,12 @@ export function visibleRange(l: GridLayout, real: number, viewport: number, coun
   }
   const firstRow = clamp(Math.floor(top / l.stride) - OVERSCAN_ROWS);
   const endRow = clamp(Math.ceil((top + viewport) / l.stride) + OVERSCAN_ROWS);
-  return { firstRow, endRow, firstIndex: firstRow * l.cols, lastIndex: Math.min(count, endRow * l.cols) - 1 };
+  return {
+    firstRow,
+    endRow,
+    firstIndex: tileFrom(l, firstRow, count),
+    lastIndex: tileEnd(l, endRow - 1, count) - 1,
+  };
 }
 
 /**
@@ -147,10 +189,7 @@ export function viewIndex(
     if (top + l.side > real && top < real + viewport) return at;
   }
   if (real <= 0) return null;
-  const index =
-    l.groups === null
-      ? Math.floor(Math.max(0, real - PAD) / l.stride) * l.cols
-      : tileFrom(l, rowAt(l, Math.max(0, real - PAD)), count);
+  const index = tileFrom(l, rowAt(l, Math.max(0, real - PAD)), count);
   return index < count ? index : null;
 }
 
@@ -158,7 +197,7 @@ export function viewIndex(
 export function followScroll(l: GridLayout, real: number, from: number, to: number): number {
   if (l.cols === 0) return real;
   if (l.groups !== null) return Math.max(0, real + rowTop(l, rowOf(l, to)) - rowTop(l, rowOf(l, from)));
-  return Math.max(0, real + (Math.floor(to / l.cols) - Math.floor(from / l.cols)) * l.stride);
+  return Math.max(0, real + (rowOf(l, to) - rowOf(l, from)) * l.stride);
 }
 
 /**
@@ -183,7 +222,6 @@ export function anchorAfterResize(before: GridLayout, after: GridLayout, real: n
     const index = tileFrom(before, rowAt(before, Math.max(0, real - PAD)), Number.MAX_SAFE_INTEGER);
     return rowTop(after, rowOf(after, index));
   }
-  const row = Math.floor(real / before.stride);
-  const index = row * before.cols;
-  return Math.floor(index / after.cols) * after.stride;
+  const index = tileFrom(before, Math.floor(real / before.stride), Number.MAX_SAFE_INTEGER);
+  return rowOf(after, index) * after.stride;
 }

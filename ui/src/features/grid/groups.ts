@@ -4,7 +4,7 @@
 // Pure functions, tested without a browser; `layout.ts` uses them when its
 // layout has groups.
 
-import { GAP, type GridLayout } from "./layout";
+import { GAP, indexOfSlot, slotOf, type GridLayout } from "./layout";
 
 /** The height of a heading row, and of the sticky heading. */
 export const HEAD = 32;
@@ -103,7 +103,7 @@ export function groupOfRow(l: GridLayout, r: number): number {
 
 /** The row of tile `index`. */
 export function rowOf(l: GridLayout, index: number): number {
-  if (l.groups === null) return Math.floor(index / l.cols);
+  if (l.groups === null) return Math.floor(slotOf(l, index) / l.cols);
   const g = groupAt(l, index);
   const { headRows, starts } = l.groups;
   return headRows[g]! + 1 + Math.floor((index - starts[g]!) / l.cols);
@@ -120,7 +120,7 @@ export function rowTiles(l: GridLayout, r: number): [number, number] | null {
 
 /** The first tile in row `r` or after it; `count` when there is none. */
 export function tileFrom(l: GridLayout, r: number, count: number): number {
-  if (l.groups === null) return Math.min(count, r * l.cols);
+  if (l.groups === null) return Math.min(count, indexOfSlot(l, r * l.cols));
   const { firsts, starts } = l.groups;
   if (r >= firsts.length) return count;
   const first = firsts[r]!;
@@ -129,7 +129,7 @@ export function tileFrom(l: GridLayout, r: number, count: number): number {
 
 /** One past the last tile in row `r` or before it. */
 export function tileEnd(l: GridLayout, r: number, count: number): number {
-  if (l.groups === null) return Math.min(count, (r + 1) * l.cols);
+  if (l.groups === null) return Math.min(count, indexOfSlot(l, (r + 1) * l.cols));
   const { firsts } = l.groups;
   if (r < 0) return 0;
   if (r >= firsts.length) return count;

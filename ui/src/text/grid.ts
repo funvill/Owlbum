@@ -5,6 +5,8 @@ export const gridText = {
   /** The name of a tile whose row has not arrived. */
   loading: "Loading…",
   noMatch: "No photos match the filter",
+  /** The note over the photos found by meaning. */
+  alsoMeaning: "Also matching by meaning",
   clearFilter: "Clear filter",
   thumbSize: "Thumbnail size",
   star: "Star",

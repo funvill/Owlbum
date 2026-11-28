@@ -240,6 +240,13 @@ impl<'a> Matcher<'a> {
         }
     }
 
+    /// Whether `p` passes every filter but the search text: the test a
+    /// photo found by meaning must pass (docs/05-organising.md, "How it
+    /// combines").
+    pub(super) fn passes_but_text(&self, p: &Photo) -> bool {
+        self.fails(p) & !TEXT == 0
+    }
+
     /// The filters `p` fails, one bit each.
     fn fails(&self, p: &Photo) -> u16 {
         let mut fails = 0;

@@ -309,6 +309,8 @@ The runtime never touches the network. It is given a folder of local files and n
 
 Search text is the one model run that does not happen on the tagging thread. A describe run takes many seconds, and a search must not wait behind it. ONNX Runtime allows several threads to run one session at once, so the search runs the CLIP text session directly. A lock around each model slot stops the tagging thread unloading a model while a search is using it.
 
+Loading is still the tagging thread's work. When the active keywords model is not loaded (tagging has not reached it yet, or it was unloaded after five idle minutes), `search_meaning` queues a load on the tagging thread, which runs it after the run in hand and before the next photo, as Regenerate is queued, paused or not. The 15 s limit for the search text counts the wait and the load; past it the search answers `unavailable`.
+
 ### Session options
 
 | Option | Value |
@@ -724,6 +726,8 @@ Search by meaning is part of the query model, so the page never holds a list of 
 
 Meaning matches keep score order whatever the sort setting is. They are never stacked. If the call fails or returns nothing, the grid shows the text matches alone and no note row.
 
+Only the grid takes a meaning segment. The page does not call `search_meaning` in the timeline or the map, whose groups and markers are worked out by `query_run`; for a result of either, or one whose free text has fewer than 3 letters, Rust answers `too_short` and adds nothing. Calling `search_meaning` again for the same token replaces its segment rather than adding a second.
+
 ### Performance for 100,000 vectors
 
 | Item | CLIP base (512) | CLIP large (768) |
@@ -741,10 +745,10 @@ Reading 100,000 blobs from SQLite takes seconds, and longer on a network share, 
 |---|
 | The cache is filled by the first `search_meaning` for the album and model, on the blocking pool. |
 | Rows whose `dim` is wrong or whose blob is not `dim × 4` bytes are skipped and counted in the log. |
-| The writer thread tells the cache about every vector written or deleted, so it never needs re-reading. |
-| It is dropped when the album closes or the keywords model changes. |
+| Every write that can touch a vector marks its photos stale in the cache once it is committed: the tagging queue's results and the rows it copies to copies, and every write through the album index's writer path (a rescan that finds new content deletes the vectors there). The next search reads only those photos' rows again before it scans, so the whole table is never re-read. A photo that left the album keeps its slot until then; the query's own checks drop it, because it is no longer in the album index. |
+| It belongs to the open album and goes when it closes. A search for another model (the keywords model changed) fills it afresh in place of the old block. |
 
-The times above are estimates. A benchmark test with 100,000 random vectors fixes the real figure, and the target is a whole search under 150 ms. If memory proves too tight, the cache can hold 16-bit floats at half the size with no visible change in results.
+The benchmark (`meaning_search_speed_over_100000_vectors`, opt-in with `--ignored`, run on a release build) measures 100,000 random unit vectors against the 150 ms target for a whole search: the scan, the sort and the meaning segment's checks, with the cache filled. Measured on Windows on 2026-11-27: 38 ms for 512 numbers and 48 ms for 768; filling the cache from the database took 0.9 s and 1.4 s. The text vector is not part of it (no model runs in tests). If memory proves too tight, the cache can hold 16-bit floats at half the size with no visible change in results.
 
 ## The page
 
@@ -981,7 +985,7 @@ Photos are named by id. Every error is an `AppError` with a stable code.
 | `tagging_retry_failed` | | `{ cleared }` | `view_only` |
 | `tagging_focus` | `ids` | nothing; unknown ids are ignored | |
 | `tagging_regenerate` | `id` | `PhotoTags` | see Regenerate |
-| `search_meaning` | `token` | `{ state, count?, photos?, meaning_start? }`; `state` is `ok`, `too_short`, `off` or `unavailable` | `query_expired` |
+| `search_meaning` | `token` | `{ state, count?, photos?, meaning_start }`; `state` is `ok`, `too_short`, `off` or `unavailable`; `count` and `photos` only with `ok`; `meaning_start` is null when nothing was added | `query_expired` |
 
 | Event | Payload | Defined in |
 |---|---|---|

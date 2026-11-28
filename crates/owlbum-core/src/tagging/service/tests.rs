@@ -900,3 +900,104 @@ fn shutdown_does_not_wait_forever_for_a_stuck_run() {
     // Let the left-behind thread finish before the folder goes.
     std::thread::sleep(Duration::from_millis(2100));
 }
+
+// ------------------------------------------------------ search by meaning --
+
+/// Runs `text` in the grid and searches it by meaning; answers the reply
+/// and the ids of the whole list.
+fn meaning(fx: &Fx, engine: &crate::query::QueryEngine, text: &str) -> (MeaningResult, Vec<i64>) {
+    let q = crate::query::Query {
+        search: Some(text.to_owned()),
+        stack: true,
+        ..crate::query::Query::default()
+    };
+    let r = engine.run(fx.album(), &q, None).unwrap();
+    let reply = fx
+        .tagging
+        .search_meaning(fx.album(), engine, &r.token)
+        .unwrap();
+    (reply, engine.ids(&r.token, 0, 1000).unwrap())
+}
+
+#[test]
+fn seaside_finds_the_harbour_photos_best_first() {
+    let mut fx = Fx::new(&["harbour dog.jpg", "lake.jpg", "harbour.jpg"]);
+    fx.choose(None, Some(K));
+    fx.open();
+    fx.finished();
+    let engine = crate::query::QueryEngine::new();
+    let (reply, ids) = meaning(&fx, &engine, "seaside");
+    assert_eq!(
+        reply,
+        MeaningResult {
+            state: MeaningState::Ok,
+            count: Some(2),
+            photos: Some(2),
+            meaning_start: Some(0),
+        }
+    );
+    assert_eq!(ids, [fx.id("harbour.jpg"), fx.id("harbour dog.jpg")]);
+    assert_eq!(
+        serde_json::to_value(reply).unwrap(),
+        serde_json::json!({ "state": "ok", "count": 2, "photos": 2, "meaning_start": 0 })
+    );
+
+    // Text matches are not repeated.
+    let (reply, ids) = meaning(&fx, &engine, "dog");
+    assert_eq!(
+        ids.iter()
+            .filter(|&&i| i == fx.id("harbour dog.jpg"))
+            .count(),
+        1
+    );
+    assert_eq!(reply.meaning_start.map_or(ids.len(), |s| s as usize), 1);
+
+    // Too short: no search.
+    let (reply, _) = meaning(&fx, &engine, " a 1 2 b ");
+    assert_eq!(reply, MeaningResult::nothing(MeaningState::TooShort));
+    assert_eq!(
+        serde_json::to_value(reply).unwrap(),
+        serde_json::json!({ "state": "too_short", "meaning_start": null })
+    );
+}
+
+#[test]
+fn without_a_keywords_model_nothing_is_found_by_meaning() {
+    let mut fx = Fx::new(&["harbour.jpg"]);
+    fx.choose(Some(D), None);
+    fx.open();
+    fx.finished();
+    let engine = crate::query::QueryEngine::new();
+    let (reply, ids) = meaning(&fx, &engine, "seaside");
+    assert_eq!(reply, MeaningResult::nothing(MeaningState::Off));
+    assert!(ids.is_empty());
+}
+
+#[test]
+fn the_model_is_loaded_again_after_it_was_unloaded_and_new_vectors_are_found() {
+    let mut fx = Fx::new(&["harbour.jpg", "lake.jpg"]);
+    fx.choose(None, Some(K));
+    fx.open();
+    fx.finished();
+    let engine = crate::query::QueryEngine::new();
+    assert_eq!(meaning(&fx, &engine, "seaside").1, [fx.id("harbour.jpg")]);
+
+    // Unloaded (as after five idle minutes): the search loads it again.
+    fx.tagging.runtime().unload(Part::Keywords);
+    fx.until("the unload", |_| {
+        fx.tagging.runtime().text_embedder().is_none()
+    });
+    assert_eq!(meaning(&fx, &engine, "seaside").1, [fx.id("harbour.jpg")]);
+
+    // A photo tagged after the cache was filled is found.
+    write_jpeg(&fx.root.join("harbour night.jpg"), 90);
+    fx.scanner
+        .as_ref()
+        .unwrap()
+        .scan_and_wait(Request::default());
+    fx.tagging.runtime().album_changed();
+    fx.until("the new photo", |s| s.total == 3 && s.done == 3);
+    let (reply, ids) = meaning(&fx, &engine, "seaside");
+    assert_eq!(reply.count, Some(2));
+    assert_eq!(ids, [fx.id("harbour.jpg"), fx.id("harbour night.jpg")]);
+}

@@ -155,6 +155,9 @@ pub struct Album {
     /// The photos being saved into their files now
     /// (docs/06-editing-and-file-actions.md, "Save into the file").
     saves: crate::edit::save::Saves,
+    /// The vectors search by meaning scans (docs/07-tagging.md,
+    /// "Performance for 100,000 vectors"); empty until the first search.
+    vectors: Arc<crate::tagging::meaning::VectorCache>,
 }
 
 impl Drop for Album {
@@ -333,6 +336,7 @@ impl Album {
                     backup: Mutex::default(),
                     undo: UndoList::default(),
                     saves: crate::edit::save::Saves::default(),
+                    vectors: Arc::default(),
                 });
             }
         };
@@ -371,6 +375,7 @@ impl Album {
             backup: Mutex::new(backup),
             undo: UndoList::default(),
             saves: crate::edit::save::Saves::default(),
+            vectors: Arc::default(),
         })
     }
 
@@ -412,6 +417,7 @@ impl Album {
             backup: Mutex::default(),
             undo: UndoList::default(),
             saves: crate::edit::save::Saves::default(),
+            vectors: Arc::default(),
         })
     }
 
@@ -489,6 +495,12 @@ impl Album {
         self.state.status_changed();
     }
 
+    /// The vector cache of search by meaning. Every write that can touch
+    /// the `vectors` table marks its photos stale here.
+    pub fn vectors(&self) -> &crate::tagging::meaning::VectorCache {
+        &self.vectors
+    }
+
     /// The album index: the in-memory copy that filters, sorts, scores and
     /// stacks read (docs/05-organising.md, "The album index").
     pub fn index(&self) -> &Arc<AlbumIndex> {
@@ -530,6 +542,7 @@ impl Album {
         F: FnOnce(&rusqlite::Transaction<'_>, &mut Touched) -> AppResult<T> + Send + 'static,
     {
         let index = Arc::clone(&self.index);
+        let vectors = Arc::clone(&self.vectors);
         let (value, _) = self.db.write_then(
             move |tx| {
                 let mut touched = Touched::default();
@@ -537,6 +550,8 @@ impl Album {
                 Ok((value, touched))
             },
             move |conn, (_, touched)| {
+                // A rescan that found new content deletes the photo's vector.
+                vectors.stale(touched.ids().iter().copied());
                 if let Err(e) = index.refresh(conn, touched.ids()) {
                     tracing::warn!(target: "album", "the album index could not follow a write ({e}); loading it again");
                     if let Err(e) = index.reload(conn) {

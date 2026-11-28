@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 use ts_rs::TS;
 
 use super::handler::MediaHandler;
+use super::system::{self, Codecs, SystemCodec};
 use super::{jxl, raw, sniff, still, video};
 use crate::text;
 
@@ -56,6 +57,10 @@ pub struct MediaFormat {
     pub label: &'static str,
     pub caps: Capabilities,
     pub handler: &'static dyn MediaHandler,
+    /// The operating system codec the format needs (HEIC, AVIF), or None
+    /// when Owlbum reads it itself. A format whose codec is missing is
+    /// not offered: its files are "not supported yet".
+    pub system: Option<SystemCodec>,
 }
 
 impl std::fmt::Debug for MediaFormat {
@@ -78,6 +83,9 @@ pub struct UnsupportedFormat {
     /// Recognises the format's bytes, for one named as a supported format.
     /// None for families that cannot be told from a supported one.
     pub sniff: Option<fn(&[u8]) -> bool>,
+    /// The system codec that would make these files a format of
+    /// [`FORMATS`]: while it is there, this row does not apply.
+    pub system: Option<SystemCodec>,
 }
 
 const fn caps(
@@ -111,6 +119,7 @@ const fn raw(
         label,
         caps: RAW_CAPS,
         handler: &raw::RAW,
+        system: None,
     }
 }
 
@@ -128,6 +137,7 @@ const fn video(
         label,
         caps: VIDEO_CAPS,
         handler: &video::VIDEO,
+        system: None,
     }
 }
 
@@ -142,6 +152,7 @@ pub static FORMATS: &[MediaFormat] = &[
         label: "JPEG",
         caps: caps(true, false, SaveFormat::Jpeg, false),
         handler: &still::JPEG,
+        system: None,
     },
     MediaFormat {
         id: "png",
@@ -151,6 +162,7 @@ pub static FORMATS: &[MediaFormat] = &[
         label: "PNG",
         caps: caps(true, true, SaveFormat::Png, false),
         handler: &still::PNG,
+        system: None,
     },
     MediaFormat {
         id: "webp",
@@ -160,6 +172,7 @@ pub static FORMATS: &[MediaFormat] = &[
         label: "WebP",
         caps: caps(false, true, SaveFormat::Webp, true),
         handler: &still::WEBP,
+        system: None,
     },
     MediaFormat {
         id: "gif",
@@ -169,6 +182,7 @@ pub static FORMATS: &[MediaFormat] = &[
         label: "GIF",
         caps: caps(false, true, SaveFormat::Png, true),
         handler: &still::GIF,
+        system: None,
     },
     MediaFormat {
         id: "tiff",
@@ -178,6 +192,7 @@ pub static FORMATS: &[MediaFormat] = &[
         label: "TIFF",
         caps: caps(false, true, SaveFormat::Png, false),
         handler: &still::TIFF,
+        system: None,
     },
     MediaFormat {
         id: "bmp",
@@ -187,6 +202,7 @@ pub static FORMATS: &[MediaFormat] = &[
         label: "BMP",
         caps: caps(false, false, SaveFormat::Png, false),
         handler: &still::BMP,
+        system: None,
     },
     MediaFormat {
         id: "jxl",
@@ -196,6 +212,28 @@ pub static FORMATS: &[MediaFormat] = &[
         label: "JPEG XL",
         caps: caps(false, true, SaveFormat::Jpeg, false),
         handler: &jxl::JXL,
+        system: None,
+    },
+    // Read by the operating system's codecs, when it has them (#70, #71).
+    MediaFormat {
+        id: "heic",
+        extensions: &[".heic", ".heif", ".hif"],
+        mime: "image/heic",
+        kind: MediaKind::Image,
+        label: "HEIC",
+        caps: caps(false, true, SaveFormat::Jpeg, false),
+        handler: &system::HEIC,
+        system: Some(SystemCodec::Heic),
+    },
+    MediaFormat {
+        id: "avif",
+        extensions: &[".avif"],
+        mime: "image/avif",
+        kind: MediaKind::Image,
+        label: "AVIF",
+        caps: caps(false, true, SaveFormat::Jpeg, false),
+        handler: &system::AVIF,
+        system: Some(SystemCodec::Avif),
     },
     raw("cr2", &[".cr2"], "image/x-canon-cr2", "Canon RAW"),
     raw("cr3", &[".cr3"], "image/x-canon-cr3", "Canon RAW"),
@@ -212,20 +250,23 @@ pub static FORMATS: &[MediaFormat] = &[
     video("avi", &[".avi"], "video/x-msvideo", "AVI video"),
 ];
 
-/// Files Owlbum knows are pictures or videos but cannot open in version 1.
-/// They get no row; the walker counts and lists them.
+/// Files Owlbum knows are pictures or videos but cannot open. They get no
+/// row; the walker counts and lists them. The HEIC and AVIF rows apply only
+/// while the system codec that reads the same files is missing.
 pub static UNSUPPORTED: &[UnsupportedFormat] = &[
     UnsupportedFormat {
         label: "HEIC",
         extensions: &[".heic", ".heif", ".hif"],
         reason: text::media::HEIC_UNSUPPORTED,
         sniff: Some(sniff::heic),
+        system: Some(SystemCodec::Heic),
     },
     UnsupportedFormat {
         label: "AVIF",
         extensions: &[".avif"],
         reason: text::media::AVIF_UNSUPPORTED,
         sniff: Some(sniff::avif),
+        system: Some(SystemCodec::Avif),
     },
     UnsupportedFormat {
         label: "Camera RAW",
@@ -235,12 +276,14 @@ pub static UNSUPPORTED: &[UnsupportedFormat] = &[
         ],
         reason: text::media::RAW_UNSUPPORTED,
         sniff: None,
+        system: None,
     },
     UnsupportedFormat {
         label: "Video",
         extensions: &[".mts", ".m2ts", ".3gp", ".wmv", ".mpg", ".mpeg"],
         reason: text::media::VIDEO_UNSUPPORTED,
         sniff: None,
+        system: None,
     },
 ];
 
@@ -248,9 +291,10 @@ pub static UNSUPPORTED: &[UnsupportedFormat] = &[
 /// the file types Owlbum offers to open from the file manager
 /// (docs/08-desktop-and-release.md, "Opening pictures").
 pub fn picture_extensions() -> Vec<&'static str> {
+    let codecs = system::codecs();
     FORMATS
         .iter()
-        .filter(|f| f.kind != MediaKind::Video)
+        .filter(|f| f.kind != MediaKind::Video && f.usable(codecs))
         .flat_map(|f| f.extensions.iter().copied())
         .collect()
 }
@@ -264,15 +308,38 @@ pub fn extension_of(name: &str) -> String {
     }
 }
 
-/// The format whose extensions contain `extension_of(name)`.
+impl MediaFormat {
+    /// True when Owlbum can read the format with `codecs`: always, unless
+    /// it needs a system codec that is missing.
+    pub fn usable(&self, codecs: Codecs) -> bool {
+        self.system.is_none_or(|c| codecs.has(c))
+    }
+}
+
+impl UnsupportedFormat {
+    /// True when the row applies with `codecs`: always, unless the system
+    /// codec that reads these files is there.
+    pub fn applies(&self, codecs: Codecs) -> bool {
+        self.system.is_none_or(|c| !codecs.has(c))
+    }
+}
+
+/// The format whose extensions contain `extension_of(name)`, among the
+/// formats this computer can read.
 pub fn format_of(name: &str) -> Option<&'static MediaFormat> {
+    format_of_in(name, system::codecs())
+}
+
+/// [`format_of`] with the given system codecs.
+pub fn format_of_in(name: &str, codecs: Codecs) -> Option<&'static MediaFormat> {
     let ext = extension_of(name);
     FORMATS
         .iter()
-        .find(|f| f.extensions.contains(&ext.as_str()))
+        .find(|f| f.extensions.contains(&ext.as_str()) && f.usable(codecs))
 }
 
-/// The format with that id.
+/// The format with that id, whether or not this computer can read it now:
+/// a row stored while a system codec was there keeps its format.
 pub fn format_by_id(id: &str) -> Option<&'static MediaFormat> {
     FORMATS.iter().find(|f| f.id == id)
 }
@@ -288,16 +355,26 @@ pub fn format_index(id: &str) -> Option<u8> {
 
 /// The row of the unsupported table for the name's extension.
 pub fn unsupported_of(name: &str) -> Option<&'static UnsupportedFormat> {
+    unsupported_of_in(name, system::codecs())
+}
+
+/// [`unsupported_of`] with the given system codecs.
+pub fn unsupported_of_in(name: &str, codecs: Codecs) -> Option<&'static UnsupportedFormat> {
     let ext = extension_of(name);
     UNSUPPORTED
         .iter()
-        .find(|u| u.extensions.contains(&ext.as_str()))
+        .find(|u| u.extensions.contains(&ext.as_str()) && u.applies(codecs))
 }
 
 /// True when Owlbum handles the file: a known extension, and not a macOS
 /// AppleDouble (`._`) file.
 pub fn is_supported(name: &str) -> bool {
-    format_of(name).is_some() && !name.starts_with("._")
+    is_supported_in(name, system::codecs())
+}
+
+/// [`is_supported`] with the given system codecs.
+pub fn is_supported_in(name: &str, codecs: Codecs) -> bool {
+    format_of_in(name, codecs).is_some() && !name.starts_with("._")
 }
 
 /// The label of the first row that uses `handler`, for its `decode` error.
@@ -330,16 +407,24 @@ pub enum Identified {
 /// 4. Nothing recognises them: the extension's format, whose handler tries
 ///    anyway and fails with `decode`.
 pub fn identify(name: &str, head: &[u8]) -> Option<Identified> {
-    let own = format_of(name)?;
+    identify_in(name, head, system::codecs())
+}
+
+/// [`identify`] with the given system codecs.
+pub fn identify_in(name: &str, head: &[u8], codecs: Codecs) -> Option<Identified> {
+    let own = format_of_in(name, codecs)?;
     if own.handler.sniff(head) {
         return Some(Identified::Format(own));
     }
-    if let Some(other) = FORMATS.iter().find(|f| f.handler.sniff(head)) {
+    if let Some(other) = FORMATS
+        .iter()
+        .find(|f| f.usable(codecs) && f.handler.sniff(head))
+    {
         return Some(Identified::Format(other));
     }
     if let Some(u) = UNSUPPORTED
         .iter()
-        .find(|u| u.sniff.is_some_and(|sniff| sniff(head)))
+        .find(|u| u.applies(codecs) && u.sniff.is_some_and(|sniff| sniff(head)))
     {
         return Some(Identified::Unsupported(u));
     }
@@ -364,10 +449,13 @@ pub struct FormatInfo {
     pub animated: bool,
 }
 
-/// The registry, so the page never hard-codes a format rule.
+/// The registry, so the page never hard-codes a format rule: the formats
+/// this computer can read.
 pub fn formats() -> Vec<FormatInfo> {
+    let codecs = system::codecs();
     FORMATS
         .iter()
+        .filter(|f| f.usable(codecs))
         .map(|f| FormatInfo {
             id: f.id.to_owned(),
             extensions: f.extensions.iter().map(|e| (*e).to_owned()).collect(),
@@ -394,7 +482,8 @@ mod tests {
             assert!(!f.extensions.is_empty(), "{} has no extension", f.id);
             for e in f.extensions {
                 assert!(seen.insert(*e), "{e} is listed twice");
-                assert_eq!(format_of(&format!("x{e}")).unwrap().id, f.id);
+                let name = format!("x{e}");
+                assert_eq!(format_of_in(&name, Codecs::ALL).unwrap().id, f.id);
             }
         }
     }
@@ -413,12 +502,71 @@ mod tests {
 
     #[test]
     fn no_extension_is_in_both_tables() {
-        let supported: HashSet<_> = FORMATS.iter().flat_map(|f| f.extensions).collect();
-        for u in UNSUPPORTED {
-            for e in u.extensions {
-                assert!(!supported.contains(e), "{e} is in both tables");
+        // A format read by a system codec is in both, but only one row
+        // applies at a time: the unsupported one while the codec is
+        // missing.
+        for codecs in [Codecs::NONE, Codecs::ALL] {
+            let supported: HashSet<_> = FORMATS
+                .iter()
+                .filter(|f| f.usable(codecs))
+                .flat_map(|f| f.extensions)
+                .collect();
+            for u in UNSUPPORTED.iter().filter(|u| u.applies(codecs)) {
+                for e in u.extensions {
+                    assert!(!supported.contains(e), "{e} is in both tables");
+                }
             }
         }
+        for u in UNSUPPORTED.iter().filter(|u| u.system.is_some()) {
+            for e in u.extensions {
+                let f = FORMATS.iter().find(|f| f.extensions.contains(e)).unwrap();
+                assert_eq!(f.system, u.system, "{e}");
+            }
+        }
+    }
+
+    #[test]
+    fn heic_and_avif_are_photos_only_with_their_system_codec() {
+        let only_heic = Codecs {
+            heic: true,
+            avif: false,
+        };
+        assert!(format_of_in("IMG_1.HEIC", Codecs::NONE).is_none());
+        assert!(!is_supported_in("IMG_1.heic", Codecs::NONE));
+        assert_eq!(
+            unsupported_of_in("IMG_1.heic", Codecs::NONE).unwrap().label,
+            "HEIC"
+        );
+        assert_eq!(format_of_in("IMG_1.HEIC", only_heic).unwrap().id, "heic");
+        assert_eq!(format_of_in("a.hif", only_heic).unwrap().id, "heic");
+        assert!(is_supported_in("IMG_1.heic", only_heic));
+        assert!(unsupported_of_in("IMG_1.heic", only_heic).is_none());
+        assert!(format_of_in("a.avif", only_heic).is_none());
+        assert_eq!(
+            unsupported_of_in("a.avif", only_heic).unwrap().label,
+            "AVIF"
+        );
+        assert_eq!(format_of_in("a.avif", Codecs::ALL).unwrap().id, "avif");
+        // Tests never install the system decoder: no codec.
+        assert!(!is_supported("IMG_1.heic"));
+        assert!(formats().iter().all(|f| f.id != "heic" && f.id != "avif"));
+        assert!(!picture_extensions().contains(&".heic"));
+    }
+
+    #[test]
+    fn a_heic_named_jpg_reads_as_heic_with_the_codec() {
+        let mut heic = 24u32.to_be_bytes().to_vec();
+        heic.extend_from_slice(b"ftypheic\0\0\0\0mif1heic");
+        heic.extend_from_slice(&[0; 64]);
+        match identify_in("IMG_1.jpg", &heic, Codecs::ALL) {
+            Some(Identified::Format(f)) => assert_eq!(f.id, "heic"),
+            other => panic!("{other:?}"),
+        }
+        match identify_in("IMG_1.jpg", &heic, Codecs::NONE) {
+            Some(Identified::Unsupported(u)) => assert_eq!(u.label, "HEIC"),
+            other => panic!("{other:?}"),
+        }
+        assert!(identify_in("IMG_1.heic", &heic, Codecs::NONE).is_none());
     }
 
     #[test]
@@ -428,7 +576,9 @@ mod tests {
             assert!(ids.insert(f.id), "{} is listed twice", f.id);
             assert_eq!(format_by_id(f.id).unwrap().id, f.id);
         }
-        assert!(format_by_id("heic").is_none());
+        assert!(format_by_id("crw").is_none());
+        // A stored row keeps its format even while its codec is missing.
+        assert_eq!(format_by_id("heic").unwrap().label, "HEIC");
     }
 
     fn handler_addr(h: &'static dyn MediaHandler) -> *const () {
@@ -438,7 +588,7 @@ mod tests {
     #[test]
     fn every_handler_is_used_by_a_row() {
         let used: HashSet<_> = FORMATS.iter().map(|f| handler_addr(f.handler)).collect();
-        let all: [&'static dyn MediaHandler; 9] = [
+        let all: [&'static dyn MediaHandler; 11] = [
             &still::JPEG,
             &still::PNG,
             &still::WEBP,
@@ -446,6 +596,8 @@ mod tests {
             &still::TIFF,
             &still::BMP,
             &jxl::JXL,
+            &system::HEIC,
+            &system::AVIF,
             &raw::RAW,
             &video::VIDEO,
         ];
@@ -472,7 +624,7 @@ mod tests {
         use MediaKind::*;
         use SaveFormat as S;
         assert_eq!(
-            &rows[..7],
+            &rows[..9],
             &[
                 ("jpeg", Image, true, false, S::Jpeg, false),
                 ("png", Image, true, true, S::Png, false),
@@ -481,6 +633,8 @@ mod tests {
                 ("tiff", Image, false, true, S::Png, false),
                 ("bmp", Image, false, false, S::Png, false),
                 ("jxl", Image, false, true, S::Jpeg, false),
+                ("heic", Image, false, true, S::Jpeg, false),
+                ("avif", Image, false, true, S::Jpeg, false),
             ]
         );
         let raw: Vec<_> = rows.iter().filter(|r| r.1 == Raw).map(|r| r.0).collect();
@@ -490,7 +644,7 @@ mod tests {
         );
         let video: Vec<_> = rows.iter().filter(|r| r.1 == Video).map(|r| r.0).collect();
         assert_eq!(video, ["mp4", "mov", "webm", "mkv", "avi"]);
-        for r in &rows[7..] {
+        for r in &rows[9..] {
             assert_eq!(
                 (r.2, r.3, r.4, r.5),
                 (false, false, S::Jpeg, false),
@@ -529,14 +683,15 @@ mod tests {
         assert!(unsupported_of("a.jpg").is_none());
         assert_eq!(
             unsupported_of("a.heic").unwrap().reason,
-            "HEIC photos are not supported yet."
+            text::media::HEIC_UNSUPPORTED
         );
     }
 
     #[test]
     fn formats_for_the_page_mirror_the_table() {
         let page = formats();
-        assert_eq!(page.len(), FORMATS.len());
+        // Without the system codecs, HEIC and AVIF are left out.
+        assert_eq!(page.len(), FORMATS.len() - 2);
         let json = serde_json::to_value(&page[0]).unwrap();
         assert_eq!(
             json,

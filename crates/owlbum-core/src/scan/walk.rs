@@ -570,7 +570,7 @@ pub(crate) mod tests {
         assert_eq!(labels, [label("photo.avif"), label("photo.heic")]);
         assert_eq!(
             w.unsupported[1].reason,
-            "HEIC photos are not supported yet."
+            crate::text::media::HEIC_UNSUPPORTED
         );
     }
 

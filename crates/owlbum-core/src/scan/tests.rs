@@ -532,8 +532,11 @@ fn extras_rows_follow_what_each_file_is() {
                     None => {
                         assert_eq!(code(&row), Some("unsupported"));
                         assert_eq!(
-                            row.scan_error.as_deref(),
-                            Some("unsupported: HEIC photos are not supported yet.")
+                            row.scan_error,
+                            Some(format!(
+                                "unsupported: {}",
+                                crate::text::media::HEIC_UNSUPPORTED
+                            ))
                         );
                     }
                 }
@@ -714,7 +717,7 @@ fn unsupported_files_are_paged_in_walker_order() {
     assert_eq!(all.total, 3);
     let paths: Vec<&str> = all.items.iter().map(|u| u.rel_path.as_str()).collect();
     assert_eq!(paths, ["a.heic", "b/2.avif", "b/10.heic"]);
-    assert_eq!(all.items[0].reason, "HEIC photos are not supported yet.");
+    assert_eq!(all.items[0].reason, crate::text::media::HEIC_UNSUPPORTED);
     let page = report::unsupported(Some(&summary.walk), 1, 1);
     assert_eq!(page.total, 3);
     assert_eq!(page.items, [all.items[1].clone()]);

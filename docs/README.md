@@ -31,7 +31,7 @@ These shape every part. A feature spec that conflicts with one of them is wrong.
 3. **What Owlbum knows about an album lives in the album.** One file, `.owlbum/owlbum.sqlite`, at the root of the folder that was opened. Copy the folder to another computer and the stars, notes, tags and scan results come with it.
 4. **App data is a cache.** Thumbnails, downloaded models and settings live in the per-user app data folder. Deleting it loses no information about any photo.
 5. **Rust owns the data; the page is a view.** Filtering, sorting, searching and scoring run in Rust against the database. The page asks for the rows it is showing. The target is an album of 100,000 photos that stays quick.
-6. **No patent-encumbered decoders are bundled.** Video, and later HEIC, go through whatever the operating system provides.
+6. **No patent-encumbered decoders are bundled.** Video, HEIC and AVIF go through whatever the operating system provides (on Windows, the Microsoft Store's free extensions).
 7. **Failures are messages, never blank windows or silent loss.** A file that cannot be read is counted and listed. A database that cannot be written makes the album view-only and says so.
 
 ## Decisions already made
@@ -43,8 +43,8 @@ These shape every part. A feature spec that conflicts with one of them is wrong.
 | Platforms | Windows x64 and Linux x64 in version 1. macOS is a later target with no build yet. Mobile is out of scope. |
 | Frameworks | Tauri 2, Rust, and a React + TypeScript page. No local HTTP server. |
 | Language | English only. All interface text lives in one module so translation is possible later. |
-| Formats in version 1 | JPEG, PNG, WebP, GIF, TIFF, BMP, JPEG XL, camera RAW, and video through system codecs. |
-| Deferred to after version 1 | HEIC, AVIF, telemetry, macOS, Windows code signing. Each has an issue. |
+| Formats in version 1 | JPEG, PNG, WebP, GIF, TIFF, BMP, JPEG XL, camera RAW, and video through system codecs. HEIC and AVIF through Windows' codecs where the Store extensions are installed (#70, #71); not on Linux. |
+| Deferred to after version 1 | Telemetry, macOS, Windows code signing. Each has an issue. |
 | Linux gaps | A feature that cannot be made reliable on Linux may ship on Windows only, with its control disabled on Linux and an issue open. |
 | Old program | No import of Photo Tool's `photoinfo.json` or `phototool-tags*.json`. |
 | Tests | Rust unit and integration tests, and page tests against a faked backend, run locally on Windows and on Linux (WSL), and on GitHub Actions on Windows for every push to `main` and pull request. |

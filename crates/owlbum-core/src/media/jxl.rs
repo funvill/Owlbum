@@ -10,7 +10,9 @@ use std::fs::File;
 use std::io::{BufReader, Read, Seek, SeekFrom};
 use std::path::Path;
 
-use jxl_oxide::{InitializeResult, JxlImage, PixelFormat, Render};
+use jxl_oxide::{
+    EnumColourEncoding, InitializeResult, JxlImage, Moxcms, PixelFormat, Render, RenderingIntent,
+};
 
 use super::colour;
 use super::exif::Exif;
@@ -138,7 +140,13 @@ fn render(file: &Path) -> Result<(JxlImage, Render), MediaError> {
     let header = read_header(file)?;
     check_size(header.width(), header.height())?;
     drop(header);
-    let image = JxlImage::builder().read(open(file)?).map_err(decode_err)?;
+    let mut image = JxlImage::builder().read(open(file)?).map_err(decode_err)?;
+    if image.pixel_format().has_black() {
+        // A CMYK picture is rendered through its CMYK profile into sRGB by
+        // `moxcms` (#82), since `Layout` has no CMYK.
+        image.set_cms(Moxcms);
+        image.request_color_encoding(EnumColourEncoding::srgb(RenderingIntent::Perceptual));
+    }
     let render = image.render_frame(0).map_err(decode_err)?;
     Ok((image, render))
 }
@@ -149,7 +157,8 @@ fn layout_of(image: &JxlImage) -> Result<Layout, MediaError> {
         PixelFormat::Graya => Ok(Layout::GreyAlpha),
         PixelFormat::Rgb => Ok(Layout::Rgb),
         PixelFormat::Rgba => Ok(Layout::Rgba),
-        // Rendering CMYK needs `jxl-oxide`'s colour management hook (#82).
+        // `render` asks for sRGB when the picture is CMYK, so CMYK is left
+        // only when that request failed.
         PixelFormat::Cmyk | PixelFormat::Cmyka => Err(decode_error()),
     }
 }

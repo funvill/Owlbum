@@ -75,9 +75,13 @@ notify = { version = "9", default-features = false }
 # (docs/03-media-and-scanning.md, "Media handlers") and owlbum-fixtures'
 # synthetic albums. Each crate turns on the image features it needs.
 image = { version = "0.25.10", default-features = false }
-jxl-oxide = { version = "0.12.6", default-features = false }
+# `moxcms` renders a CMYK JPEG XL through its CMYK profile into sRGB (#82).
+jxl-oxide = { version = "0.12.6", default-features = false, features = ["moxcms"] }
 png = "0.18"
 zune-core = "0.5"
+# A CMYK JPEG's raw samples, for converting through its CMYK profile
+# (#82): `image` hands out only RGB. The version `image` already uses.
+zune-jpeg = "0.5.15"
 zune-jpegxl = "0.5"
 nom-exif = "3.8"
 # Thumbnail and analysis resizing (docs/03-media-and-scanning.md, "Image

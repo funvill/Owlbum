@@ -21,9 +21,21 @@ pub fn too_large(width: u32, height: u32) -> String {
     format!("This picture is too large to open ({width} × {height}).")
 }
 
+/// Reason shown for a HEIC file while the system cannot decode it. On
+/// Windows it names the free Microsoft Store extensions that let Windows
+/// read HEIC (docs/03-media-and-scanning.md, "The system image handler").
+#[cfg(windows)]
+pub const HEIC_UNSUPPORTED: &str = "To show HEIC photos, install two free extensions from the Microsoft Store: HEIF Image Extensions and HEVC Video Extensions from Device Manufacturer.";
 /// Reason shown for a HEIC file.
+#[cfg(not(windows))]
 pub const HEIC_UNSUPPORTED: &str = "HEIC photos are not supported yet.";
+/// Reason shown for an AVIF file while the system cannot decode it. On
+/// Windows it names the free Microsoft Store extensions that let Windows
+/// read AVIF.
+#[cfg(windows)]
+pub const AVIF_UNSUPPORTED: &str = "To show AVIF photos, install two free extensions from the Microsoft Store: HEIF Image Extensions and AV1 Video Extension.";
 /// Reason shown for an AVIF file.
+#[cfg(not(windows))]
 pub const AVIF_UNSUPPORTED: &str = "AVIF photos are not supported yet.";
 /// Reason shown for a RAW format with no decoder.
 pub const RAW_UNSUPPORTED: &str = "This camera's RAW format is not supported yet.";

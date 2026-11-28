@@ -351,7 +351,10 @@ fn copy_not_shown_copies_unsupported_then_unreadable_files() {
     assert_eq!(copied, 2);
     let text = f.fake.text.lock().unwrap().clone().unwrap();
     let lines: Vec<&str> = text.lines().collect();
-    assert_eq!(lines[0], "z.heic	HEIC photos are not supported yet.");
+    assert_eq!(
+        lines[0],
+        format!("z.heic\t{}", owlbum_core::text::media::HEIC_UNSUPPORTED)
+    );
     assert!(lines[1].starts_with("bad.jpg	"), "{text:?}");
 }
 

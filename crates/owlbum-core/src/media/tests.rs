@@ -524,7 +524,7 @@ fn a_heic_named_jpg_is_unsupported() {
     match identify("IMG_1.jpg", &heic) {
         Some(Identified::Unsupported(u)) => {
             assert_eq!(u.label, "HEIC");
-            assert_eq!(u.reason, "HEIC photos are not supported yet.");
+            assert_eq!(u.reason, crate::text::media::HEIC_UNSUPPORTED);
         }
         other => panic!("{other:?}"),
     }

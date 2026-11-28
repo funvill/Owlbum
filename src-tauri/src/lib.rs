@@ -162,6 +162,11 @@ pub fn run() {
         data.dir().display(),
         location.overridden,
     );
+    // HEIC and AVIF are photos only where the system can decode them
+    // (docs/03-media-and-scanning.md, "The system image handler"). Asked
+    // once, before any album is opened.
+    let codecs = owlbum_core::media::system::install_detected();
+    tracing::info!(target: "app", "system codecs heic={} avif={}", codecs.heic, codecs.avif);
     if let Some(moved) = data.set_aside() {
         tracing::warn!(
             target: "app",

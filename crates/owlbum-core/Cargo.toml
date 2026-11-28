@@ -33,10 +33,14 @@ tracing.workspace = true
 ts-rs.workspace = true
 ureq.workspace = true
 uuid.workspace = true
+zune-core.workspace = true
+zune-jpeg.workspace = true
 
 [target.'cfg(windows)'.dependencies]
 windows = { workspace = true, features = [
+    "Win32_Foundation",
     "Win32_Graphics_Gdi",
+    "Win32_Graphics_Imaging",
     "Win32_Media_MediaFoundation",
     "Win32_System_Com",
     "Win32_System_Com_StructuredStorage",

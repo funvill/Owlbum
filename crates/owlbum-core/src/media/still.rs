@@ -7,7 +7,8 @@
 //! still at least `min_side` on its longest side (#114). When no scale fits
 //! below full size, when the file is CMYK, 16-bit or lossless, or when
 //! `jpeg-decoder` cannot read it, `preview` is the full decode. For every
-//! other format `preview` and `working` are the same decode.
+//! other format `preview` and `working` are the same decode. A CMYK JPEG
+//! with a CMYK profile is converted through it by `cmyk` (#82).
 
 use std::fs::File;
 use std::io::BufReader;
@@ -25,7 +26,7 @@ use super::handler::{
     Cost, Layout, MediaError, MediaHandler, Metadata, Pixels, Samples, SourcePixels, VideoInfo,
     check_size,
 };
-use super::{headers, registry, sniff};
+use super::{cmyk, headers, registry, sniff};
 
 /// One format the still handler reads.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -110,6 +111,19 @@ impl Still {
             icc = Self::tiff_icc(file);
         }
         let mut img = DynamicImage::from_decoder(decoder).map_err(self.decode_err())?;
+        // `zune-jpeg` has turned a CMYK JPEG into RGB with a formula; with
+        // a CMYK profile it is decoded again and converted through the
+        // profile (#82), and is then sRGB.
+        if self.format == StillFormat::Jpeg
+            && let Some(profile) = icc.as_deref()
+            && cmyk::is_cmyk_profile(profile)
+            && let Some(rgb) = std::fs::read(file)
+                .ok()
+                .and_then(|bytes| cmyk::jpeg_to_srgb(&bytes, profile))
+        {
+            img = DynamicImage::ImageRgb8(rgb);
+            icc = None;
+        }
         img.apply_orientation(orientation);
         Ok((img, icc))
     }

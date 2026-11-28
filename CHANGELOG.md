@@ -11,6 +11,15 @@ the window's title shows the version that is running.
 
 ### Added
 
+- HEIC, HEIF and AVIF photos show like any other photo on Windows when
+  the free Microsoft Store extensions are installed (HEIF Image
+  Extensions, plus HEVC Video Extensions from Device Manufacturer for
+  HEIC or AV1 Video Extension for AVIF). Owlbum checks for them when it
+  starts; without them the Files not shown list says which extensions
+  to install.
+- CMYK JPEG pictures (from print work) are converted through their
+  CMYK colour profile, so their colours are right instead of
+  approximate. CMYK JPEG XL pictures open instead of failing.
 - About lists the ONNX Runtime version once photo tagging has loaded
   it, and the log names the version at the first model load.
 

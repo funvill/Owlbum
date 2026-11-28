@@ -287,8 +287,11 @@ mod tests {
         }];
         assert_eq!(
             not_shown_text(&unsupported, &errors),
-            "2024/a.heic\tHEIC photos are not supported yet.\n\
-             b.jpg\tThis file could not be read: bad bytes\n"
+            format!(
+                "2024/a.heic\t{}\n\
+                 b.jpg\tThis file could not be read: bad bytes\n",
+                text::media::HEIC_UNSUPPORTED
+            )
         );
         assert_eq!(not_shown_text(&[], &[]), "");
     }

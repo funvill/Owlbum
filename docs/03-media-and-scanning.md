@@ -27,6 +27,7 @@ pub struct MediaFormat {
     pub label: &'static str,                 // shown to the user
     pub caps: Capabilities,
     pub handler: &'static dyn MediaHandler,
+    pub system: Option<SystemCodec>,         // the OS codec it needs (HEIC, AVIF), else None
 }
 ```
 
@@ -41,6 +42,8 @@ pub struct MediaFormat {
 | `tiff` | `.tif` `.tiff` | image/tiff | image | TIFF | no | yes | png | no | still |
 | `bmp` | `.bmp` | image/bmp | image | BMP | no | no | png | no | still |
 | `jxl` | `.jxl` | image/jxl | image | JPEG XL | no | yes | jpeg | no | jxl |
+| `heic` | `.heic` `.heif` `.hif` | image/heic | image | HEIC | no | yes | jpeg | no | system (HEIC) |
+| `avif` | `.avif` | image/avif | image | AVIF | no | yes | jpeg | no | system (AVIF) |
 | `cr2` | `.cr2` | image/x-canon-cr2 | raw | Canon RAW | no | no | jpeg | no | raw |
 | `cr3` | `.cr3` | image/x-canon-cr3 | raw | Canon RAW | no | no | jpeg | no | raw |
 | `nef` | `.nef` | image/x-nikon-nef | raw | Nikon RAW | no | no | jpeg | no | raw |
@@ -64,16 +67,17 @@ Notes on the capabilities:
 - **Video** has no editing at all. Its `save_as` value is never used.
 - `dng` stays in the table: the RAW prototype (#49) read an uncompressed Bayer DNG laid out like a camera's or Adobe's converter's (the fixture generator's) with `rawler` 0.8, its embedded preview and its development both. Lossy and linear DNG from phones were checked later with public samples (#157, open question 1): all read and develop. A file `rawler` cannot read is a `decode` error row like any other.
 - **RAW and video handlers.** The RAW rows use `media::raw` (#49) and the video rows `media::video` (#50). Until they were built, these rows named placeholder handlers that answered `unsupported`; `SCAN_VERSION` 4 reads the error rows they left again.
+- **HEIC and AVIF** (#70, #71) are read by the operating system's codecs, and only where it has them: see [The system image handler](#the-system-image-handler). While the codec is missing the row is not offered (`format_of`, `is_supported`, `identify` and `app_formats` leave it out) and the file is "not supported yet" by the second table. `format_by_id` always finds the row, so a photo scanned while the codec was there keeps its format. They are saved as a JPEG copy.
 - **WebP and JPEG XL encoders, confirmed.** `image` 0.25.10 writes only lossless WebP, and `jxl-oxide` 0.12.6 only decodes, so the save-as values above stand (open question 9).
 
 ### Files recognised but not supported yet
 
-A second table in the same module lists extensions Owlbum knows are pictures but cannot open in version 1. The walker counts these files and the album reports them, so nobody thinks photos are missing. They get no row in the database.
+A second table in the same module lists extensions Owlbum knows are pictures but cannot open. The walker counts these files and the album reports them, so nobody thinks photos are missing. They get no row in the database. The HEIC and AVIF rows apply only while the system codec for them is missing (their `system` field names it); on Windows their reason says which free Microsoft Store extensions to install.
 
 | Label | Extensions | Reason shown |
 |---|---|---|
-| HEIC | `.heic` `.heif` `.hif` | "HEIC photos are not supported yet." |
-| AVIF | `.avif` | "AVIF photos are not supported yet." |
+| HEIC | `.heic` `.heif` `.hif` | Windows: "To show HEIC photos, install two free extensions from the Microsoft Store: HEIF Image Extensions and HEVC Video Extensions from Device Manufacturer." Linux: "HEIC photos are not supported yet." |
+| AVIF | `.avif` | Windows: "To show AVIF photos, install two free extensions from the Microsoft Store: HEIF Image Extensions and AV1 Video Extension." Linux: "AVIF photos are not supported yet." |
 | Camera RAW | `.crw` `.nrw` `.srf` `.sr2` `.pef` `.srw` `.rwl` `.3fr` `.iiq` `.erf` `.mef` `.mos` `.kdc` `.dcr` `.x3f` | "This camera's RAW format is not supported yet." |
 | Video | `.mts` `.m2ts` `.3gp` `.wmv` `.mpg` `.mpeg` | "This video format is not supported yet." |
 
@@ -86,9 +90,9 @@ Moving a format from this table to the first one is the whole job of supporting 
 | Function | Rule |
 |---|---|
 | `extension_of(name)` | The text from the last dot of the file name, lower-cased, with the dot. Empty when there is no dot or the only dot is the first character (`.jpg` has no extension). |
-| `format_of(name)` | The format whose extensions contain `extension_of(name)`, or none. |
+| `format_of(name)` | The format whose extensions contain `extension_of(name)`, or none. A format that needs a missing system codec is none. Each of these lookups has an `_in(…, codecs)` form that takes the codecs explicitly, for tests. |
 | `format_by_id(id)` | The format with that id, or none. |
-| `unsupported_of(name)` | The row of the second table for that extension, or none. |
+| `unsupported_of(name)` | The row of the second table for that extension that applies with this computer's codecs, or none. |
 | `is_supported(name)` | `format_of(name)` is some, and the name does not start with `._`. |
 
 ### When the extension lies
@@ -104,7 +108,7 @@ Each handler has a `sniff` test on the first bytes of the file. The scanner alre
 
 RAW and video containers are sniffed by container family only (TIFF-based, ISO base media, RIFF, EBML). The extension picks the format id within a family.
 
-`identify(name, head)` in the registry applies this table. Each still format has its own handler instance, so "the extension's own handler" means that format's signature, not the whole still family. When bytes match several rows, the first row in table order wins, so a TIFF named `.cr2` stays RAW but a CR2 named `.jpg` reads as TIFF. An ISO base media file is told apart by its `ftyp` brands: HEIF (`heic`, `mif1` and kin) and AVIF (`avif`, `avis`) are unsupported stills, `crx ` is Canon RAW, anything else is video. A RIFF file is told apart by its form type (`WEBP` or `AVI `).
+`identify(name, head)` in the registry applies this table. Each still format has its own handler instance, so "the extension's own handler" means that format's signature, not the whole still family. When bytes match several rows, the first row in table order wins, so a TIFF named `.cr2` stays RAW but a CR2 named `.jpg` reads as TIFF. An ISO base media file is told apart by its `ftyp` brands: HEIF (`heic`, `mif1` and kin) and AVIF (`avif`, `avis`) are stills (the `heic` and `avif` formats with their codec, else unsupported), `crx ` is Canon RAW, anything else is video. A RIFF file is told apart by its form type (`WEBP` or `AVI `).
 
 ## Media handlers
 
@@ -189,7 +193,8 @@ Every `preview` and `working` result passes through one function, `media::colour
 
 - An RGB profile converts the colour channels. A grey profile converts a grey picture. Alpha is never changed.
 - A profile that gives sRGB back (every colour of a 9 × 9 × 9 test lattice, or every grey level, within one level) is skipped, so the many files that embed sRGB cost about half a millisecond. `media::colour::is_srgb(icc)` is true when `to_srgb` would leave the pixels as they are, for whatever reason (no profile, sRGB, or a profile it cannot use).
-- A profile that cannot be read or used, a profile for another colour space, and a grey profile on a colour picture leave the pixels as decoded. A damaged profile never costs the user the picture. A CMYK JPEG is the common case: its decoder has already turned it into RGB, so its CMYK profile cannot apply (#82).
+- A profile that cannot be read or used, a profile for another colour space, and a grey profile on a colour picture leave the pixels as decoded. A damaged profile never costs the user the picture.
+- **CMYK** (#82) never reaches `to_srgb` with its CMYK profile. A CMYK or YCCK JPEG whose embedded profile is CMYK is decoded a second time by `zune-jpeg` to its raw samples (`media::cmyk`), turned into ink amounts (an Adobe CMYK JPEG stores every channel inverted; a YCCK one stores C, M and Y as YCbCr and K inverted), and converted with a `moxcms` CMYK to sRGB transform (perceptual for table profiles). The picture is then sRGB, so `source` gives it with no profile. A CMYK JPEG without a CMYK profile, or whose profile `moxcms` cannot use, keeps `zune-jpeg`'s plain formula. A CMYK JPEG XL is rendered into sRGB by `jxl-oxide` through `moxcms` (see the JPEG XL handler).
 - The picture is converted in strips of 16,384 pixels through a small scratch buffer, so a large picture is never held twice. A 24-megapixel picture takes about 60 ms on one thread.
 
 `source` never passes through `to_srgb`: it keeps the profile's bytes as the file has them.
@@ -202,7 +207,7 @@ It covers JPEG, PNG, WebP, GIF, TIFF and BMP, all decoded with the `image` crate
 
 | Format | Notes |
 |---|---|
-| JPEG | `zune-jpeg` 0.5 has no reduced-size decode, so `preview(min_side)` is decoded by `jpeg-decoder` 0.3 (no rayon), scaled in the DCT to 1/2, 1/4 or 1/8: the smallest of these whose longest side is still at least `min_side` (a 5504 × 4128 photo is decoded at 2752 × 2064 for `preview(1600)`, and at 688 × 516 for the page's `preview(512)`; a 2048 × 1536 photo at 512 × 384 for `preview(512)`), then turned upright from its EXIF orientation and converted with its embedded profile, with `full_width`/`full_height` the full upright size (#114). When no scale below full size fits (a 2048 × 1536 photo for 1600), or the file is CMYK, 16-bit or lossless, or `jpeg-decoder` cannot read it, `preview` is the full `zune-jpeg` decode. `working` and `source` are always the full `zune-jpeg` decode. CMYK and greyscale files are converted to RGB; a CMYK file's profile is not applied (#82). A truncated file yields the part that was read. Cost: cheap. |
+| JPEG | `zune-jpeg` 0.5 has no reduced-size decode, so `preview(min_side)` is decoded by `jpeg-decoder` 0.3 (no rayon), scaled in the DCT to 1/2, 1/4 or 1/8: the smallest of these whose longest side is still at least `min_side` (a 5504 × 4128 photo is decoded at 2752 × 2064 for `preview(1600)`, and at 688 × 516 for the page's `preview(512)`; a 2048 × 1536 photo at 512 × 384 for `preview(512)`), then turned upright from its EXIF orientation and converted with its embedded profile, with `full_width`/`full_height` the full upright size (#114). When no scale below full size fits (a 2048 × 1536 photo for 1600), or the file is CMYK, 16-bit or lossless, or `jpeg-decoder` cannot read it, `preview` is the full `zune-jpeg` decode. `working` and `source` are always the full `zune-jpeg` decode. Greyscale files are converted to RGB; CMYK files are converted through their CMYK profile as described under the sRGB rule above (#82). A truncated file yields the part that was read. Cost: cheap. |
 | PNG | Cost: cheap under 8 MB, else decode. |
 | WebP | Animated files: frame 1 is the picture. |
 | GIF | Frame 1 is the picture, composed on a transparent canvas. |
@@ -225,9 +230,19 @@ GIF and WebP files may hold more than one frame. `metadata` reports the frame co
 
 ### The JPEG XL handler
 
-It decodes with `jxl-oxide`. Orientation and colour come from the codestream; `jxl-oxide` applies the orientation when it hands out pixels. `metadata` reads only as far as the image header, then walks the container's box headers (seeking past every other box, so the codestream is never read) to the `Exif` box, which may follow the codestream. A bare codestream has no EXIF, and a Brotli-compressed `brob` box is not read. `source` keeps 16 bits when the codestream's bit depth is above 8, and its `icc` is the profile `jxl-oxide` rendered into. A CMYK JPEG XL needs `jxl-oxide`'s colour management hook to render and is a `decode` error until #82. Cost: decode.
+It decodes with `jxl-oxide`. Orientation and colour come from the codestream; `jxl-oxide` applies the orientation when it hands out pixels. `metadata` reads only as far as the image header, then walks the container's box headers (seeking past every other box, so the codestream is never read) to the `Exif` box, which may follow the codestream. A bare codestream has no EXIF, and a Brotli-compressed `brob` box is not read. `source` keeps 16 bits when the codestream's bit depth is above 8, and its `icc` is the profile `jxl-oxide` rendered into. A CMYK JPEG XL (#82) is rendered into sRGB: `jxl-oxide`'s `moxcms` feature is on, and for a picture whose pixel format has a black channel the handler sets `Moxcms` as its colour management system and asks for sRGB (perceptual), so the CMYK profile is applied and `source`'s `icc` is sRGB. No CMYK JPEG XL test file could be made here (no encoder in Rust, and none on the build machine), so this path is not yet checked by a test (#82 stays open for it). Cost: decode.
 
 No JPEG XL encoder exists in Rust, so the handler's tests use five tiny files (under 300 bytes each) in `crates/owlbum-core/testdata/media/`, made once with ImageMagick and committed. `p3.jxl` is an 8 × 8 lossless picture of `rgb(200,100,50)` tagged with the fixture generator's Display P3 profile (`magick -size 8x8 "xc:rgb(200,100,50)" -depth 8 -profile p3.icc -quality 100 p3.jxl`). Every other test picture is generated by the test.
+
+### The system image handler
+
+HEIC and HEIF (#70) and AVIF (#71) are read by the operating system, because [principle 6](README.md#principles) bundles no patent-encumbered decoder. `media::system` holds the handler (`HEIC` and `AVIF`, one instance per row) and the `SystemDecoder` trait it decodes through; `media::wic` is the Windows decoder. Tests use a fake decoder and never need the codecs.
+
+- **Windows.** The Windows Imaging Component reads both with the decoder of the Microsoft Store's free "HEIF Image Extensions", which needs a Media Foundation video decoder for the pictures: HEVC ("HEVC Video Extensions from Device Manufacturer", free) or AV1 ("AV1 Video Extension", free). At start, before any album opens, `install_detected` lists the WIC decoders (Store codecs included) and asks `MFTEnumEx` for an HEVC and an AV1 video decoder, as Microsoft's HEIF codec page advises. A format is available when a WIC decoder claims one of its extensions and its video decoder is there. The result is logged (`system codecs heic=… avif=…`) and holds until the program restarts, so installing an extension takes a restart.
+- **Elsewhere** (Linux, and every test) nothing is installed and both stay "not supported yet". Linux has no system decoder here; libheif would bundle the decoders principle 6 rules out, so Linux is left unsupported for these formats.
+- **Calls.** `metadata` asks WIC for the first frame's size and pixel format (no pixels) and reads the EXIF block from the container itself (`media::heif`: the `meta` box's `iinf` and `iloc`, then the `Exif` item's bytes, file or `idat` extents), so EXIF works without the codec's help. `preview`, `working` and `source` are one full decode of the first frame through a WIC format converter to 8-bit RGBA, with the frame's first ICC colour context as the profile (`to_srgb` applies it; `source` keeps it). There is no reduced decode. Cost: decode.
+- **Orientation.** HEIF pictures carry their turn in the container (`irot`, `imir`); WIC reports it as `WICHeifOrientation`, numbered like EXIF, and does not apply it. The handler reads `/heifProps/{ushort=1}` (then `System.Photo.Orientation`) from the frame's metadata, falls back to the EXIF Orientation tag, and turns the picture upright itself. Whether WIC's value is right for rotated iPhone photos could not be checked on the build machine, which lacks the video decoders (#70, owner's check).
+- **Errors.** A decode WIC refuses is `decode` with the row's label. A file of a format whose codec went missing since the scan is `unsupported` with the reason of the second table.
 
 ### The RAW handler
 

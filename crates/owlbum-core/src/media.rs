@@ -7,18 +7,24 @@
 //! WebP, GIF, TIFF and BMP, `jxl` reads JPEG XL, `raw` reads camera RAW
 //! with `rawler` (#49) and `video` reads video containers and asks the
 //! operating system for poster frames (#50). `colour` converts embedded
-//! colour profiles to sRGB (#7).
+//! colour profiles to sRGB (#7). `system` reads HEIC and AVIF through the
+//! operating system's codecs when it has them (#70, #71; `wic` on Windows).
 
+mod cmyk;
 pub mod colour;
 pub mod exif;
 pub mod handler;
 mod headers;
+mod heif;
 pub mod jxl;
 pub mod raw;
 pub mod registry;
 mod sniff;
 pub mod still;
+pub mod system;
 pub mod video;
+#[cfg(windows)]
+mod wic;
 
 #[cfg(test)]
 mod tests;

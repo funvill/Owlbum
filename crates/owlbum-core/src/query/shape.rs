@@ -119,6 +119,26 @@ pub enum HiddenFilter {
     Only,
 }
 
+/// The kinds of photo the media type filter tells apart
+/// (docs/05-organising.md, "The list of filters"; owner's feedback, #165).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum KindFilter {
+    /// A picture of kind `image` that is not animated.
+    Still,
+    /// An animated picture: kind `image` with a length.
+    Animated,
+    /// A camera RAW file.
+    Raw,
+    /// A video.
+    Video,
+}
+
+impl KindFilter {
+    /// Every kind, in the order the panel and the chips list them.
+    pub const ALL: [KindFilter; 4] = [Self::Still, Self::Animated, Self::Raw, Self::Video];
+}
+
 /// Which kind of label a tag filter names.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize, TS)]
 #[serde(rename_all = "snake_case")]
@@ -190,6 +210,16 @@ pub struct Filter {
     #[serde(default, skip_serializing_if = "Option::is_none")]
     #[ts(optional)]
     pub near_duplicates: Option<bool>,
+    /// The kinds of photo shown; absent shows every kind. "No videos" is
+    /// every kind but `video`.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub kinds: Option<Vec<KindFilter>>,
+    /// The file formats shown, as media format registry ids; absent shows
+    /// every format. "Only PNGs" is the PNG format alone.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    #[ts(optional)]
+    pub formats: Option<Vec<String>>,
 }
 
 impl Filter {
@@ -205,6 +235,24 @@ impl Filter {
             near_duplicates: on(self.near_duplicates),
             people: self.people.clone().filter(|p| !p.is_empty()),
             tags: self.tags.clone().filter(|t| !t.is_empty()),
+            kinds: self.kinds.as_ref().and_then(|kinds| {
+                // In the fixed order, once each; none or every kind is no filter.
+                let kept: Vec<KindFilter> = KindFilter::ALL
+                    .into_iter()
+                    .filter(|k| kinds.contains(k))
+                    .collect();
+                (!kept.is_empty() && kept.len() < KindFilter::ALL.len()).then_some(kept)
+            }),
+            formats: self.formats.as_ref().and_then(|formats| {
+                // Registry order, once each; an id the registry does not know
+                // (from another Owlbum) is dropped.
+                let kept: Vec<String> = crate::media::FORMATS
+                    .iter()
+                    .filter(|f| formats.iter().any(|w| w == f.id))
+                    .map(|f| f.id.to_owned())
+                    .collect();
+                (!kept.is_empty()).then_some(kept)
+            }),
             ..self.clone()
         }
     }
@@ -314,6 +362,30 @@ pub struct FolderFacet {
     pub count: u32,
 }
 
+/// Facet counts for the kinds of the media type filter.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct KindFacets {
+    /// Still pictures.
+    pub still: u32,
+    /// Animated pictures.
+    pub animated: u32,
+    /// RAW files.
+    pub raw: u32,
+    /// Videos.
+    pub video: u32,
+}
+
+/// The facet count of one file format.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
+pub struct FormatFacet {
+    /// The media format registry's id.
+    pub format: String,
+    /// The registry's label, such as "PNG".
+    pub label: String,
+    /// Photos.
+    pub count: u32,
+}
+
 /// The counts beside the filter panel's options.
 #[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct Facets {
@@ -333,6 +405,10 @@ pub struct Facets {
     pub low_quality: u32,
     /// Near-duplicates.
     pub near_duplicates: u32,
+    /// The kinds of photo.
+    pub kinds: KindFacets,
+    /// The formats that photos in the scope have, in registry order.
+    pub formats: Vec<FormatFacet>,
 }
 
 /// What `query_run` answers.

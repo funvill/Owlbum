@@ -266,6 +266,15 @@ pub fn format_by_id(id: &str) -> Option<&'static MediaFormat> {
     FORMATS.iter().find(|f| f.id == id)
 }
 
+/// The place of the format with that id in [`FORMATS`], as the album
+/// index keeps it.
+pub fn format_index(id: &str) -> Option<u8> {
+    FORMATS
+        .iter()
+        .position(|f| f.id == id)
+        .and_then(|i| u8::try_from(i).ok())
+}
+
 /// The row of the unsupported table for the name's extension.
 pub fn unsupported_of(name: &str) -> Option<&'static UnsupportedFormat> {
     let ext = extension_of(name);

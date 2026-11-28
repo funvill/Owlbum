@@ -417,6 +417,14 @@ The panel is a popover that drops from the Filters button, its right edge on the
 
 ```text
                                 +--------------------------------------------------------------+
+                                | PHOTO                TYPE                 WHEN    WHERE      |
+                                | (as below)           [x] Stills (1,900)   ...     ...        |
+                                |                      [x] Animated (12)                       |
+                                |                      [x] RAW (180)                           |
+                                |                      [x] Videos (48)                         |
+                                |                      Only these formats                      |
+                                |                      [ ] JPEG (1,880) [ ] PNG (20) ...       |
+                                |                                                              |
                                 | PHOTO                WHEN                 WHERE              |
                                 | Stars                From                 Folder             |
                                 | [All            v]   [ 2024-06-01 ]       [All folders    v] |
@@ -438,7 +446,7 @@ The panel is a popover that drops from the Filters button, its right edge on the
         (select options are drawn open here only to show the counts; they are ordinary selects)
 ```
 
-- **Groups**, in order: Photo, When, Where, Content, Quality. Legends are small, upper case, in `--muted`.
+- **Groups**, in order: Photo, Type, When, Where, Content, Quality. Type holds the kinds (a labelled group "Kinds shown") and the formats (a labelled group "Only these formats"; "No formats to list yet." before the counts arrive). Legends are small, upper case, in `--muted`.
 - **Folder** is shown only when the open scope has photos in two or more folders.
 - **Content** shows the active keyword, object and person chips, each with a ×. With none it shows the note "Pick a keyword under What's in it, or type tag:word in the search box."
 - **From** cannot be set later than To, and To cannot be set earlier than From.
@@ -478,12 +486,15 @@ One table in `owlbum-core` drives the panel's contents, the chips, the "Filters 
 | `tags` | Content | chips only | the keyword or object label | Every listed tag is present: a keyword tag equals one of the photo's keywords, an object tag equals one of its object labels. The lookup is the `photo_labels` table, whose labels are lower case; the typed value is lower-cased and must equal a whole label. |
 | `low_quality` | Quality | checkbox **Low quality** | "Low quality" | At least one quality flag is set. |
 | `near_duplicates` | Quality | checkbox **Near-duplicates** | "Near-duplicates" | The photo is in a burst. |
+| `kinds` | Type | a checkbox per kind, all ticked by default: **Stills**, **Animated**, **RAW**, **Videos** | One chip: "No videos" ("No stills", "No animated", "No RAW") when one kind is left out, else the kinds shown, "Stills, RAW" | The photo's kind is in the list. A photo's kind is `raw` or `video` from `photos.kind`; a picture of kind `image` is `animated` when it has a length (`duration_ms`), else `still`. Every kind ticked is no filter; the last ticked kind cannot be unticked. |
+| `formats` | Type | a checkbox per file format that a photo in the scope has, none ticked by default, under "Only these formats" | One chip per format: the registry's label ("PNG") | The photo's format (`photos.format`, a media format registry id) is in the list. The formats and their labels come from the registry through the facets, never from a list in the page. An id the registry does not know is dropped. |
 | search text | (none) | the search box | no chip | See [Text search](#text-search). |
 
 - A photo passes when it passes every filter that is on.
 - **"Is anything filtered"** is true when any filter is on, including search text of the minimum length.
 - **"Filters · N"** counts the filters above that are on and have a panel group. From and To count as one. Each person and each tag chip counts as one. Search text is not counted.
 - **The folder list** is the distinct folders of the photos in the open scope, with the top folder first and the rest in the natural order. Folder values are paths relative to the album root, so a saved filter still means the same folder when the album is opened at a different scope.
+- **The media type filter is new** (owner's feedback, #165): "no videos" is every kind but Videos; "only PNGs" is the PNG format alone. Kinds and formats combine with each other and with every other filter like any two filters.
 - **The `people` filter and the `person:` query word are new.** The old program could only ask "has anyone". They cost nothing extra, because people now have their own table.
 - **Tag matching is fixed.** The old program compared keywords case-sensitively while lower-casing what was typed, so a keyword with a capital letter could never be matched by typing.
 - **Lifetime.** The filter and the search text are saved in the album's session and restored when the album is reopened. A saved filter may come from a newer or older Owlbum: unknown fields are ignored, a field with a value that is not allowed is dropped, and a folder that no longer exists is dropped.
@@ -519,6 +530,9 @@ value  := '"' chars [ '"' ]  |  chars      a leading '"' is removed, and a trail
 | `tag` | any text that is not blank | adds a keyword tag | `try tag:<word>` |
 | `object` | any text that is not blank | adds an object tag | `try object:<word>` |
 | `person` | a name that is in the album | adds a person | `no person named {value}` |
+| `kind` | `still`, `animated`, `raw`, `video` (also `stills`, `videos`) | `kinds`: only that kind; several `kind:` words in one box add up | `try kind:still, animated, raw or video` |
+| `no` | the same values as `kind` | `kinds`: every kind shown so far but that one, so `no:video` is "No videos". Leaving out the last kind is a bad value. | `try kind:still, animated, raw or video` |
+| `format` | a format's registry id, one of its extensions (with or without the dot) or its label, in any case: `format:png`, `format:.jpg`, `format:jpeg` | adds the format to `formats` | `no format named {value}` |
 
 Rules for values:
 
@@ -589,6 +603,8 @@ The query is re-run 200 ms after the last change to the search text, and at once
 | `from:2024-06-01 to:2024-06-30 ` | One chip "2024-06-01 → 2024-06-30". |
 | `star:maybe lake` then Enter | No chip. The hint line reads `"star:maybe" isn't a filter: try star:yes or star:no`. Search text `star:maybe lake`. |
 | `folder:nowhere ` | No chip. `"folder:nowhere" isn't a filter: no folder named nowhere`. |
+| `no:video ` | Chip "No videos". |
+| `format:png ` | Chip "PNG": only PNG files. |
 | `star:yes shape:por` | Chip "Starred"; the box holds `shape:por`; no search text yet. |
 
 ## Text search
@@ -669,6 +685,8 @@ interface Filter {
   tags?: TagFilter[];
   low_quality?: true;
   near_duplicates?: true;
+  kinds?: ('still' | 'animated' | 'raw' | 'video')[];  // the kinds shown; absent or all four is every kind
+  formats?: string[];           // media format registry ids shown; absent is every format
 }
 
 interface TagFilter { kind: 'keyword' | 'object'; value: string }
@@ -733,6 +751,8 @@ interface Facets {
   has_people: number;
   low_quality: number;
   near_duplicates: number;
+  kinds: { still: number; animated: number; raw: number; video: number };
+  formats: { format: string; label: string; count: number }[];  // formats a photo in the scope has, registry order
 }
 ```
 

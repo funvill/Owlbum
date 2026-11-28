@@ -5,6 +5,8 @@ import type { AppError } from "../bindings/AppError";
 import type { Chip } from "../bindings/Chip";
 import type { Facets } from "../bindings/Facets";
 import type { Filter } from "../bindings/Filter";
+import type { KindFilter } from "../bindings/KindFilter";
+import { fakeFormats } from "./app";
 import type { FakePhoto } from "./query";
 
 const STAR = 1;
@@ -19,6 +21,27 @@ const LOW_QUALITY = 256;
 const NEAR_DUPLICATES = 512;
 /** Search text: no group, so a photo failing it counts in no facet. */
 const TEXT = 1024;
+const KIND = 2048;
+const FORMAT = 4096;
+
+const KINDS: KindFilter[] = ["still", "animated", "raw", "video"];
+
+/** The media type filter's kind of `p`, as Rust's `kind_of`. */
+function kindOf(p: FakePhoto): KindFilter {
+  if (p.kind === "raw" || p.kind === "video") return p.kind;
+  return p.duration_ms !== undefined && p.duration_ms !== null ? "animated" : "still";
+}
+
+/** The registry id of `p`'s format: the fake registry's first when the photo names none. */
+const formatOf = (p: FakePhoto) => p.format ?? fakeFormats[0]!.id;
+
+/** The media type chip's text, as Rust's `chip::kinds`. */
+function kindsText(kinds: KindFilter[]): string {
+  const plural: Record<KindFilter, string> = { still: "Stills", animated: "Animated", raw: "RAW", video: "Videos" };
+  const out = KINDS.filter((k) => !kinds.includes(k));
+  if (out.length === 1) return out[0] === "raw" ? "No RAW" : `No ${plural[out[0]!].toLowerCase()}`;
+  return kinds.map((k) => plural[k]).join(", ");
+}
 
 export function folderOf(relPath: string): string {
   const at = relPath.lastIndexOf("/");
@@ -32,6 +55,11 @@ export function normalised(filter: Filter): Filter {
     if (value === undefined || value === null || value === false) continue;
     if (Array.isArray(value) && value.length === 0) continue;
     (out as Record<string, unknown>)[key] = value;
+  }
+  if (out.kinds !== undefined) {
+    const kinds = KINDS.filter((k) => out.kinds!.includes(k));
+    if (kinds.length === KINDS.length) delete out.kinds;
+    else out.kinds = kinds;
   }
   return out;
 }
@@ -94,6 +122,8 @@ function fails(p: FakePhoto, filter: Filter, text: Set<number> | null): number {
   if (filter.low_quality) fail(LOW_QUALITY, p.low_quality ?? false);
   if (filter.near_duplicates) fail(NEAR_DUPLICATES, p.burst ?? p.burst_id !== undefined);
   if (text !== null) fail(TEXT, text.has(p.id));
+  if (filter.kinds !== undefined) fail(KIND, filter.kinds.includes(kindOf(p)));
+  if (filter.formats !== undefined) fail(FORMAT, filter.formats.includes(formatOf(p)));
   return mask;
 }
 
@@ -119,8 +149,11 @@ export function pass(
     has_people: 0,
     low_quality: 0,
     near_duplicates: 0,
+    kinds: { still: 0, animated: 0, raw: 0, video: 0 },
+    formats: [],
   };
   const folders = new Map<string, number>();
+  const formats = new Map<string, number>();
   for (const p of photos) {
     if (filter.hidden !== undefined || !(p.hidden ?? false)) total += 1;
     const mask = fails(p, filter, text);
@@ -140,7 +173,12 @@ export function pass(
     if (counts(HAS_PEOPLE) && hasPeople(p)) f.has_people += 1;
     if (counts(LOW_QUALITY) && (p.low_quality ?? false)) f.low_quality += 1;
     if (counts(NEAR_DUPLICATES) && (p.burst ?? p.burst_id !== undefined)) f.near_duplicates += 1;
+    if (counts(KIND)) f.kinds[kindOf(p)] += 1;
+    formats.set(formatOf(p), (formats.get(formatOf(p)) ?? 0) + (counts(FORMAT) ? 1 : 0));
   }
+  f.formats = fakeFormats
+    .filter((x) => formats.has(x.id))
+    .map((x) => ({ format: x.id, label: x.label, count: formats.get(x.id)! }));
   f.folders = [...folders]
     .map(([folder, count]) => ({ folder, label: folder === scope ? "Top folder" : folder, count }))
     .sort((a, b) => Number(a.folder !== scope) - Number(b.folder !== scope) || (a.folder < b.folder ? -1 : 1));
@@ -179,5 +217,9 @@ export function chips(filter: Filter, scope: string): Chip[] {
   (filter.tags ?? []).forEach((t, i) => chip(`tag:${t.kind}:${t.value}`, t.value, (f) => f.tags?.splice(i, 1)));
   if (filter.low_quality) chip("low_quality", "Low quality", (f) => delete f.low_quality);
   if (filter.near_duplicates) chip("near_duplicates", "Near-duplicates", (f) => delete f.near_duplicates);
+  if (filter.kinds !== undefined) chip("kinds", kindsText(filter.kinds), (f) => delete f.kinds);
+  (filter.formats ?? []).forEach((id, i) =>
+    chip(`format:${id}`, fakeFormats.find((x) => x.id === id)?.label ?? id, (f) => f.formats?.splice(i, 1)),
+  );
   return out;
 }

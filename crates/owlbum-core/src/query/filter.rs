@@ -19,11 +19,13 @@ use std::cmp::Ordering;
 use std::collections::HashSet;
 
 use super::shape::{
-    Chip, Facets, Filter, FolderFacet, HiddenFilter, ShapeFilter, StarFilter, TagFilter, TagKind,
+    Chip, Facets, Filter, FolderFacet, FormatFacet, HiddenFilter, KindFilter, ShapeFilter,
+    StarFilter, TagFilter, TagKind,
 };
 use crate::album::{Album, sqlite_error};
 use crate::error::{AppError, AppResult, ErrorCode};
-use crate::index::{IndexView, Photo, parse_date};
+use crate::index::{IndexView, Kind, Photo, parse_date};
+use crate::media::FORMATS;
 use crate::scan::order::natural_cmp;
 use crate::text;
 
@@ -40,6 +42,20 @@ const LOW_QUALITY: u16 = 1 << 8;
 const NEAR_DUPLICATES: u16 = 1 << 9;
 /// Search text: no group, so a photo failing it counts in no facet.
 const TEXT: u16 = 1 << 10;
+/// The kinds of the media type filter.
+const KIND: u16 = 1 << 11;
+/// The formats of the media type filter.
+const FORMAT: u16 = 1 << 12;
+
+/// The media type filter's kind of `p` (owner's feedback, #165).
+pub(super) fn kind_of(p: &Photo) -> KindFilter {
+    match p.kind {
+        Kind::Raw => KindFilter::Raw,
+        Kind::Video => KindFilter::Video,
+        Kind::Image if p.animated() => KindFilter::Animated,
+        Kind::Image => KindFilter::Still,
+    }
+}
 
 /// The photo ids of the people and tags of a filter: those with every
 /// listed person and every listed tag. None when neither is on.
@@ -159,6 +175,10 @@ pub(super) struct Matcher<'a> {
     text: Option<&'a HashSet<u32>>,
     low_quality: bool,
     near_duplicates: bool,
+    /// The kinds shown; None shows every kind.
+    kinds: Option<Vec<KindFilter>>,
+    /// Per registry format, whether it is shown; None shows every format.
+    formats: Option<Vec<bool>>,
 }
 
 impl<'a> Matcher<'a> {
@@ -183,7 +203,15 @@ impl<'a> Matcher<'a> {
             tags: _,
             low_quality,
             near_duplicates,
+            kinds,
+            formats,
         } = filter;
+        let formats = formats.as_ref().map(|want| {
+            FORMATS
+                .iter()
+                .map(|f| want.iter().any(|w| w == f.id))
+                .collect()
+        });
         let from_day = from.as_deref().and_then(day_of);
         let to_day = to.as_deref().and_then(day_of);
         let days = (from_day.is_some() || to_day.is_some())
@@ -207,6 +235,8 @@ impl<'a> Matcher<'a> {
             text: text.as_ref(),
             low_quality: low_quality.unwrap_or(false),
             near_duplicates: near_duplicates.unwrap_or(false),
+            kinds: kinds.clone(),
+            formats,
         }
     }
 
@@ -260,6 +290,15 @@ impl<'a> Matcher<'a> {
         if self.near_duplicates {
             fail(NEAR_DUPLICATES, p.derived.burst.is_some());
         }
+        if let Some(kinds) = &self.kinds {
+            fail(KIND, kinds.contains(&kind_of(p)));
+        }
+        if let Some(formats) = &self.formats {
+            fail(
+                FORMAT,
+                formats.get(p.format as usize).copied().unwrap_or(false),
+            );
+        }
         fails
     }
 }
@@ -301,6 +340,12 @@ pub(super) fn pass<'v>(
     let mut f = Facets::default();
     let mut folders = if want_facets {
         vec![None::<u32>; view.folder_count()]
+    } else {
+        Vec::new()
+    };
+    // Per registry format: None while no photo in the scope has it.
+    let mut formats = if want_facets {
+        vec![None::<u32>; FORMATS.len()]
     } else {
         Vec::new()
     };
@@ -353,9 +398,35 @@ pub(super) fn pass<'v>(
         if counts(NEAR_DUPLICATES) && p.derived.burst.is_some() {
             f.near_duplicates += 1;
         }
+        if counts(KIND) {
+            match kind_of(p) {
+                KindFilter::Still => f.kinds.still += 1,
+                KindFilter::Animated => f.kinds.animated += 1,
+                KindFilter::Raw => f.kinds.raw += 1,
+                KindFilter::Video => f.kinds.video += 1,
+            }
+        }
+        if let Some(n) = formats.get_mut(p.format as usize) {
+            // Listed whatever it counts: a photo in the scope has it.
+            let n = n.get_or_insert(0);
+            if counts(FORMAT) {
+                *n += 1;
+            }
+        }
     }
     let facets = want_facets.then(|| {
         f.folders = folder_facets(view, &folders);
+        f.formats = FORMATS
+            .iter()
+            .zip(&formats)
+            .filter_map(|(format, n)| {
+                Some(FormatFacet {
+                    format: format.id.to_owned(),
+                    label: format.label.to_owned(),
+                    count: (*n)?,
+                })
+            })
+            .collect();
         f
     });
     Passed {
@@ -415,6 +486,8 @@ pub(super) fn chips(filter: &Filter, top: &str) -> Vec<Chip> {
         tags,
         low_quality,
         near_duplicates,
+        kinds,
+        formats,
     } = filter;
     use text::query::chip as t;
     let mut chips = Vec::new();
@@ -503,6 +576,17 @@ pub(super) fn chips(filter: &Filter, top: &str) -> Vec<Chip> {
     if near_duplicates.is_some() {
         chip("near_duplicates".into(), t::NEAR_DUPLICATES.into(), &|f| {
             f.near_duplicates = None;
+        });
+    }
+    if let Some(kinds) = kinds {
+        chip("kinds".into(), t::kinds(kinds), &|f| f.kinds = None);
+    }
+    for (i, id) in formats.iter().flatten().enumerate() {
+        let label = crate::media::format_by_id(id).map_or(id.as_str(), |f| f.label);
+        chip(format!("format:{id}"), label.to_owned(), &|f| {
+            if let Some(list) = f.formats.as_mut() {
+                list.remove(i);
+            }
         });
     }
     chips

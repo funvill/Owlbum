@@ -62,7 +62,8 @@ use crate::scan::natural_cmp_text;
 use crate::text;
 
 pub use record::{
-    Analysis, ColourBucket, Derived, Kind, NO_DATE, Photo, PhotoFacts, parse_date, quality,
+    Analysis, ColourBucket, Derived, Kind, NO_DATE, NO_FORMAT, Photo, PhotoFacts, parse_date,
+    quality,
 };
 
 /// The photo ids a write changed, reported by the write job so the album
@@ -126,7 +127,8 @@ struct State {
 const SELECT: &str = "SELECT p.id, p.rel_dir, p.file_name, p.kind, p.captured_at, p.date_override,
         p.star, p.hidden, p.score_adjust, p.width, p.height,
         p.gps_lat, p.gps_lon, p.loc_lat, p.loc_lon, p.edit IS NOT NULL, p.analysis,
-        (SELECT count(*) FROM photo_people pp WHERE pp.photo_id = p.id)
+        (SELECT count(*) FROM photo_people pp WHERE pp.photo_id = p.id),
+        p.format, p.duration_ms IS NOT NULL
    FROM photos p
   WHERE p.missing = 0 AND p.scan_error IS NULL
     AND (?1 = '' OR p.rel_dir = ?1 OR substr(p.rel_dir, 1, length(?1) + 1) = ?1 || '/')";
@@ -777,6 +779,8 @@ fn facts_from_row(row: &Row<'_>) -> rusqlite::Result<PhotoFacts> {
         has_edit: row.get::<_, i64>(15)? != 0,
         analysis: text(16)?,
         people: u32::try_from(row.get::<_, i64>(17)?).unwrap_or(u32::MAX),
+        format: text(18)?.unwrap_or_default(),
+        has_duration: row.get::<_, i64>(19)? != 0,
     })
 }
 

@@ -143,6 +143,17 @@
   gap: var(--space-1);
 }
 
+.ow-filter-panel__list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.ow-filter-panel__sublabel {
+  font: var(--text-xs);
+  color: var(--muted);
+}
+
 .ow-filter-panel__note {
   margin: 0;
   font: var(--text-sm);

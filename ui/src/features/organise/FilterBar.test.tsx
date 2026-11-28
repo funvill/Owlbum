@@ -3,6 +3,7 @@ import { act, fireEvent, render, screen, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { setApi } from "../../api";
 import { createFakeApi, type FakeApi } from "../../api/fake";
+import { fakeFormats } from "../../api/fake/app";
 import { createQueryFake } from "../../api/fake/query";
 import { defaultQuery } from "../../api/query";
 import { seriousFindings } from "../../test/axe";
@@ -114,6 +115,46 @@ describe("FilterBar", () => {
     expect(within(panel).getByText(/Pick a keyword/)).toBeInTheDocument();
     // The grid's keys do nothing inside the panel.
     expect(focusOf(stars)).toBe("dialog");
+    expect(await seriousFindings(container)).toEqual([]);
+  });
+
+  it("filters by media type: no videos, or one format alone, from the registry's formats", async () => {
+    const second = fakeFormats[1]!;
+    fake = createFakeApi(
+      createQueryFake([
+        { id: 1, rel_path: "one", date: "2024-01-01T00:00:00" },
+        { id: 2, rel_path: "two", date: "2024-01-02T00:00:00", kind: "video", duration_ms: 4000 },
+        { id: 3, rel_path: "three", date: "2024-01-03T00:00:00", format: second.id },
+      ]).handlers,
+    );
+    setApi(fake);
+    await grid().start();
+    const { container } = render(<FilterBar />);
+    await userEvent.click(screen.getByRole("button", { name: "Filters" }));
+    const kinds = screen.getByRole("group", { name: "Kinds shown" });
+    const videos = await within(kinds).findByRole("checkbox", { name: "Videos (1)" });
+    expect(within(kinds).getByRole("checkbox", { name: "Stills (2)" })).toBeChecked();
+    expect(videos).toBeChecked();
+    const formats = screen.getByRole("group", { name: "Only these formats" });
+    expect(within(formats).getAllByRole("checkbox")).toHaveLength(2);
+    expect(within(formats).getByRole("checkbox", { name: `${fakeFormats[0]!.label} (2)` })).not.toBeChecked();
+
+    await userEvent.click(videos);
+    await vi.waitFor(() =>
+      expect(runs().at(-1)!.args).toMatchObject({ query: { filter: { kinds: ["still", "animated", "raw"] } } }),
+    );
+    const row = await screen.findByRole("region", { name: "Active filters" });
+    expect(within(row).getByText("No videos")).toBeInTheDocument();
+    expect(within(row).getByText("Showing 2 of 3")).toBeInTheDocument();
+
+    await userEvent.click(within(formats).getByRole("checkbox", { name: `${second.label} (1)` }));
+    await vi.waitFor(() =>
+      expect(runs().at(-1)!.args).toMatchObject({
+        query: { filter: { kinds: ["still", "animated", "raw"], formats: [second.id] } },
+      }),
+    );
+    expect(await within(row).findByText(second.label)).toBeInTheDocument();
+    expect(within(row).getByText("Showing 1 of 3")).toBeInTheDocument();
     expect(await seriousFindings(container)).toEqual([]);
   });
 

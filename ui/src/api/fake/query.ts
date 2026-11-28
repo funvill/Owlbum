@@ -31,6 +31,8 @@ export interface FakePhoto {
   hidden?: boolean;
   star?: boolean;
   kind?: MediaKind;
+  /** The media format registry's id; the fake registry's first when absent. */
+  format?: string;
   width?: number;
   height?: number;
   duration_ms?: number | null;

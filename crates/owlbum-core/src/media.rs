@@ -30,6 +30,6 @@ pub use handler::{
 };
 pub use registry::{
     Capabilities, FORMATS, FormatInfo, Identified, MediaFormat, MediaKind, SaveFormat, UNSUPPORTED,
-    UnsupportedFormat, extension_of, format_by_id, format_of, formats, identify, is_supported,
-    unsupported_of,
+    UnsupportedFormat, extension_of, format_by_id, format_index, format_of, formats, identify,
+    is_supported, unsupported_of,
 };

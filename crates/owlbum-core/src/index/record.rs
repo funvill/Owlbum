@@ -184,6 +184,10 @@ const HIDDEN: u8 = 2;
 const HAS_LOCATION: u8 = 4;
 const HAS_EDIT: u8 = 8;
 const ANALYSED: u8 = 16;
+const ANIMATED: u8 = 32;
+
+/// [`Photo::format`] when `photos.format` is not a registry id.
+pub const NO_FORMAT: u8 = u8::MAX;
 
 /// One photo in the album index.
 #[derive(Debug, Clone, Copy, PartialEq)]
@@ -210,6 +214,9 @@ pub struct Photo {
     pub people: u16,
     /// `kind`.
     pub kind: Kind,
+    /// `format`, as its place in the media format registry
+    /// ([`crate::media::FORMATS`]); [`NO_FORMAT`] when it is not one.
+    pub format: u8,
     flags: u8,
     pub(super) name_at: u32,
     pub(super) name_len: u16,
@@ -238,6 +245,11 @@ impl Photo {
     /// Has a place: a typed location or GPS.
     pub fn has_location(&self) -> bool {
         self.flags & HAS_LOCATION != 0
+    }
+
+    /// An animated picture: kind image with a `duration_ms`.
+    pub fn animated(&self) -> bool {
+        self.flags & ANIMATED != 0
     }
 
     /// Has a stored edit (`photos.edit` is not NULL).
@@ -301,6 +313,10 @@ pub struct PhotoFacts {
     pub analysis: Option<String>,
     /// The number of `photo_people` rows for the photo.
     pub people: u32,
+    /// `format`: the media format registry's id.
+    pub format: String,
+    /// `duration_ms IS NOT NULL`: on kind `image`, an animated picture.
+    pub has_duration: bool,
 }
 
 /// Reads a wall-clock date `YYYY-MM-DDTHH:MM:SS` (a space may stand for the
@@ -356,6 +372,7 @@ pub(crate) fn build(facts: &PhotoFacts, folder: u32) -> Option<Photo> {
         (facts.gps.is_some() || facts.loc.is_some(), HAS_LOCATION),
         (facts.has_edit, HAS_EDIT),
         (analysis.is_some(), ANALYSED),
+        (facts.has_duration && facts.kind == "image", ANIMATED),
     ] {
         if on {
             flags |= bit;
@@ -371,6 +388,7 @@ pub(crate) fn build(facts: &PhotoFacts, folder: u32) -> Option<Photo> {
         height: clamp_u32(facts.height),
         people: u16::try_from(facts.people).unwrap_or(u16::MAX),
         kind: Kind::from_db(&facts.kind),
+        format: crate::media::format_index(&facts.format).unwrap_or(NO_FORMAT),
         flags,
         name_at: 0,
         name_len: 0,

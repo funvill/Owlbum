@@ -11,7 +11,7 @@ use ts_rs::TS;
 
 use super::filter::day_of;
 use super::search::words;
-use super::shape::{Filter, HiddenFilter, ShapeFilter, StarFilter, TagFilter, TagKind};
+use super::shape::{Filter, HiddenFilter, KindFilter, ShapeFilter, StarFilter, TagFilter, TagKind};
 use crate::album::{Album, sqlite_error};
 use crate::error::AppResult;
 use crate::text;
@@ -47,9 +47,43 @@ pub trait Names {
 }
 
 /// The known keys, in lower case.
-const KEYS: [&str; 11] = [
+const KEYS: [&str; 14] = [
     "star", "shape", "hidden", "from", "to", "folder", "has", "is", "tag", "object", "person",
+    "kind", "no", "format",
 ];
+
+/// The kind a `kind:` or `no:` value names, singular or plural, in any case.
+fn kind_named(value: &str) -> Option<KindFilter> {
+    let v = value.trim().to_lowercase();
+    let v = v
+        .strip_suffix('s')
+        .filter(|s| *s == "still" || *s == "video")
+        .unwrap_or(&v);
+    match v {
+        "still" => Some(KindFilter::Still),
+        "animated" => Some(KindFilter::Animated),
+        "raw" => Some(KindFilter::Raw),
+        "video" => Some(KindFilter::Video),
+        _ => None,
+    }
+}
+
+/// The registry id of the format a `format:` value names: its id, one of
+/// its extensions (with or without the dot) or its label, in any case.
+fn format_named(value: &str) -> Option<&'static str> {
+    let v = value.trim();
+    let v = v.strip_prefix('.').unwrap_or(v);
+    crate::media::FORMATS
+        .iter()
+        .find(|f| {
+            f.id.eq_ignore_ascii_case(v)
+                || f.label.eq_ignore_ascii_case(v)
+                || f.extensions
+                    .iter()
+                    .any(|e| e.trim_start_matches('.').eq_ignore_ascii_case(v))
+        })
+        .map(|f| f.id)
+}
 
 /// The known key of `word` and its value with the quotes taken off, or
 /// None when the word is plain text.
@@ -94,6 +128,8 @@ struct Parse<'a> {
     filter: &'a Filter,
     names: &'a mut dyn Names,
     out: ParsedBox,
+    /// A `kind:` word was taken: the next one adds its kind to the list.
+    kind_word: bool,
 }
 
 impl Parse<'_> {
@@ -159,6 +195,45 @@ impl Parse<'_> {
                 0 => set.low_quality = Some(true),
                 _ => set.near_duplicates = Some(true),
             },
+            "kind" => {
+                let kind = kind_named(value).ok_or_else(|| hint::KIND.to_owned())?;
+                let mut kinds = if self.kind_word {
+                    set.kinds.clone().unwrap_or_default()
+                } else {
+                    Vec::new()
+                };
+                if !kinds.contains(&kind) {
+                    kinds.push(kind);
+                }
+                kinds.sort_unstable();
+                set.kinds = Some(kinds);
+                self.kind_word = true;
+            }
+            "no" => {
+                let kind = kind_named(value).ok_or_else(|| hint::KIND.to_owned())?;
+                let had = set
+                    .kinds
+                    .clone()
+                    .or_else(|| self.filter.kinds.clone())
+                    .unwrap_or_else(|| KindFilter::ALL.to_vec());
+                let kinds: Vec<KindFilter> = had.into_iter().filter(|k| *k != kind).collect();
+                if kinds.is_empty() {
+                    return Err(hint::KIND.to_owned());
+                }
+                set.kinds = Some(kinds);
+            }
+            "format" => {
+                let id = format_named(value).ok_or_else(|| hint::no_format(value))?;
+                let mut formats = set
+                    .formats
+                    .clone()
+                    .or_else(|| self.filter.formats.clone())
+                    .unwrap_or_default();
+                if !formats.iter().any(|f| f == id) {
+                    formats.push(id.to_owned());
+                }
+                set.formats = Some(formats);
+            }
             "tag" | "object" => {
                 let (kind, bad) = if key == "tag" {
                     (TagKind::Keyword, hint::TAG)
@@ -229,6 +304,7 @@ pub fn parse(text: &str, last: bool, filter: &Filter, names: &mut dyn Names) -> 
         filter,
         names,
         out: ParsedBox::default(),
+        kind_word: false,
     };
     let mut kept: Vec<&str> = Vec::new();
     for &word in finished {
@@ -357,6 +433,50 @@ mod tests {
 
     fn run(text: &str, last: bool) -> ParsedBox {
         parse(text, last, &Filter::default(), &mut Fake { asked: 0 })
+    }
+
+    #[test]
+    fn media_type_words_set_kinds_and_formats() {
+        let r = run("kind:video", true);
+        assert_eq!(r.set.kinds, Some(vec![KindFilter::Video]));
+        let r = run("KIND:Videos kind:raw", true);
+        assert_eq!(r.set.kinds, Some(vec![KindFilter::Raw, KindFilter::Video]));
+        let r = run("no:videos", true);
+        assert_eq!(
+            r.set.kinds,
+            Some(vec![
+                KindFilter::Still,
+                KindFilter::Animated,
+                KindFilter::Raw
+            ])
+        );
+        // `no:` takes a kind away from the filter the page holds.
+        let held = Filter {
+            kinds: Some(vec![KindFilter::Still, KindFilter::Video]),
+            ..Filter::default()
+        };
+        let r = parse("no:video", true, &held, &mut Fake { asked: 0 });
+        assert_eq!(r.set.kinds, Some(vec![KindFilter::Still]));
+        // Leaving out every kind would show nothing.
+        let only = Filter {
+            kinds: Some(vec![KindFilter::Still]),
+            ..Filter::default()
+        };
+        let r = parse("no:still", true, &only, &mut Fake { asked: 0 });
+        assert!(!r.taken);
+        assert!(r.error.is_some());
+
+        let r = run("format:PNG", true);
+        assert_eq!(r.set.formats, Some(vec!["png".to_owned()]));
+        let r = run("format:.png beach", true);
+        assert_eq!(r.set.formats, Some(vec!["png".to_owned()]));
+        assert_eq!(r.search.as_deref(), Some("beach"));
+        let r = run("format:nope kind:cartoon", true);
+        assert!(!r.taken);
+        assert_eq!(
+            r.error.as_deref(),
+            Some(r#""format:nope" isn't a filter: no format named nope"#)
+        );
     }
 
     fn tag(kind: TagKind, value: &str) -> TagFilter {

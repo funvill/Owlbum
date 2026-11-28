@@ -41,7 +41,19 @@ export const organiseText = {
   /** The filter panel (docs/05-organising.md, "The filter panel"). */
   panel: {
     label: "Filters",
-    groups: { photo: "Photo", when: "When", where: "Where", content: "Content", quality: "Quality" },
+    groups: {
+      photo: "Photo",
+      type: "Type",
+      when: "When",
+      where: "Where",
+      content: "Content",
+      quality: "Quality",
+    },
+    /** The media type filter's kinds (owner's feedback, issue 165). */
+    kinds: { still: "Stills", animated: "Animated", raw: "RAW", video: "Videos" },
+    kindsLabel: "Kinds shown",
+    formatsLabel: "Only these formats",
+    noFormats: "No formats to list yet.",
     stars: "Stars",
     starOptions: { all: "All", yes: "Starred", no: "Not starred" },
     shape: "Shape",
@@ -77,8 +89,6 @@ export const organiseText = {
   },
   /** The score toast when no target changed (docs/05-organising.md, "Nudges"). */
   nudgeLimit: "Can't nudge any further",
-  /** "4 photos" in the score toast. */
-  photos: (n: number) => (n === 1 ? "1 photo" : `${n} photos`),
   /** The undo toasts (docs/05-organising.md, "What `album_undo` does"). */
   undo: {
     nothing: "Nothing to undo",

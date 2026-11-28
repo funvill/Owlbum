@@ -102,7 +102,8 @@ fn read_with_handler(path: &Path, format: &str) -> Vec<ExifField> {
             };
             ExifField {
                 group: group.to_owned(),
-                name: ExifTag::from_code_in(kind, *code).map_or_else(|| code_name(*code), |t| t.name().to_owned()),
+                name: ExifTag::from_code_in(kind, *code)
+                    .map_or_else(|| code_name(*code), |t| t.name().to_owned()),
                 value: cut(value_text(value)),
             }
         })
@@ -138,11 +139,19 @@ fn list<T>(items: &[T], one: impl Fn(&T) -> String) -> String {
 /// Bytes as text when they are printable ASCII (after any trailing NULs),
 /// else as hex, at most [`MAX_BYTES`] of them.
 fn bytes_text(bytes: &[u8]) -> String {
-    let trimmed = bytes.iter().rposition(|&b| b != 0).map_or(&bytes[..0], |end| &bytes[..=end]);
+    let trimmed = bytes
+        .iter()
+        .rposition(|&b| b != 0)
+        .map_or(&bytes[..0], |end| &bytes[..=end]);
     if !trimmed.is_empty() && trimmed.iter().all(|&b| b == b' ' || b.is_ascii_graphic()) {
         return String::from_utf8_lossy(trimmed).into_owned();
     }
-    let shown = bytes.iter().take(MAX_BYTES).map(|b| format!("{b:02X}")).collect::<Vec<_>>().join(" ");
+    let shown = bytes
+        .iter()
+        .take(MAX_BYTES)
+        .map(|b| format!("{b:02X}"))
+        .collect::<Vec<_>>()
+        .join(" ");
     if bytes.len() > MAX_BYTES {
         format!("{shown} … ({} bytes)", bytes.len())
     } else {
@@ -171,7 +180,13 @@ fn value_text(value: &Value) -> String {
     match value {
         Value::Text(s) => s.trim().to_owned(),
         Value::Ints(v) => list(v, i64::to_string),
-        Value::Ratios(v) => list(v, |&(n, d)| if d == 1 { n.to_string() } else { format!("{n}/{d}") }),
+        Value::Ratios(v) => list(v, |&(n, d)| {
+            if d == 1 {
+                n.to_string()
+            } else {
+                format!("{n}/{d}")
+            }
+        }),
     }
 }
 

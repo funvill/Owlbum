@@ -479,6 +479,8 @@ fn every_filter_field_has_a_chip() {
         tags: Some(vec![tag(TagKind::Keyword, "lake")]),
         low_quality: Some(true),
         near_duplicates: Some(true),
+        kinds: Some(vec![KindFilter::Still, KindFilter::Raw]),
+        formats: Some(vec!["png".into()]),
     };
     let fields = serde_json::to_value(&all).unwrap();
     let fields: Vec<&str> = fields
@@ -494,12 +496,13 @@ fn every_filter_field_has_a_chip() {
             "from" | "to" => "dates",
             "people" => "person:Ann",
             "tags" => "tag:keyword:lake",
+            "formats" => "format:png",
             other => other,
         };
         assert!(ids.contains(&id), "no chip for the {field} filter");
     }
     // A Filter with every field set answers as many chips as panel filters.
-    assert_eq!(r.panel_count, 11);
+    assert_eq!(r.panel_count, 13);
 }
 
 #[test]
@@ -602,4 +605,132 @@ fn a_value_that_is_not_allowed_answers_bad_query() {
         code(engine.facets(&album, "q-gone")),
         ErrorCode::QueryExpired
     );
+}
+
+/// The filterable album with a media type each (owner's feedback, #165):
+/// a animated, b a still in the second format, c a still, d hidden, e a
+/// video, f a RAW file. The rest keep the first format the helper writes.
+fn typed(album: &Album) -> [i64; 6] {
+    let ids = filterable(album);
+    let [a, b, _, _, e, f] = ids;
+    change(
+        album,
+        &format!(
+            "UPDATE photos SET duration_ms = 1200 WHERE id = {a};
+             UPDATE photos SET format = 'png' WHERE id = {b};
+             UPDATE photos SET kind = 'video', duration_ms = 5000 WHERE id = {e};
+             UPDATE photos SET kind = 'raw' WHERE id = {f};"
+        ),
+        &ids,
+    );
+    ids
+}
+
+#[test]
+fn the_media_type_filter_keeps_kinds_and_formats() {
+    let tmp = tempfile::tempdir().unwrap();
+    let album = album(tmp.path());
+    let [a, b, c, _, e, f] = typed(&album);
+    let engine = QueryEngine::new();
+
+    // No videos: every kind but video.
+    let no_videos = filtered(Filter {
+        kinds: Some(vec![
+            KindFilter::Still,
+            KindFilter::Animated,
+            KindFilter::Raw,
+        ]),
+        ..Filter::default()
+    });
+    let r = run(&engine, &album, &no_videos);
+    let mut shown = tile_ids(&engine, &album, &r.token);
+    shown.sort_unstable();
+    assert_eq!(shown, vec![a, b, c, f]);
+    assert_eq!(r.chips.len(), 1);
+    assert_eq!(r.chips[0].text, "No videos");
+    assert_eq!(r.chips[0].remove, Filter::default());
+    assert_eq!(r.panel_count, 1);
+
+    // Only the second format.
+    let only = filtered(Filter {
+        formats: Some(vec!["png".into()]),
+        ..Filter::default()
+    });
+    let r = run(&engine, &album, &only);
+    assert_eq!(tile_ids(&engine, &album, &r.token), vec![b]);
+    assert_eq!(r.chips[0].id, "format:png");
+    assert_eq!(r.chips[0].text, "PNG");
+
+    // Kinds shown by name when more than one is left out; videos alone.
+    let r = run(
+        &engine,
+        &album,
+        &filtered(Filter {
+            kinds: Some(vec![KindFilter::Video]),
+            ..Filter::default()
+        }),
+    );
+    assert_eq!(tile_ids(&engine, &album, &r.token), vec![e]);
+    assert_eq!(r.chips[0].text, "Videos");
+}
+
+#[test]
+fn every_kind_or_an_unknown_format_is_no_filter() {
+    let all = Filter {
+        kinds: Some(KindFilter::ALL.to_vec()),
+        formats: Some(vec!["no-such-format".into()]),
+        ..Filter::default()
+    };
+    assert!(all.is_empty());
+    let twice = Filter {
+        kinds: Some(vec![
+            KindFilter::Video,
+            KindFilter::Still,
+            KindFilter::Video,
+        ]),
+        ..Filter::default()
+    };
+    assert_eq!(
+        twice.normalised().kinds,
+        Some(vec![KindFilter::Still, KindFilter::Video])
+    );
+}
+
+#[test]
+fn the_media_type_facets_count_kinds_and_list_the_formats_in_the_scope() {
+    let tmp = tempfile::tempdir().unwrap();
+    let album = album(tmp.path());
+    typed(&album);
+    let engine = QueryEngine::new();
+    let q = Query {
+        want_facets: true,
+        ..default_query()
+    };
+    let f = run(&engine, &album, &q).facets.unwrap();
+    // d is hidden, so it counts nowhere.
+    assert_eq!(
+        (f.kinds.still, f.kinds.animated, f.kinds.raw, f.kinds.video),
+        (2, 1, 1, 1)
+    );
+    assert_eq!(f.formats.len(), 2);
+    let second = f.formats.iter().find(|x| x.format == "png").unwrap();
+    assert_eq!((second.label.as_str(), second.count), ("PNG", 1));
+    assert_eq!(f.formats.iter().map(|x| x.count).sum::<u32>(), 5);
+
+    // With the format filter on, the kinds count only what passes it, and
+    // every format keeps its own count.
+    let q = Query {
+        want_facets: true,
+        filter: Filter {
+            formats: Some(vec!["png".into()]),
+            ..Filter::default()
+        },
+        ..default_query()
+    };
+    let f = run(&engine, &album, &q).facets.unwrap();
+    assert_eq!(
+        (f.kinds.still, f.kinds.animated, f.kinds.raw, f.kinds.video),
+        (1, 0, 0, 0)
+    );
+    assert_eq!(f.formats.iter().map(|x| x.count).sum::<u32>(), 5);
 }

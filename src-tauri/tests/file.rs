@@ -220,12 +220,11 @@ fn copy_paths_copies_every_path_in_order() {
 #[test]
 fn copy_text_puts_the_text_on_the_clipboard() {
     let f = fixture();
+    let text = "Photo\nTaken: 12 Jun 2024";
     let () = f
-        .call("file_copy_text", json!({ "content": "Photo
-Taken	12 Jun 2024" }))
+        .call("file_copy_text", json!({ "content": text }))
         .unwrap();
-    assert_eq!(f.fake.text.lock().unwrap().as_deref(), Some("Photo
-Taken	12 Jun 2024"));
+    assert_eq!(f.fake.text.lock().unwrap().as_deref(), Some(text));
 }
 
 #[test]

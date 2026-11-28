@@ -32,9 +32,9 @@ pub use keep::{settle, settle_stacked};
 pub use map::{MapPoint, MapPoints};
 pub use parse::{ParsedBox, parse_box};
 pub use shape::{
-    Chip, Facets, Filter, FolderFacet, Group, GroupUnit, HiddenFilter, Keep, Kept, Located,
-    PhotoAt, Query, QueryResult, QuerySort, QueryTimelineUnit, QueryView, Row, RowStack,
-    ShapeFacets, ShapeFilter, StarFacets, StarFilter, TagFilter, TagKind,
+    Chip, Facets, Filter, FolderFacet, FormatFacet, Group, GroupUnit, HiddenFilter, Keep, Kept,
+    KindFacets, KindFilter, Located, PhotoAt, Query, QueryResult, QuerySort, QueryTimelineUnit,
+    QueryView, Row, RowStack, ShapeFacets, ShapeFilter, StarFacets, StarFilter, TagFilter, TagKind,
 };
 
 #[cfg(test)]

@@ -29,6 +29,11 @@ the window's title shows the version that is running.
   album, the thumbnail cache's size, limit and Clear cache, whether edits
   stay in the album or are saved into the photo file, loading maps from the
   internet, and checking for updates.
+- Filter by media type: tick off Stills, Animated, RAW or Videos in the
+  new Type group of the filter panel (for example, no videos), or pick
+  file formats to show only those (for example, only PNGs). Each has its
+  count, shows as a chip, and can be typed in the search box as
+  kind:video, no:video or format:png.
 - The details panel has a Copy button that copies everything it shows as
   plain text, a Path row with the file's full path and a button to copy
   it, and an EXIF section listing every tag in the file.

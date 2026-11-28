@@ -73,6 +73,8 @@ impl MemoryRow {
             height: i64::from(f.height),
             gps: f.gps_lat.zip(f.gps_lon),
             analysis: f.analysis.clone(),
+            format: f.format.clone(),
+            has_duration: f.duration_ms.is_some(),
             ..PhotoFacts::default()
         };
         let typed = conn

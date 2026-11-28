@@ -48,6 +48,36 @@ pub mod chip {
     /// `near_duplicates`.
     pub const NEAR_DUPLICATES: &str = "Near-duplicates";
 
+    /// A kind of photo in the media type chip, as a plural.
+    fn kind_plural(kind: crate::query::KindFilter) -> &'static str {
+        use crate::query::KindFilter as K;
+        match kind {
+            K::Still => "Stills",
+            K::Animated => "Animated",
+            K::Raw => "RAW",
+            K::Video => "Videos",
+        }
+    }
+
+    /// The media type chip (owner's feedback, #165): "No videos" when one
+    /// kind is left out, else the kinds shown, "Stills, RAW".
+    pub fn kinds(kinds: &[crate::query::KindFilter]) -> String {
+        use crate::query::KindFilter as K;
+        let left_out: Vec<K> = K::ALL.into_iter().filter(|k| !kinds.contains(k)).collect();
+        if let [one] = left_out.as_slice() {
+            let what = kind_plural(*one);
+            return match one {
+                K::Raw => format!("No {what}"),
+                _ => format!("No {}", what.to_lowercase()),
+            };
+        }
+        kinds
+            .iter()
+            .map(|k| kind_plural(*k))
+            .collect::<Vec<_>>()
+            .join(", ")
+    }
+
     /// The one chip of `from` and `to`: "{from} → {to}", "From {from}" or
     /// "Until {to}".
     pub fn dates(from: Option<&str>, to: Option<&str>) -> String {
@@ -88,6 +118,13 @@ pub mod words {
     pub const TAG: &str = "try tag:<word>";
     /// `object:`.
     pub const OBJECT: &str = "try object:<word>";
+    /// `kind:` and `no:`.
+    pub const KIND: &str = "try kind:still, animated, raw or video";
+
+    /// `format:` naming no format Owlbum reads.
+    pub fn no_format(value: &str) -> String {
+        format!("no format named {value}")
+    }
 
     /// `folder:` naming no folder.
     pub fn no_folder(value: &str) -> String {

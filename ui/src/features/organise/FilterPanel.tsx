@@ -1,6 +1,7 @@
 import { useEffect, useRef, type ReactNode } from "react";
 import type { Facets } from "../../api/bindings/Facets";
 import type { Filter } from "../../api/bindings/Filter";
+import type { KindFilter } from "../../api/bindings/KindFilter";
 import { Checkbox, SelectField, TextField, type SelectOption } from "../../controls";
 import { organiseText } from "../../text/organise";
 import { FilterChip } from "./FilterChip";
@@ -17,6 +18,27 @@ interface FilterPanelProps {
 /** A select option with its facet; muted, still enabled, when the count is 0. */
 function option(value: string, label: string, n?: number): SelectOption {
   return { value, label: t.counted(label, n), muted: n === 0 };
+}
+
+/** Every kind of the media type filter, in the order Rust lists them. */
+const KINDS: KindFilter[] = ["still", "animated", "raw", "video"];
+
+/**
+ * The kinds shown after `kind` is turned on or off: absent when every
+ * kind is on; unchanged when it would turn the last one off.
+ */
+export function toggleKind(kinds: KindFilter[] | undefined, kind: KindFilter, on: boolean): KindFilter[] | undefined {
+  const had = kinds ?? KINDS;
+  const next = KINDS.filter((k) => (k === kind ? on : had.includes(k)));
+  if (next.length === 0) return kinds;
+  return next.length === KINDS.length ? undefined : next;
+}
+
+/** The formats shown after `format` is turned on or off: absent when none is on. */
+export function toggleFormat(formats: string[] | undefined, format: string, on: boolean): string[] | undefined {
+  const next = (formats ?? []).filter((f) => f !== format);
+  if (on) next.push(format);
+  return next.length === 0 ? undefined : next;
 }
 
 function Group({ legend, children }: { legend: string; children: ReactNode }) {
@@ -51,6 +73,8 @@ export function FilterPanel({ filter, facets, onChange }: FilterPanelProps) {
     onChange(next);
   };
   const folders = facets?.folders ?? [];
+  // The formats come from Rust's registry through the facets, never from a list here.
+  const formats = facets?.formats ?? [];
   const people = filter.people ?? [];
   const tags = filter.tags ?? [];
   return (
@@ -86,6 +110,33 @@ export function FilterPanel({ filter, facets, onChange }: FilterPanelProps) {
           ]}
           onChange={(v) => set({ hidden: v === "" ? undefined : (v as Filter["hidden"]) })}
         />
+      </Group>
+      <Group legend={t.groups.type}>
+        <div className="ow-filter-panel__list" role="group" aria-label={t.kindsLabel}>
+          {KINDS.map((kind) => (
+            <Checkbox
+              key={kind}
+              label={t.counted(t.kinds[kind], facets?.kinds[kind])}
+              checked={filter.kinds === undefined || filter.kinds.includes(kind)}
+              onChange={(on) => set({ kinds: toggleKind(filter.kinds, kind, on) })}
+            />
+          ))}
+        </div>
+        <div className="ow-filter-panel__list" role="group" aria-label={t.formatsLabel}>
+          <span className="ow-filter-panel__sublabel">{t.formatsLabel}</span>
+          {formats.length === 0 ? (
+            <p className="ow-filter-panel__note">{t.noFormats}</p>
+          ) : (
+            formats.map((f) => (
+              <Checkbox
+                key={f.format}
+                label={t.counted(f.label, f.count)}
+                checked={filter.formats?.includes(f.format) ?? false}
+                onChange={(on) => set({ formats: toggleFormat(filter.formats, f.format, on) })}
+              />
+            ))
+          )}
+        </div>
       </Group>
       <Group legend={t.groups.when}>
         <TextField

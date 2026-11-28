@@ -125,8 +125,14 @@ fn a_trip_photo_answers_its_details() {
         .unwrap()
         .deserialize()
         .unwrap();
-    let model = exif.iter().find(|t| t.name == "Model").expect("the Model tag");
-    assert_eq!((model.group.as_str(), model.value.as_str()), ("Image", "Fixture One"));
+    let model = exif
+        .iter()
+        .find(|t| t.name == "Model")
+        .expect("the Model tag");
+    assert_eq!(
+        (model.group.as_str(), model.value.as_str()),
+        ("Image", "Fixture One")
+    );
     assert!(exif.iter().any(|t| t.group == "GPS"), "{exif:?}");
 
     let err = f.detail(987_654).unwrap_err();

@@ -243,7 +243,9 @@ fn each_folder_counts_its_photos_through_adds_moves_and_removals() {
     set(&conn, a, "rel_dir = 'y', rel_path = 'y/a.jpg'");
     index.refresh(&conn, &[a]).unwrap();
     assert_folders_counted(&index);
-    assert!(index.read(|v| (0..v.folder_count()).any(|f| v.folder(u32::try_from(f).unwrap()) == "x")));
+    assert!(
+        index.read(|v| (0..v.folder_count()).any(|f| v.folder(u32::try_from(f).unwrap()) == "x"))
+    );
     // Removals, then one back.
     set(&conn, b, "missing = 1");
     set(&conn, c, "missing = 1");
@@ -713,7 +715,13 @@ fn a_load_from_the_file_on_several_connections_equals_the_one_connection_load() 
     schema::migrate_with(&mut conn, MIGRATIONS, NewAlbumMeta::now).unwrap();
     // Ids far apart, so the ranges of several readers each hold some, and
     // one row outside the scope.
-    for (n, rel_dir) in [(1, "a"), (9_000, "a/b"), (20_000, "c"), (40_000, "a"), (70_001, "a")] {
+    for (n, rel_dir) in [
+        (1, "a"),
+        (9_000, "a/b"),
+        (20_000, "c"),
+        (40_000, "a"),
+        (70_001, "a"),
+    ] {
         let id = add(&conn, rel_dir, &format!("p{n}.jpg"));
         conn.execute("UPDATE photos SET id = ?1 WHERE id = ?2", (n, id))
             .unwrap();
@@ -726,6 +734,9 @@ fn a_load_from_the_file_on_several_connections_equals_the_one_connection_load() 
         assert_ranks_consistent(&many);
         assert_folders_counted(&many);
     }
-    assert_eq!(ids(&AlbumIndex::load_file(&path, "a").unwrap()), [1, 9_000, 40_000, 70_001]);
+    assert_eq!(
+        ids(&AlbumIndex::load_file(&path, "a").unwrap()),
+        [1, 9_000, 40_000, 70_001]
+    );
     drop(conn);
 }

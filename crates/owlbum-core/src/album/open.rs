@@ -583,7 +583,9 @@ impl Preload {
     fn start(db_path: &Path, scope: &str) -> Self {
         let (path, scope) = (db_path.to_path_buf(), scope.to_owned());
         // The rows are read on several connections at once (issue 162).
-        Self(std::thread::spawn(move || AlbumIndex::load_file(&path, &scope).ok()))
+        Self(std::thread::spawn(move || {
+            AlbumIndex::load_file(&path, &scope).ok()
+        }))
     }
 
     /// The index, or None when it could not be read (it is then read again

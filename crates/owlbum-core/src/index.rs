@@ -139,11 +139,17 @@ const SELECT: &str = "SELECT p.id, p.rel_dir, p.file_name, p.kind, p.captured_at
 
 /// The rows of `scope` in id order, those with ids in `ids` only when
 /// given.
-fn read_rows(conn: &Connection, scope: &str, ids: Option<(i64, i64)>) -> AppResult<Vec<PhotoFacts>> {
+fn read_rows(
+    conn: &Connection,
+    scope: &str,
+    ids: Option<(i64, i64)>,
+) -> AppResult<Vec<PhotoFacts>> {
     let failed = sqlite_error(text::album::READING_DATABASE);
     let (from, to) = ids.unwrap_or((i64::MIN, i64::MAX));
     let mut stmt = conn
-        .prepare(&format!("{SELECT} AND p.id BETWEEN ?2 AND ?3 ORDER BY p.id"))
+        .prepare(&format!(
+            "{SELECT} AND p.id BETWEEN ?2 AND ?3 ORDER BY p.id"
+        ))
         .map_err(&failed)?;
     let mut rows = stmt.query((scope, from, to)).map_err(&failed)?;
     let mut all = Vec::new();
@@ -172,7 +178,9 @@ fn read_rows_parallel(path: &Path, scope: &str) -> AppResult<Vec<PhotoFacts>> {
     };
     let conn = open()?;
     let (lo, hi): (Option<i64>, Option<i64>) = conn
-        .query_row("SELECT min(id), max(id) FROM photos", [], |r| Ok((r.get(0)?, r.get(1)?)))
+        .query_row("SELECT min(id), max(id) FROM photos", [], |r| {
+            Ok((r.get(0)?, r.get(1)?))
+        })
         .map_err(&failed)?;
     let (Some(lo), Some(hi)) = (lo, hi) else {
         return Ok(Vec::new());
@@ -190,7 +198,11 @@ fn read_rows_parallel(path: &Path, scope: &str) -> AppResult<Vec<PhotoFacts>> {
     let ranges: Vec<(i64, i64)> = (0..parts)
         .map(|k| {
             let from = lo.saturating_add(k * step);
-            let to = if k == parts - 1 { i64::MAX } else { from + step - 1 };
+            let to = if k == parts - 1 {
+                i64::MAX
+            } else {
+                from + step - 1
+            };
             (if k == 0 { i64::MIN } else { from }, to)
         })
         .collect();
@@ -563,7 +575,10 @@ impl State {
         };
         // Folders are numbered in row order, before the records are built
         // on several threads (reading each `analysis` is most of the work).
-        let folders: Vec<u32> = all.iter().map(|f| state.intern_folder(&f.rel_dir)).collect();
+        let folders: Vec<u32> = all
+            .iter()
+            .map(|f| state.intern_folder(&f.rel_dir))
+            .collect();
         let built = build_all(all, &folders);
         state.photos.reserve(all.len());
         for (facts, photo) in all.iter().zip(built) {

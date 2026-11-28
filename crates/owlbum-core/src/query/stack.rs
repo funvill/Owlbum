@@ -113,12 +113,12 @@ impl Facts {
     /// the index's own); None when no photo is in a burst.
     fn of(shown: &[&Photo]) -> Option<Self> {
         let largest = shown.iter().map(|p| p.id).max()?;
-        let mut facts = if (largest as usize) <= shown.len().saturating_mul(4).saturating_add(65_536)
-        {
-            Self::Dense(vec![NO_FACT; largest as usize + 1])
-        } else {
-            Self::Sparse(HashMap::new())
-        };
+        let mut facts =
+            if (largest as usize) <= shown.len().saturating_mul(4).saturating_add(65_536) {
+                Self::Dense(vec![NO_FACT; largest as usize + 1])
+            } else {
+                Self::Sparse(HashMap::new())
+            };
         let mut any = false;
         for p in shown {
             let Some(burst) = p.derived.burst else {

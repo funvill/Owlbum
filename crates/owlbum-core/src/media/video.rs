@@ -764,7 +764,11 @@ pub(crate) mod ebml {
             let tracks = [track(2, "A_OPUS"), track(1, "V_VP9"), track(1, "V_AV1")];
             for live in [false, true] {
                 let got = codecs(&mut Cursor::new(file(&tracks, live)));
-                assert_eq!(got, (Some("vp9".into()), Some("opus".into())), "live {live}");
+                assert_eq!(
+                    got,
+                    (Some("vp9".into()), Some("opus".into())),
+                    "live {live}"
+                );
             }
             let bytes = file(&[track(1, "V_MPEG4/ISO/AVC"), track(2, "A_AAC")], false);
             assert_eq!(
@@ -871,7 +875,14 @@ mod mf {
             for _ in 0..MAX_READS {
                 let mut flags = 0u32;
                 reader
-                    .ReadSample(video, 0, None, Some(&raw mut flags), None, Some(&raw mut sample))
+                    .ReadSample(
+                        video,
+                        0,
+                        None,
+                        Some(&raw mut flags),
+                        None,
+                        Some(&raw mut sample),
+                    )
                     .ok()?;
                 if sample.is_some() || flags & MF_SOURCE_READERF_ENDOFSTREAM.0 as u32 != 0 {
                     break;

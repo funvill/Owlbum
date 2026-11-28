@@ -83,7 +83,9 @@ const PAR_ABOVE: usize = 16_384;
 /// `f` of every item, in order, split over the processors (at most 8
 /// threads) when there are many items.
 fn par_map<T: Sync, U: Send>(items: &[T], f: impl Fn(&T) -> U + Sync) -> Vec<U> {
-    let threads = std::thread::available_parallelism().map_or(1, std::num::NonZero::get).min(8);
+    let threads = std::thread::available_parallelism()
+        .map_or(1, std::num::NonZero::get)
+        .min(8);
     if items.len() < PAR_ABOVE || threads < 2 {
         return items.iter().map(f).collect();
     }

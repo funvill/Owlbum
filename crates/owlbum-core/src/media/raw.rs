@@ -343,7 +343,9 @@ mod tests {
         use std::time::Instant;
         let dir = std::env::var_os("OWLBUM_RAWS").expect("OWLBUM_RAWS");
         let size = |r: Result<Option<DynamicImage>, _>| {
-            r.ok().flatten().map(|i: DynamicImage| (i.width(), i.height()))
+            r.ok()
+                .flatten()
+                .map(|i: DynamicImage| (i.width(), i.height()))
         };
         for entry in std::fs::read_dir(dir).unwrap() {
             let path = entry.unwrap().path();

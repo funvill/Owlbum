@@ -249,7 +249,11 @@ fn copy_image_draws_the_stored_edit() {
     .unwrap();
     let out: CopiedImage = f.call("file_copy_image", json!({ "photo_id": b })).unwrap();
     assert!(!out.scaled && !out.file);
-    assert_eq!(*f.fake.image.lock().unwrap(), Some((20, 31)), "turned a quarter");
+    assert_eq!(
+        *f.fake.image.lock().unwrap(),
+        Some((20, 31)),
+        "turned a quarter"
+    );
 }
 
 #[test]

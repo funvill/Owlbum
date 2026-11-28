@@ -321,6 +321,31 @@ fn a_folder_that_arrives_before_startup_is_handed_over_and_later_ones_are_events
 }
 
 #[test]
+fn a_picture_named_by_a_launch_comes_with_its_folder() {
+    let f = fixture();
+    let opens = f.events::<OpenFolder>("open_folder");
+    let root = f.folder("Trip");
+    let photo = root.join("a.jpg");
+    owlbum_lib::handoff::deliver_photo(f.app.handle(), &root, Some(&photo));
+    let s = startup(&f);
+    assert_eq!(s.launch_folder, Some(root.display().to_string()));
+    assert_eq!(s.launch_photo, Some(photo.display().to_string()));
+
+    // A second launch, after the page started.
+    let launch = owlbum_core::app::Launch {
+        folder: root.clone(),
+        photo: Some(root.join("b.jpg")),
+    };
+    owlbum_lib::handoff::deliver_launch(f.app.handle(), &launch);
+    let event = opens.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert_eq!(event.path, root.display().to_string());
+    assert_eq!(event.photo, Some(root.join("b.jpg").display().to_string()));
+    owlbum_lib::handoff::deliver(f.app.handle(), &root);
+    let event = opens.recv_timeout(Duration::from_secs(5)).unwrap();
+    assert_eq!(event.photo, None, "a folder alone names no picture");
+}
+
+#[test]
 fn a_drag_shows_the_outline_and_a_drop_opens_its_first_folder() {
     let f = fixture();
     startup(&f);

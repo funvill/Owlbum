@@ -4,7 +4,7 @@ import { useBrowseKeys } from "./browseKeys";
 import { Grid, type GridProps } from "./Grid";
 import { clickPhoto, menuPhoto } from "./selection";
 
-export interface BrowseGridProps extends Pick<GridProps, "busy" | "onStar" | "onStack"> {
+export interface BrowseGridProps extends Pick<GridProps, "busy" | "onStar" | "onStack" | "across"> {
   /** Open the viewer on a photo: a double-click, Enter or Space (#22). */
   onOpen?: (at: PhotoAt) => void;
   /** The photo menu, after a right-click has selected the photo (#38). */

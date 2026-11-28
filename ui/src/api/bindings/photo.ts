@@ -12,6 +12,7 @@ import type { ScoreBreakdown } from "./ScoreBreakdown";
 export type PhotoCommands = {
   photo_detail: { args: { id: number }; result: PhotoDetail };
   photo_exif: { args: { id: number }; result: Array<ExifField> };
+  photo_find: { args: { path: string }; result: number | null };
   photo_histogram: { args: { id: number }; result: Histogram };
   photo_nudge: { args: { ids: Array<number>; delta: number }; result: Nudged };
   photo_score: { args: { id: number }; result: ScoreBreakdown };

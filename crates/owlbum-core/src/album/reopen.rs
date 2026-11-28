@@ -76,6 +76,43 @@ pub fn to_page(conn: &Connection, stored: &Value) -> AppResult<Value> {
     Ok(Value::Object(out))
 }
 
+/// The photo whose file is `path`, in the album whose root is `root`: its
+/// id, or none when the path is not under the root or no photo that is not
+/// missing has it (not scanned yet, say). On Windows the name is matched
+/// whatever its case, as the file system does.
+pub fn photo_at(
+    conn: &Connection,
+    root: &std::path::Path,
+    path: &std::path::Path,
+) -> AppResult<Option<i64>> {
+    let Ok(below) = path.strip_prefix(root) else {
+        return Ok(None);
+    };
+    let mut parts = Vec::new();
+    for part in below.components() {
+        let std::path::Component::Normal(name) = part else {
+            return Ok(None);
+        };
+        let Some(name) = name.to_str() else {
+            return Ok(None);
+        };
+        parts.push(name);
+    }
+    let rel = parts.join("/");
+    let find = |sql: &str| {
+        conn.query_row(sql, [&rel], |r| r.get::<_, i64>(0))
+            .optional()
+            .map_err(sqlite_error(text::album::READING_DATABASE))
+    };
+    let exact = find("SELECT id FROM photos WHERE rel_path = ?1 AND missing = 0")?;
+    if exact.is_some() || !cfg!(windows) {
+        return Ok(exact);
+    }
+    find(
+        "SELECT id FROM photos WHERE rel_path = ?1 COLLATE NOCASE AND missing = 0 ORDER BY id LIMIT 1",
+    )
+}
+
 /// Drops each field named as a [`Query`] field whose value that field
 /// cannot take, tried one at a time over the default query, so every field
 /// the `Query` gains later is checked too. The filter is checked filter by
@@ -119,6 +156,31 @@ mod tests {
     use super::*;
     use crate::album::schema;
     use serde_json::json;
+
+    #[test]
+    fn a_file_is_found_by_its_path_under_the_root() {
+        let c = db();
+        let root = std::path::Path::new("/albums/trip");
+        assert_eq!(
+            photo_at(&c, root, &root.join("a").join("beach.jpg")).unwrap(),
+            Some(1)
+        );
+        assert_eq!(photo_at(&c, root, &root.join("lake.jpg")).unwrap(), Some(2));
+        assert_eq!(
+            photo_at(&c, root, &root.join("new.jpg")).unwrap(),
+            None,
+            "not scanned yet"
+        );
+        let elsewhere = std::path::Path::new("/albums/other/lake.jpg");
+        assert_eq!(
+            photo_at(&c, root, elsewhere).unwrap(),
+            None,
+            "not under the root"
+        );
+        if cfg!(windows) {
+            assert_eq!(photo_at(&c, root, &root.join("LAKE.JPG")).unwrap(), Some(2));
+        }
+    }
 
     fn db() -> Connection {
         let mut conn = Connection::open_in_memory().unwrap();

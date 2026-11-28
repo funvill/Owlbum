@@ -34,7 +34,7 @@ owlbum [folder]
 |---|---|
 | The folder | The first argument that does not begin with `-`. |
 | A relative path | Resolved against the working directory of the launch that gave it. |
-| A file instead of a folder | The folder that holds the file is opened. |
+| A file instead of a folder | The folder that holds the file is opened, with that picture current and shown (owner's feedback, #184; see [Browsing](04-browsing.md#opening-a-picture)). This is how the file manager opens a picture with Owlbum: `"owlbum.exe" "%1"`. |
 | Arguments beginning with `-` | Ignored. Owlbum defines no flags in version 1. |
 | A path that cannot be opened | Owlbum starts normally and the page shows the `album_open` error (see [Browsing](04-browsing.md)). |
 
@@ -44,7 +44,7 @@ The first rule that applies wins.
 
 | Order | Situation | Result |
 |---|---|---|
-| 1 | A folder was given on the command line | That folder opens. |
+| 1 | A folder (or a picture) was given on the command line | That folder opens, with the picture shown. |
 | 2 | `reopen_last` is true and the newest entry in `recent` still exists | That album reopens where it was (see [Browsing](04-browsing.md)). |
 | 3 | Otherwise | The start screen. |
 
@@ -70,7 +70,7 @@ There is one window and one running copy per app data folder.
 
 - A second launch sends its arguments and working directory to the first copy and exits with code 0.
 - The first copy restores its window from minimised, shows it and gives it focus.
-- If the second launch named a folder, the first copy opens it, exactly as File > Open folder would. Opening another album asks no question, because every edit is already in the album (see [Editing and file actions](06-editing-and-file-actions.md)).
+- If the second launch named a folder, the first copy opens it, exactly as File > Open folder would. Opening another album asks no question, because every edit is already in the album (see [Editing and file actions](06-editing-and-file-actions.md)). If it named a picture, its folder opens with the picture shown; if that folder is already open, only the current photo changes.
 - The single-instance plugin is not registered when `OWLBUM_DATA_DIR` is set, so tests can run several copies at once, each with its own data folder.
 
 ### Handing a folder to the page
@@ -79,9 +79,9 @@ A folder can arrive before the page is listening, so an event alone is not enoug
 
 | Moment | What happens |
 |---|---|
-| A folder arrives before `app_startup` | It is kept as the pending folder. A later one replaces it. |
-| The page calls `app_startup` | The reply includes the pending folder, which is then cleared. |
-| A folder arrives after `app_startup` | The `open_folder` event is emitted at once. |
+| A folder arrives before `app_startup` | It is kept as the pending folder, with the picture the launch named if any. A later one replaces it. |
+| The page calls `app_startup` | The reply includes the pending folder (`launch_folder`) and picture (`launch_photo`), which are then cleared. |
+| A folder arrives after `app_startup` | The `open_folder` event (`{ path, photo }`) is emitted at once. |
 
 ## The window
 
@@ -146,6 +146,10 @@ The menu bar has three menus. `&` marks the mnemonic.
 | File | `Open the &data folder` | none | Opens the app data folder in the file manager. |
 | File | separator | | |
 | File | `&Quit` | `Ctrl+Q` | Quits, through the steps in [Closing and quitting](#closing-and-quitting). |
+| View | `&Thumbnails` (checkbox) | shown as `T` | Shows or hides the thumbnails (`panel.grid_shown`; owner's feedback, #185, see [Browsing](04-browsing.md#hiding-and-moving-the-panels)). |
+| View | `&Details panel` (checkbox) | shown as `I` | Shows or hides the details panel (`panel.details_shown`). |
+| View | `Thumbnails at the &bottom` (checkbox) | none | Moves the thumbnails between the left column and the bottom strip (`panel.grid_place`). |
+| View | separator | | |
 | View | `Toggle &full screen` | `F11` | Makes the window full screen, or returns it. This is the window, not the full-screen viewer. |
 | View | `&Reload` (development builds only) | `Ctrl+R` | Reloads the page. |
 | View | `Toggle &developer tools` (development builds only) | `Ctrl+Shift+I` | |
@@ -164,7 +168,8 @@ Rules:
 - **Every accelerator is set explicitly.** None is left to a platform default. Each comes from its `menu` row in the [key table](#the-key-table); Reload and Toggle developer tools have rows marked `dev`.
 - **`?` is not a native accelerator.** It must not fire while the user is typing, so the page handles it. The menu only shows the key beside the item.
 - **F1, F2, F11, `Ctrl+O`, `Ctrl+W` and `Ctrl+Q` are native accelerators.** They work whenever the window has focus, including while typing and while a dialog is open. The page must not bind them.
-- **Items that act in the page** (Close folder, Rescan, Keyboard shortcuts, What's new, About, and the update item) emit `app_menu` with `{ item }`, the item's id. The page does the rest.
+- **Items that act in the page** (Close folder, Rescan, Keyboard shortcuts, What's new, About, the three panel items, and the update item) emit `app_menu` with `{ item }`, the item's id (`toggle_grid`, `toggle_details`, `grid_place` for the panel items). The page does the rest.
+- **The panel items' keys** (`T`, `I`) are the page's, like `?`: they must not fire while typing. The menu shows them beside the items. Their checkboxes follow the settings whenever `app_settings_set` saves (from the menu, a key, a button or Settings).
 - **The menu is rebuilt** when the update state changes, when `updates.auto` changes, and when an album opens or closes.
 - **Menu text** lives in the shell's text module, the Rust counterpart of `ui/src/text/`.
 
@@ -207,6 +212,8 @@ The gear button in the top bar opens Settings. It is a modal dialog. Esc, the cl
 | Section | Control | Key | Rules |
 |---|---|---|---|
 | General | Reopen the last album at start (checkbox) | `reopen_last` | |
+| General | Open pictures with Owlbum (checkbox) | none: the registry | Windows only, see [Opening pictures](#opening-pictures). Read with `app_associate_status` when the dialog opens; changed with `app_associate`. Turning it on says "Choose Owlbum in Default apps to finish." |
+| View | Thumbnails (two radio buttons) | `panel.grid_place` | **At the left** or **Along the bottom, under the preview**. Choosing also shows the thumbnails. The same setting as View > Thumbnails at the bottom. |
 | General | Cache limit (whole number of GB) | `cache.limit_gb` | 1 to 1000. Saved when the field loses focus or Enter is pressed. A value outside the range is put back and the field says why. Lowering the limit prunes at once. |
 | General | Cache use (text) | none | From `app_cache_usage`: the bytes held by `thumbs/` and `full/`. Read when the dialog opens and after a clear. |
 | General | Clear cache (button) | none | Opens a confirm strip: "Clear 12.4 GB of thumbnails? They are made again as you browse." with **Cancel** and **Clear**. Clear calls `app_cache_clear`, which deletes `thumbs/`, `full/` and their `cache_entries` rows. Models, settings and albums are not touched. |
@@ -220,6 +227,23 @@ The gear button in the top bar opens Settings. It is a modal dialog. Esc, the cl
 In a view-only album every control here still works, because none of them writes to the album.
 
 As built (#59, `ui/src/features/app/SettingsDialog.tsx`): Check now is left out until the updater exists (#62). The Photo tagging section is a slot, `ui/src/features/app/TaggingSettings.tsx`, which #57 fills. A refused change shows "Couldn't keep the setting: <reason>" as a toast. Changing `edit_target` reads `edit_status` again, because what waits to be saved depends on it. The cache limit's message reads "Use a whole number from 1 to 1000. The limit was put back."
+
+## Opening pictures
+
+Owner's feedback on 0.1.3 (#184): people can use Owlbum as their main picture viewer.
+
+- **Settings > General > Open pictures with Owlbum** registers Owlbum, for the current user and with no administrator rights, as a program that opens every picture format of the media registry (stills and RAW, not video: `registry::picture_extensions`). It writes, under `HKEY_CURRENT_USER\Software`:
+  - `Classes\Owlbum.Picture`: the ProgID, with `DefaultIcon` (the program's icon) and `shell\open\command` = `"<owlbum.exe>" "%1"`.
+  - `Classes\<ext>\OpenWithProgids\Owlbum.Picture` for each extension, so Owlbum is offered in "Open with".
+  - `Classes\Applications\owlbum.exe`, with its open command and `SupportedTypes`.
+  - `Owlbum\Capabilities` (`ApplicationName`, `ApplicationDescription`, `FileAssociations`: each extension to the ProgID) and `RegisteredApplications\Owlbum` pointing at it, so Owlbum is listed in Windows' Default apps.
+  Then it tells Explorer that file types changed and opens Windows' Default apps page (`ms-settings:defaultapps`), where the user chooses Owlbum. Windows 10 and 11 do not let a program make itself the default silently, so Owlbum never writes the extensions' own default or `UserChoice`.
+- **Turning it off** removes every entry above, and only those: the extensions' keys and other programs' entries stay.
+- **On or off** is read from the registry each time: on when the ProgID's open command names this copy of the program. Registered for another copy (an older install place, a development build) reads as off, and turning it on points it at this copy.
+- **Double-clicking a picture** then starts Owlbum with the file (see [Command line](#command-line)), or hands it to the running copy.
+- **Tests** never touch the real registry: the writes go through the `Registry` trait (`owlbum_core::app::assoc`), which shell tests fill with a map, as file actions use the `Desktop` trait.
+- **The installer** does not offer it yet; it must only ever be an opt-in (a question, never a silent takeover), and the uninstaller should remove the entries. Follow-up issue.
+- **Linux** (paused): a `.desktop` file's `MimeType` line will do it later. `app_associate_status` answers `available: false` there, and Settings leaves the checkbox out.
 
 ## Keyboard shortcuts
 
@@ -296,6 +320,8 @@ What each action does is owned by the part named in the last column. This table 
 | `browse.before` | browse | `\` | Show the original | hold | 06 |
 | `browse.copy` | browse | `Ctrl+C` | Copy the photo, or the files when several are selected | | 06 |
 | `browse.trash` | browse | `Delete` | Move to the Recycle Bin or Trash | | 06 |
+| `browse.toggle_grid` | browse | `T` | Show or hide the thumbnails (also View > Thumbnails) | | 04 |
+| `browse.toggle_details` | browse | `I` | Show or hide the details panel (also View > Details panel) | | 04 |
 | `viewer.previous`, `viewer.next` | viewer | `ArrowLeft`, `ArrowRight` | Previous or next photo | repeat | 04 |
 | `viewer.first`, `viewer.last` | viewer | `Home`, `End` | First or last photo | | 04 |
 | `viewer.close` | viewer | `Enter` | Close the viewer | | 04 |
@@ -1039,7 +1065,9 @@ The events `open_folder` and `update_state` are listed in [Architecture](01-arch
 
 | Command | Arguments → reply | Purpose |
 |---|---|---|
-| `app_startup` | → `{ version, platform, arch, package, dev, settings, recent: Recent[], launch_folder: string \| null, reopen: string \| null, show_update_notice, whats_new? }` | The page has drawn. Shows the window and hands over what the page needs to begin. `settings` and `Recent` are the shapes in Browsing. `package` is `nsis`, `deb`, `appimage`, or `dev` for a development build. `launch_folder` is a folder from the command line, or one that arrived before this call (a folder dropped while the page loaded, or a second launch). `reopen` is the folder to reopen by the rule in [Which album opens at start](#which-album-opens-at-start). `show_update_notice` is true while `updates.notice_seen` is false. |
+| `app_startup` | → `{ version, platform, arch, package, dev, settings, recent: Recent[], launch_folder: string \| null, launch_photo: string \| null, reopen: string \| null, show_update_notice, whats_new? }` | The page has drawn. Shows the window and hands over what the page needs to begin. `settings` and `Recent` are the shapes in Browsing. `package` is `nsis`, `deb`, `appimage`, or `dev` for a development build. `launch_folder` is a folder from the command line, or one that arrived before this call (a folder dropped while the page loaded, or a second launch). `launch_photo` is the picture the launch named, when it named a file (#184). `reopen` is the folder to reopen by the rule in [Which album opens at start](#which-album-opens-at-start). `show_update_notice` is true while `updates.notice_seen` is false. |
+| `app_associate_status` | → `{ available, on }` | Whether Owlbum opens pictures, read from the registry ([Opening pictures](#opening-pictures)). `available` is false where it is not offered (Linux, for now). |
+| `app_associate` | `{ on }` → `{ available, on }` | Registers Owlbum to open pictures and opens Default apps, or removes the registration. `internal` when the registry refused a change. |
 | `app_version` | → `{ version }` | The running version. Added by the scaffold (#1) to prove the command pattern end to end; `app_startup` carries the same value. |
 | `app_pick_folder` | → `path` or null | The native "Open a folder of photos" dialog, for the page's own Open folder button. |
 | `app_close_ready` | | The page has finished edit mode, the session save and any running save, after `app_closing`. |

@@ -11,6 +11,7 @@ use ts_rs::TS;
 use crate::Event;
 use crate::appdata::{Recent, Settings};
 
+pub mod assoc;
 pub mod fatal;
 pub mod update;
 pub mod whats_new;
@@ -50,6 +51,10 @@ pub struct Startup {
     /// A folder from the command line, or one that arrived before this
     /// call (a drop, a second launch). It is opened.
     pub launch_folder: Option<String>,
+    /// The picture the launch named, when it named a file rather than a
+    /// folder (Owlbum opening a picture from the file manager): it is
+    /// selected and shown once its folder is open.
+    pub launch_photo: Option<String>,
     /// The folder to reopen ([`reopen`]), when there is no launch folder.
     pub reopen: Option<String>,
     /// True while `updates.notice_seen` is false.
@@ -88,6 +93,9 @@ pub fn package_kind(dev: bool, appimage: bool) -> &'static str {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, TS)]
 pub struct OpenFolder {
     pub path: String,
+    /// The picture to select and show once the folder is open: a second
+    /// launch that named a file. Null otherwise.
+    pub photo: Option<String>,
 }
 
 impl Event for OpenFolder {
@@ -145,6 +153,12 @@ pub enum MenuItem {
     WhatsNew,
     /// Help > About Owlbum.
     About,
+    /// View > Thumbnails: show or hide them.
+    ToggleGrid,
+    /// View > Details panel: show or hide it.
+    ToggleDetails,
+    /// View > Thumbnails at the bottom: move them between left and bottom.
+    GridPlace,
 }
 
 /// The `app_menu` event: a menu item that acts in the page was chosen.
@@ -238,11 +252,20 @@ pub fn dropped_folder(paths: &[PathBuf]) -> Option<PathBuf> {
     })
 }
 
-/// The folder named on a command line (docs/08-desktop-and-release.md,
-/// "Command line"): the first argument after the program's own name that
-/// does not begin with `-`, resolved against `cwd`, a file's folder for a
-/// file.
-pub fn launch_folder<I, S>(args: I, cwd: &Path) -> Option<PathBuf>
+/// What a command line asks to open: a folder, and the picture in it when
+/// it named a file.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Launch {
+    pub folder: PathBuf,
+    /// The file named, when the argument was a file.
+    pub photo: Option<PathBuf>,
+}
+
+/// What a command line opens (docs/08-desktop-and-release.md, "Command
+/// line"): the first argument after the program's own name that does not
+/// begin with `-`, resolved against `cwd`. A folder opens itself; a file
+/// opens the folder that holds it, with the file as the photo to show.
+pub fn launch<I, S>(args: I, cwd: &Path) -> Option<Launch>
 where
     I: IntoIterator<Item = S>,
     S: AsRef<std::ffi::OsStr>,
@@ -251,7 +274,19 @@ where
         .into_iter()
         .skip(1)
         .find(|a| !a.as_ref().to_string_lossy().starts_with('-'))?;
-    Some(folder_of(&cwd.join(arg.as_ref())))
+    let path = cwd.join(arg.as_ref());
+    let folder = folder_of(&path);
+    let photo = (folder != path).then_some(path);
+    Some(Launch { folder, photo })
+}
+
+/// The folder named on a command line: [`launch`]'s folder.
+pub fn launch_folder<I, S>(args: I, cwd: &Path) -> Option<PathBuf>
+where
+    I: IntoIterator<Item = S>,
+    S: AsRef<std::ffi::OsStr>,
+{
+    launch(args, cwd).map(|l| l.folder)
 }
 
 #[cfg(test)]
@@ -331,6 +366,41 @@ mod tests {
             Some(dir.clone())
         );
         assert_eq!(launch_folder(["owlbum", "-x"], tmp.path()), None);
-        assert_eq!(launch_folder(["owlbum", "gone"], tmp.path()), Some(gone));
+        assert_eq!(
+            launch_folder(["owlbum", "gone"], tmp.path()),
+            Some(gone.clone())
+        );
+    }
+
+    #[test]
+    fn a_file_on_the_command_line_is_the_photo_to_show() {
+        let tmp = tempfile::tempdir().unwrap();
+        let dir = tmp.path().join("Trip");
+        std::fs::create_dir(&dir).unwrap();
+        let file = dir.join("a.jpg");
+        std::fs::write(&file, b"x").unwrap();
+        assert_eq!(
+            launch(["owlbum", "Trip/a.jpg"], tmp.path()),
+            Some(Launch {
+                folder: dir.clone(),
+                photo: Some(tmp.path().join("Trip/a.jpg")),
+            })
+        );
+        assert_eq!(
+            launch(["owlbum", file.to_str().unwrap()], Path::new("/elsewhere")),
+            Some(Launch {
+                folder: dir.clone(),
+                photo: Some(file.clone()),
+            }),
+            "an absolute path, as the file manager gives it"
+        );
+        assert_eq!(
+            launch(["owlbum", "Trip"], tmp.path()),
+            Some(Launch {
+                folder: dir,
+                photo: None
+            })
+        );
+        assert_eq!(launch(["owlbum"], tmp.path()), None);
     }
 }

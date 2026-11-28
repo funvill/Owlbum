@@ -49,6 +49,35 @@
   right: 0;
 }
 
+/* The bottom strip (docs/04-browsing.md, "Hiding and moving the panels"):
+   the grid on its side. Each row is a column of one or two tiles and the
+   box scrolls sideways. */
+.ow-grid--across {
+  overflow-x: auto;
+  overflow-y: hidden;
+}
+
+.ow-grid--across .ow-grid__content {
+  height: 100%;
+}
+
+.ow-grid--across .ow-grid__layer {
+  inset: 0 auto 0 0;
+}
+
+.ow-grid--across .ow-grid__row {
+  right: auto;
+  bottom: 0;
+}
+
+/* A timeline heading or the meaning note reads upwards in its narrow column. */
+.ow-grid--across .ow-grid__head-cell,
+.ow-grid--across .ow-grid__note-cell {
+  height: 100%;
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+}
+
 /* A tile: a square placed by transform, its picture under its marks. */
 .ow-tile {
   position: absolute;

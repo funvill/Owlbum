@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { columnWidths } from "./columns";
+import { columnWidths, stripHeight } from "./columns";
 
 describe("columnWidths", () => {
   it("shows the stored widths while the row has room, and before it is measured", () => {
@@ -52,5 +52,34 @@ describe("columnWidths", () => {
       detailsMax: 288,
       gridMax: 628,
     });
+  });
+});
+
+describe("columns that are hidden or at the bottom", () => {
+  it("gives the room of a column not in the row to the others, with no splitter for it", () => {
+    // No thumbnails in the row: the details column may take what the preview leaves.
+    expect(columnWidths(1000, 420, 900, { grid: false, details: true })).toMatchObject({
+      details: 560,
+      detailsMax: 560,
+    });
+    expect(columnWidths(800, 420, 560, { grid: false, details: true })).toMatchObject({ details: 494 });
+    // No details column: the thumbnails may take all but the preview and one splitter.
+    expect(columnWidths(1000, 900, 340, { grid: true, details: false })).toMatchObject({
+      grid: 694,
+      gridMax: 694,
+    });
+  });
+});
+
+describe("stripHeight", () => {
+  it("keeps the stored height while it fits, and before the screen is measured", () => {
+    expect(stripHeight(800, 200)).toEqual({ height: 200, max: 594 });
+    expect(stripHeight(null, 900)).toEqual({ height: 900, max: Infinity });
+  });
+
+  it("stays at least 120 and leaves the preview 200 above it", () => {
+    expect(stripHeight(800, 50).height).toBe(120);
+    expect(stripHeight(500, 400)).toEqual({ height: 294, max: 294 });
+    expect(stripHeight(300, 400)).toEqual({ height: 120, max: 120 });
   });
 });

@@ -156,3 +156,57 @@ describe("Review splitters", () => {
     });
   });
 });
+
+describe("Review panels", () => {
+  const settings = () => useSettingsStore.getState().settings;
+  const photosColumn = () => document.querySelector<HTMLElement>(".ow-review__photos");
+
+  it("hides and shows the details panel with its button and with I, and remembers it", async () => {
+    useSettingsStore.setState({ settings: { ...defaultSettings } });
+    render(<Review busy={() => false} />);
+    await waitFor(() => expect(grid().result).not.toBeNull());
+    const button = screen.getByRole("button", { name: "Details panel" });
+    expect(button).toHaveAttribute("aria-pressed", "true");
+    fireEvent.click(button);
+    await waitFor(() => expect(settings()?.["panel.details_shown"]).toBe(false));
+    expect(screen.queryByRole("complementary", { name: "Details" })).toBeNull();
+    expect(screen.queryByRole("separator", { name: "Resize details panel" })).toBeNull();
+    expect(button).toHaveAttribute("aria-pressed", "false");
+    fireEvent.keyDown(window, { key: "i", code: "KeyI" });
+    await waitFor(() => expect(settings()?.["panel.details_shown"]).toBe(true));
+    expect(screen.getByRole("complementary", { name: "Details" })).toBeInTheDocument();
+  });
+
+  it("hides the thumbnails with T while the keys and the selection go on working", async () => {
+    useSettingsStore.setState({ settings: { ...defaultSettings } });
+    render(<Review busy={() => false} />);
+    await waitFor(() => expect(grid().current?.index).toBe(0));
+    fireEvent.keyDown(window, { key: "t", code: "KeyT" });
+    await waitFor(() => expect(settings()?.["panel.grid_shown"]).toBe(false));
+    expect(photosColumn()).not.toBeVisible();
+    expect(screen.queryByRole("separator", { name: "Resize thumbnail column" })).toBeNull();
+    fireEvent.keyDown(window, { key: "ArrowRight", code: "ArrowRight" });
+    await waitFor(() => expect(grid().current?.index).toBe(1));
+    fireEvent.click(screen.getByRole("button", { name: "Thumbnails" }));
+    await waitFor(() => expect(photosColumn()).toBeVisible());
+  });
+
+  it("puts the thumbnails in a strip along the bottom that scrolls sideways", async () => {
+    useSettingsStore.setState({
+      settings: { ...defaultSettings, "panel.grid_place": "bottom", "panel.strip_height": 240 },
+    });
+    render(<Review busy={() => false} />);
+    await waitFor(() => expect(grid().current?.index).toBe(0));
+    expect(document.querySelector(".ow-review--bottom")).not.toBeNull();
+    expect(photosColumn()?.style.height).toBe("240px");
+    expect(screen.getByRole("grid")).toHaveClass("ow-grid--across");
+    const strip = screen.getByRole("separator", { name: "Resize thumbnail strip" });
+    expect(strip).toHaveAttribute("aria-orientation", "horizontal");
+    expect(screen.queryByRole("separator", { name: "Resize thumbnail column" })).toBeNull();
+    // Up makes the strip taller: it sits under the splitter.
+    fireEvent.keyDown(strip, { key: "ArrowUp" });
+    expect(strip).toHaveAttribute("aria-valuenow", "256");
+    fireEvent.keyDown(window, { key: "ArrowRight", code: "ArrowRight" });
+    await waitFor(() => expect(grid().current?.index).toBe(1));
+  });
+});

@@ -43,3 +43,14 @@ pub const OPENING_ADDRESS: &str = "opening the address in your browser";
 /// Doing: opening a file or folder in the user's own program (the licence,
 /// the notices, the log folder).
 pub const OPENING_FILE: &str = "opening the file";
+
+/// The name Windows shows for a picture Owlbum opens (docs/08, "Opening
+/// pictures").
+pub const PICTURE_TYPE: &str = "Picture";
+
+/// Owlbum's line in Windows' Default apps page.
+pub const APP_DESCRIPTION: &str = "Look through folders of photos and star the best ones.";
+
+/// What was being done, for an `internal` error while making Owlbum the
+/// program that opens pictures, or no longer.
+pub const ASSOCIATING: &str = "changing which program opens pictures";

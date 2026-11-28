@@ -100,6 +100,30 @@ fn without_an_album_the_photo_commands_answer_no_album() {
 }
 
 #[test]
+fn a_picture_handed_over_by_its_path_is_found_in_the_album() {
+    let f = fixture();
+    let find = |path: &Path| -> Result<Option<i64>, serde_json::Value> {
+        invoke(
+            &f.window,
+            "photo_find",
+            json!({ "path": path.display().to_string() }),
+        )
+        .map(|r| r.deserialize().unwrap())
+    };
+    let root = f.tmp.path().join("red");
+    red_album(&root);
+    assert_eq!(find(&root.join("red.png")).unwrap_err()["code"], "no_album");
+    f.open(&root);
+    let root = owlbum_core::album::locate(&root).unwrap().root;
+    assert_eq!(
+        find(&root.join("red.png")).unwrap(),
+        Some(f.id_of("red.png"))
+    );
+    assert_eq!(find(&root.join("blue.png")).unwrap(), None);
+    assert_eq!(find(&f.tmp.path().join("elsewhere.png")).unwrap(), None);
+}
+
+#[test]
 fn a_trip_photo_answers_its_details() {
     let f = fixture();
     let fixture = owlbum_fixtures::trip(&f.tmp.path().join("trip")).unwrap();

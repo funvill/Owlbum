@@ -44,6 +44,22 @@ import "./Grid.css";
 export interface GridProps extends TileActions {
   /** Whether a scan or tagging is running, which spaces re-runs a second apart. */
   busy?: () => boolean;
+  /**
+   * The bottom strip (docs/04-browsing.md, "Hiding and moving the panels"):
+   * the same grid turned on its side. Its rows run down the strip's height
+   * (one or two tiles) and it scrolls sideways; the wheel scrolls it too.
+   */
+  across?: boolean;
+}
+
+/** The scroll position along the grid's own axis: down, or sideways across. */
+function scrollPos(el: HTMLElement, across: boolean): number {
+  return across ? el.scrollLeft : el.scrollTop;
+}
+
+function setScrollPos(el: HTMLElement, across: boolean, pos: number): void {
+  if (across) el.scrollLeft = pos;
+  else el.scrollTop = pos;
 }
 
 /** Pixels per wheel line, for a wheel that reports lines. */
@@ -82,6 +98,7 @@ const sameSticky = (a: Sticky | null, b: Sticky | null) =>
  * (`useGridStore.getState().stop()` on close) belongs to the window shell.
  */
 export function Grid(props: GridProps) {
+  const across = props.across ?? false;
   const result = useGridStore((s) => s.result);
   const thumbSize = useGridStore((s) => s.thumbSize);
   const current = useGridStore((s) => s.current);
@@ -128,7 +145,7 @@ export function Grid(props: GridProps) {
     () => (groups === null ? [] : railYears(groups)),
     [groups],
   );
-  const rail = railShown(years);
+  const rail = !across && railShown(years);
   const [range, setRange] = useState<VisibleRange>(() =>
     visibleRange(layout, 0, 0, count),
   );
@@ -140,6 +157,7 @@ export function Grid(props: GridProps) {
   // `at` is where the current photo is, or is going while a step waits on its row.
   const at = pending?.index ?? current?.index ?? null;
   const live = useRef({
+    across,
     layout,
     size,
     count,
@@ -151,7 +169,7 @@ export function Grid(props: GridProps) {
   });
   // Kept up to date before any other effect of this render reads it.
   useLayoutEffect(() => {
-    Object.assign(live.current, { layout, size, count, at, anchor });
+    Object.assign(live.current, { across, layout, size, count, at, anchor });
   });
 
   /** The first row drawn, as committed: rows are placed relative to it. */
@@ -168,8 +186,8 @@ export function Grid(props: GridProps) {
     if (el === null || layer === null) return;
     const v = live.current;
     const y =
-      el.scrollTop - v.real + PAD + rowTop(v.layout, drawnFirst.current);
-    layer.style.transform = `translateY(${y}px)`;
+      scrollPos(el, v.across) - v.real + PAD + rowTop(v.layout, drawnFirst.current);
+    layer.style.transform = `translate${v.across ? "X" : "Y"}(${y}px)`;
   }, []);
 
   /** Reads the scroll position and works out what is drawn and wanted. */
@@ -178,7 +196,7 @@ export function Grid(props: GridProps) {
     if (el === null) return;
     const v = live.current;
     const viewport = v.size.height;
-    const real = realScroll(el.scrollTop, v.layout, viewport);
+    const real = realScroll(scrollPos(el, v.across), v.layout, viewport);
     if (real !== v.real) v.direction = real > v.real ? 1 : -1;
     v.real = real;
     placeLayer();
@@ -187,7 +205,7 @@ export function Grid(props: GridProps) {
     reportShown(next.firstIndex, next.lastIndex);
     // The first photo in view, kept with the album's session.
     setGridTop(viewIndex(v.layout, real, viewport, v.count, null) ?? 0);
-    const nextSticky = stickyAt(v.layout, real);
+    const nextSticky = v.across ? null : stickyAt(v.layout, real);
     setSticky((before) =>
       sameSticky(before, nextSticky) ? before : nextSticky,
     );
@@ -224,19 +242,21 @@ export function Grid(props: GridProps) {
     const el = boxRef.current;
     if (el === null) return;
     const v = live.current;
-    el.scrollTop = toScrollTop(Math.max(0, real), v.layout, v.size.height);
+    setScrollPos(el, v.across, toScrollTop(Math.max(0, real), v.layout, v.size.height));
   }, []);
 
-  // The box's size.
+  // The box's size. Across, the width is the strip's height (where the
+  // tiles of a row sit) and the height is its width (the way it scrolls).
   useLayoutEffect(() => {
     const el = boxRef.current;
     if (el === null) return;
-    const measure = () =>
+    const measure = () => {
+      const width = across ? el.clientHeight : el.clientWidth;
+      const height = across ? el.clientWidth : el.clientHeight;
       setSize((s) =>
-        s.width === el.clientWidth && s.height === el.clientHeight
-          ? s
-          : { width: el.clientWidth, height: el.clientHeight },
+        s.width === width && s.height === height ? s : { width, height },
       );
+    };
     measure();
     if (typeof ResizeObserver === "undefined") {
       window.addEventListener("resize", measure);
@@ -245,7 +265,7 @@ export function Grid(props: GridProps) {
     const observer = new ResizeObserver(measure);
     observer.observe(el);
     return () => observer.disconnect();
-  }, []);
+  }, [across]);
 
   // Above the height limit the page scrolls by the wheel and page keys itself, in real pixels.
   useEffect(() => {
@@ -254,11 +274,13 @@ export function Grid(props: GridProps) {
     const onWheel = (e: WheelEvent) => {
       const v = live.current;
       const ratio = scrollRatio(v.layout, v.size.height);
-      if (ratio === 1 || e.ctrlKey) return;
+      // Across, the wheel's turn scrolls sideways.
+      if ((ratio === 1 && !v.across) || e.ctrlKey) return;
       e.preventDefault();
       const unit =
         e.deltaMode === 1 ? LINE : e.deltaMode === 2 ? v.size.height : 1;
-      el.scrollTop += (e.deltaY * unit) / ratio;
+      const delta = v.across ? e.deltaY + e.deltaX : e.deltaY;
+      setScrollPos(el, v.across, scrollPos(el, v.across) + (delta * unit) / ratio);
     };
     el.addEventListener("wheel", onWheel, { passive: false });
     return () => el.removeEventListener("wheel", onWheel);
@@ -299,7 +321,7 @@ export function Grid(props: GridProps) {
     ) {
       scrollReal(anchorAfterResize(old, layout, v.real));
       v.real = realScroll(
-        boxRef.current?.scrollTop ?? 0,
+        boxRef.current === null ? 0 : scrollPos(boxRef.current, v.across),
         layout,
         v.size.height,
       );
@@ -307,6 +329,15 @@ export function Grid(props: GridProps) {
         const to = scrollToShow(v.at, layout, v.real, v.size.height);
         if (to !== null) scrollReal(to);
       }
+    } else if (
+      old !== null &&
+      old.width === 0 &&
+      layout.width > 0 &&
+      v.at !== null
+    ) {
+      // Shown again after being hidden, or moved: the current photo comes into view.
+      const to = scrollToShow(v.at, layout, v.real, v.size.height);
+      scrollReal(to ?? v.real);
     } else {
       // The count or the viewport changed. Above MAX_SCROLL that changes the
       // scale, so the box's scrollTop is set again for the same real place:
@@ -416,6 +447,11 @@ export function Grid(props: GridProps) {
   const others = pending === null || pending.add;
   const rows = [];
   const firstTop = rowTop(layout, range.firstRow);
+  /** A row's size and place along the grid's axis: a column of the strip, across. */
+  const place = (size: number, at: number) =>
+    across
+      ? { width: size, transform: `translateX(${at}px)` }
+      : { height: size, transform: `translateY(${at}px)` };
   const heading = (g: number, copy = false) => {
     const group = groups?.[g];
     if (group === undefined) return null;
@@ -442,10 +478,7 @@ export function Grid(props: GridProps) {
           role="row"
           aria-rowindex={r + 1}
           className="ow-grid__row ow-grid__note-row"
-          style={{
-            height: layout.side,
-            transform: `translateY(${rowTop(layout, r) - firstTop}px)`,
-          }}
+          style={place(layout.side, rowTop(layout, r) - firstTop)}
         >
           <div role="rowheader" className="ow-grid__note-cell">
             <div role="note" className="ow-grid__note">
@@ -468,10 +501,7 @@ export function Grid(props: GridProps) {
           role="row"
           aria-rowindex={r + 1}
           className="ow-grid__row ow-grid__head-row"
-          style={{
-            height: HEAD,
-            transform: `translateY(${rowTop(layout, r) - firstTop}px)`,
-          }}
+          style={place(HEAD, rowTop(layout, r) - firstTop)}
         >
           <div role="rowheader" className="ow-grid__head-cell">
             {heading(groupOfRow(layout, r))}
@@ -490,6 +520,7 @@ export function Grid(props: GridProps) {
           index={i}
           row={row}
           x={PAD + (i - first) * layout.stride}
+          across={across}
           side={layout.side}
           thumb={thumb}
           selected={
@@ -512,10 +543,7 @@ export function Grid(props: GridProps) {
         role="row"
         aria-rowindex={r + 1}
         className="ow-grid__row"
-        style={{
-          height: layout.side,
-          transform: `translateY(${rowTop(layout, r) - firstTop}px)`,
-        }}
+        style={place(layout.side, rowTop(layout, r) - firstTop)}
       >
         {cells}
       </div>,
@@ -526,7 +554,7 @@ export function Grid(props: GridProps) {
     <div className="ow-grid-frame">
       <div
         ref={boxRef}
-        className="ow-grid"
+        className={across ? "ow-grid ow-grid--across" : "ow-grid"}
         role="grid"
         aria-label={gridText.label}
         aria-multiselectable="true"
@@ -549,7 +577,7 @@ export function Grid(props: GridProps) {
         )}
         <div
           className="ow-grid__content"
-          style={{ height: `${layout.height}px` }}
+          style={across ? { width: `${layout.height}px` } : { height: `${layout.height}px` }}
         >
           <div ref={layerRef} className="ow-grid__layer">
             {rows}

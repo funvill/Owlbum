@@ -37,6 +37,8 @@ export const keyLabels: Record<KeyId, string> = {
   "browse.before": "Show the original",
   "browse.copy": "Copy",
   "browse.trash": "Move to the Recycle Bin or Trash",
+  "browse.toggle_grid": "Show or hide the thumbnails",
+  "browse.toggle_details": "Show or hide the details panel",
   "viewer.previous": "Previous photo",
   "viewer.next": "Next photo",
   "viewer.first": "First photo",

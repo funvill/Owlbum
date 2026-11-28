@@ -4,4 +4,9 @@
  * The `open_folder` event: a folder to open, from a drop, the File menu
  * or a second launch, arriving after `app_startup`.
  */
-export type OpenFolder = { path: string, };
+export type OpenFolder = { path: string, 
+/**
+ * The picture to select and show once the folder is open: a second
+ * launch that named a file. Null otherwise.
+ */
+photo: string | null, };

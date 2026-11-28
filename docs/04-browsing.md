@@ -176,6 +176,14 @@ Rules:
 
 **Close folder** (top bar, and File > Close folder, Ctrl+W) calls `album_close` and shows the start screen.
 
+### Opening a picture
+
+Owner's feedback on 0.1.3 (#184): Owlbum can be the program that opens pictures (see [Desktop and release](08-desktop-and-release.md#opening-pictures)). A launch that names a picture file, from the file manager or the command line, opens the folder that holds it (or the album that holds that folder, scoped to it, as any open does) with that picture current, the only one selected and in view, so the preview shows it. A second launch hands the picture to the running window the same way; when its folder is already open only the current photo changes.
+
+- The page asks `photo_find(path)` for the picture's id. Found, the album opens in the grid with that photo current: the saved session's view, filters and search are not used for this open, so nothing can hide it.
+- Not found yet (a folder opened for the first time, whose scan has not reached it): the album opens as usual and the page asks again each time the status is read during the scan; when the picture is found and the grid holds it, it becomes current. If the scan ends without it, the page stops asking.
+- A picture inside a closed stack cannot be shown as a tile; the album opens without moving to it.
+
 ## Top bar
 
 The bar is 48px high. It has a left group that takes the free space and a right group.
@@ -294,7 +302,7 @@ All values are in px. `room` is the measured width of the row.
 
 | Name | Rule |
 |---|---|
-| `free` | `room − 300 − 12` (the preview's minimum and the two splitters). Treated as unlimited until `room` has been measured. |
+| `free` | `room − 300 − 12` (the preview's minimum and the two splitters). Treated as unlimited until `room` has been measured. A hidden column, or thumbnails at the bottom, take no room and no splitter: `free` loses only 6 per splitter shown, and the other column's maximum no longer leaves room for it. |
 | `gridMax` | `max(200, free − 260)` |
 | Thumbnail column width | `clamp(panel.grid_width, 200, gridMax)` |
 | `detailsMax` | `max(260, min(560, free − thumbnail column width))` |
@@ -311,6 +319,22 @@ Each splitter is a `role=separator` with `aria-orientation=vertical`, 6px wide, 
 - **Keys.** With focus on a splitter, Left and Right move it by 16px. Home and End set the minimum and maximum.
 - **Saving.** On pointer-up, on lost capture, or 500 ms after the last key, the width is saved with `app_settings_set` under `panel.grid_width` or `panel.details_width`.
 - **Double-click** puts the default width back (420 or 340).
+
+### Hiding and moving the panels
+
+Owner's feedback on 0.1.3 (#185). The thumbnails and the details panel can each be hidden and shown again, and the thumbnails can sit in a strip along the bottom of the window instead of the column at the left. Each choice is a setting (`panel.grid_shown`, `panel.details_shown`, `panel.grid_place`, `panel.strip_height`, see [Data](02-data.md)), so it is remembered for every album.
+
+| Way | Thumbnails | Details panel |
+|---|---|---|
+| Buttons | **Thumbnails**, a toggle button at the preview's top right (`panel-left` or `panel-bottom` icon), pressed while they show | **Details panel**, the toggle beside it (`details` icon) |
+| Keys (browse) | `T` (`browse.toggle_grid`) | `I` (`browse.toggle_details`), as in the viewer |
+| View menu | `&Thumbnails` (checkbox) | `&Details panel` (checkbox) |
+
+- **Where the thumbnails sit.** View > `Thumbnails at the &bottom` (a checkbox), or Settings > View > Thumbnails (**At the left** or **Along the bottom, under the preview**), sets `panel.grid_place`. Moving them also shows them.
+- **The bottom strip.** As wide as the window, under the preview and the details column, with the view switch on top. It is the same grid turned on its side: its rows run down the strip (one or two tiles, as its height allows) and it scrolls sideways; the mouse wheel scrolls it sideways too. Its height is `panel.strip_height` (default 200, at least 120, and at most what leaves the preview 200 px above it), set by a row splitter over it ("Resize thumbnail strip": drag, Up and Down by 16 px, Home and End, double-click for 200), saved like the column splitters. In the timeline each heading reads upwards in its own narrow column; the month rail is not shown in the strip. The map, when it is the view, fills the strip.
+- **Hidden thumbnails** stay in the page, out of sight, so the review keys, the current photo, the selection, the rows the preview needs and the store keep working: Left and Right still step through the result. When they show again the current photo is brought into view. A hidden column has no splitter, and the preview takes its room (the column widths below count only the columns in the row).
+- **A hidden details panel** is not drawn; the preview still reads the photo's details it needs.
+- F6 skips a hidden region.
 
 ### View switch
 
@@ -1121,6 +1145,7 @@ Names follow the prefixes in [Architecture](01-architecture.md). Every command a
 | `query_ids` | `token`, `offset`, `limit` | `number[]` | The ids at those places of the token's list, in order: one id per tile, so the face of a closed stack and not its folded members, and the meaning segment when the range reaches it. For Shift ranges, heading clicks and Ctrl+A. No limit on `limit`. Error: `query_expired`. |
 | `query_map` | `token` | `{ points: [id, lat, lon, thumb_key, file_name, edit_plan][], unlocated }` | For a token made with `view: "map"`. Error: `query_expired`. |
 | `photo_detail` | `id` | `PhotoDetail` | Error: `photo_not_found`. |
+| `photo_find` | `path` | `number \| null` | The id of the photo whose file is `path` (a full path) in the open album, or null when it is not there or not scanned yet ([Opening a picture](#opening-a-picture)). On Windows the name matches whatever its case. Error: `no_album`. |
 | `photo_exif` | `id` | `ExifField[]`, `{ group, name, value }` | Every EXIF tag of the file ([EXIF section](#exif-section)). Error: `photo_not_found`. |
 | `photo_set_info` | `ids`, `patch` | `{ changed: number[], revision }` | Validates again in Rust; errors `invalid_date`, `invalid_location`, and the shared `view_only` and `photo_not_found`. `changed` lists the photos whose values changed. The patch fields `star` and `hidden` are defined in 05. |
 | `photo_histogram` | `id` | `{ l, r, g, b }`, each 64 numbers | |

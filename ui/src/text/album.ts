@@ -42,6 +42,11 @@ export const albumText = {
   // Review screen splitters (docs/04-browsing.md, "Splitters")
   resizeGrid: "Resize thumbnail column",
   resizeDetails: "Resize details panel",
+  resizeStrip: "Resize thumbnail strip",
+  /** The panel buttons at the preview's top right (issue 185). */
+  panels: "Panels",
+  thumbnails: "Thumbnails",
+  details: "Details panel",
 
   // Top bar
   showWholeAlbum: "Show whole album",

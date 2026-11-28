@@ -20,6 +20,12 @@ export interface SplitterProps {
   onSave(width: number): void;
   /** The default width, put back by a double-click. */
   reset: number;
+  /**
+   * A row splitter over the bottom strip: it sets a height, moves with the
+   * pointer's height, and Up and Down move it (`dir` +1 when moving down
+   * makes it bigger).
+   */
+  across?: boolean;
 }
 
 const clamp = (x: number, lo: number, hi: number) => Math.round(Math.min(hi, Math.max(lo, x)));
@@ -27,9 +33,10 @@ const clamp = (x: number, lo: number, hi: number) => Math.round(Math.min(hi, Mat
 /**
  * A 6 px column splitter (docs/04-browsing.md, "Splitters"): a focusable
  * `separator` that a drag, Left and Right (16 px), Home and End move, and a
- * double-click puts back to its default.
+ * double-click puts back to its default. Across, it is a row splitter that
+ * Up and Down move.
  */
-export function Splitter({ label, value, min, max, dir, onMove, onSave, reset }: SplitterProps) {
+export function Splitter({ label, value, min, max, dir, onMove, onSave, reset, across = false }: SplitterProps) {
   const drag = useRef<{ x: number; start: number; width: number } | null>(null);
   const [dragging, setDragging] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -59,21 +66,21 @@ export function Splitter({ label, value, min, max, dir, onMove, onSave, reset }:
     if (e.button !== 0) return;
     e.preventDefault();
     e.currentTarget.setPointerCapture?.(e.pointerId);
-    drag.current = { x: e.clientX, start: value, width: value };
+    drag.current = { x: across ? e.clientY : e.clientX, start: value, width: value };
     setDragging(true);
   };
 
   const onPointerMove = (e: PointerEvent<HTMLDivElement>) => {
     const d = drag.current;
     if (d === null) return;
-    d.width = clamp(d.start + dir * (e.clientX - d.x), min, max);
+    d.width = clamp(d.start + dir * ((across ? e.clientY : e.clientX) - d.x), min, max);
     onMove(d.width);
   };
 
   const onKeyDown = (e: KeyboardEvent<HTMLDivElement>) => {
     let width: number;
-    if (e.key === "ArrowLeft") width = value - dir * SPLITTER_STEP;
-    else if (e.key === "ArrowRight") width = value + dir * SPLITTER_STEP;
+    if (e.key === (across ? "ArrowUp" : "ArrowLeft")) width = value - dir * SPLITTER_STEP;
+    else if (e.key === (across ? "ArrowDown" : "ArrowRight")) width = value + dir * SPLITTER_STEP;
     else if (e.key === "Home") width = min;
     else if (e.key === "End" && Number.isFinite(max)) width = max;
     else return;
@@ -92,13 +99,13 @@ export function Splitter({ label, value, min, max, dir, onMove, onSave, reset }:
   return (
     <div
       role="separator"
-      aria-orientation="vertical"
+      aria-orientation={across ? "horizontal" : "vertical"}
       aria-label={label}
       aria-valuenow={value}
       aria-valuemin={min}
       aria-valuemax={Number.isFinite(max) ? max : undefined}
       tabIndex={0}
-      className={`ow-splitter${dragging ? " ow-splitter--dragging" : ""}`}
+      className={`ow-splitter${across ? " ow-splitter--across" : ""}${dragging ? " ow-splitter--dragging" : ""}`}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={end}

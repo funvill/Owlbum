@@ -244,6 +244,17 @@ pub static UNSUPPORTED: &[UnsupportedFormat] = &[
     },
 ];
 
+/// The extensions of every picture format, RAW included but not video:
+/// the file types Owlbum offers to open from the file manager
+/// (docs/08-desktop-and-release.md, "Opening pictures").
+pub fn picture_extensions() -> Vec<&'static str> {
+    FORMATS
+        .iter()
+        .filter(|f| f.kind != MediaKind::Video)
+        .flat_map(|f| f.extensions.iter().copied())
+        .collect()
+}
+
 /// The text from the last dot of the file name, lower-cased, with the dot.
 /// Empty when there is no dot or the only dot is the first character.
 pub fn extension_of(name: &str) -> String {

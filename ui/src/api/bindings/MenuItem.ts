@@ -4,4 +4,4 @@
  * A menu item that acts in the page (docs/08-desktop-and-release.md,
  * "Menus"). The page does the rest.
  */
-export type MenuItem = "close_folder" | "rescan" | "shortcuts" | "update" | "whats_new" | "about";
+export type MenuItem = "close_folder" | "rescan" | "shortcuts" | "update" | "whats_new" | "about" | "toggle_grid" | "toggle_details" | "grid_place";

@@ -10,8 +10,9 @@ import { useSettingsStore } from "../app/settings";
 import { toggleShortcuts } from "../app/shortcuts";
 import { openAbout } from "../app/aboutOpen";
 import { listenLifecycle, openWhatsNew, startLifecycle } from "../app/lifecycle";
-import { restoreSession, type SavedSession } from "../grid";
+import { restoreSession, showPhoto, type SavedSession } from "../grid";
 import { followEditStatus } from "../edit/save";
+import { toggleDetails, toggleGrid, toggleGridPlace } from "./panels";
 import { flushSession, followSession, stopSession } from "./reopen";
 import type { ReadStart } from "./reading";
 import { useScanStore } from "./store";
@@ -54,10 +55,16 @@ export interface AlbumState {
   /**
    * Opens a folder that a route chose: the dialog, a recent entry, a drop,
    * `open_folder`. The folder that is already open is left as it is.
+   * `photo`, a picture's full path, is selected and shown (a picture
+   * opened from the file manager, docs/04-browsing.md, "Opening a picture").
    */
-  openFolder(path: string): Promise<void>;
-  /** Calls `album_open`, closing any open album; answers to questions pass `options`. */
-  open(path: string, options?: Partial<OpenOptions>): Promise<void>;
+  openFolder(path: string, photo?: string | null): Promise<void>;
+  /**
+   * Calls `album_open`, closing any open album; answers to questions pass
+   * `options`. With `photo`, that picture is selected and shown instead of
+   * the saved session's place.
+   */
+  open(path: string, options?: Partial<OpenOptions>, photo?: string | null): Promise<void>;
   /** The Open folder button: the native dialog, then `openFolder`. */
   pickFolder(): Promise<void>;
   /** Close folder: back to the start screen. */
@@ -106,6 +113,47 @@ let openCalls = 0;
 let scansFinished = 0;
 /** "Can't watch this folder" is said once per session. */
 let notWatchingSaid = false;
+/**
+ * A picture a launch named that the album did not hold yet when it opened
+ * (a folder opened for the first time): looked for as the scan goes on,
+ * and shown when found. `call` is the `album_open` it belongs to.
+ */
+let wantedPhoto: { path: string; call: number; tries: number } | null = null;
+/** After the scan, a found picture the grid does not show yet is tried this many more times, a second apart. */
+const WANTED_TRIES = 5;
+
+/** The id of the picture at `path` in the open album; null when it is not there (yet). */
+async function findPhoto(path: string): Promise<number | null> {
+  try {
+    return await api().invoke("photo_find", { path });
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Looks for the wanted picture again: shown once the scan has reached it
+ * and the grid holds it. Given up once the scan is over and it still is
+ * not there.
+ */
+async function lookForWanted(scanning: boolean): Promise<void> {
+  const wanted = wantedPhoto;
+  if (wanted === null || wanted.call !== openCalls) return;
+  const id = await findPhoto(wanted.path);
+  if (wantedPhoto !== wanted) return;
+  if (id !== null && (await showPhoto(id))) {
+    if (wantedPhoto === wanted) wantedPhoto = null;
+    return;
+  }
+  if (scanning) return;
+  wanted.tries += 1;
+  if (id === null || wanted.tries > WANTED_TRIES) {
+    wantedPhoto = null;
+    return;
+  }
+  // Found, but the grid's result is not the one with it yet.
+  setTimeout(() => void lookForWanted(false), REFRESH_EVERY_MS);
+}
 let lateScanTimer: ReturnType<typeof setTimeout> | null = null;
 let refreshTimer: ReturnType<typeof setTimeout> | null = null;
 let lastRefresh = 0;
@@ -145,6 +193,7 @@ export function resetAlbumSession(): void {
   openCalls = 0;
   scansFinished = 0;
   notWatchingSaid = false;
+  wantedPhoto = null;
   if (lateScanTimer !== null) clearTimeout(lateScanTimer);
   if (refreshTimer !== null) clearTimeout(refreshTimer);
   lateScanTimer = null;
@@ -272,7 +321,7 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
       listening = await Promise.all([
         api().listen("scan_progress", onProgress),
         api().listen("album_changed", (e) => onChanged(e.reason)),
-        api().listen("open_folder", (e) => void get().openFolder(e.path)),
+        api().listen("open_folder", (e) => void get().openFolder(e.path, e.photo)),
         // The close handshake (docs/08-desktop-and-release.md, "Closing and
         // quitting"): edit mode ends as Done and the session is saved
         // before Rust closes the album.
@@ -285,6 +334,9 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
           else if (item === "shortcuts") toggleShortcuts();
           else if (item === "about") openAbout();
           else if (item === "whats_new") void openWhatsNew();
+          else if (item === "toggle_grid") void toggleGrid();
+          else if (item === "toggle_details") void toggleDetails();
+          else if (item === "grid_place") void toggleGridPlace();
         }),
         api().listen("folder_drop", (e) => {
           if (e.phase === "over") set({ dropOver: true });
@@ -308,7 +360,7 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
       set({ recent: startup.recent });
       const first = startup.launch_folder ?? startup.reopen;
       if (first !== null) {
-        await get().open(first);
+        await get().open(first, undefined, startup.launch_folder === null ? null : startup.launch_photo);
         return;
       }
       const newest = startup.recent[0];
@@ -330,14 +382,23 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
       listening = [];
     },
 
-    async openFolder(path) {
+    async openFolder(path, photo = null) {
       const open = get().status;
-      if (open !== null && open.folder === path && get().opening === null)
+      if (open !== null && open.folder === path && get().opening === null) {
+        // The album is open already: only the picture changes.
+        if (photo !== null) {
+          const call = openCalls;
+          const id = await findPhoto(photo);
+          if (id !== null && call === openCalls && (await showPhoto(id))) return;
+          wantedPhoto = { path: photo, call, tries: 0 };
+          void lookForWanted(open.scanning);
+        }
         return;
-      await get().open(path);
+      }
+      await get().open(path, undefined, photo);
     },
 
-    async open(path, options) {
+    async open(path, options, photo = null) {
       // Where the person was in the album still open, while Rust has it open.
       if (get().status !== null) {
         await leaving();
@@ -355,6 +416,7 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         noticesHidden: null,
       });
       latest = null;
+      wantedPhoto = null;
       const full: OpenOptions = {
         take_lock: false,
         view_only: false,
@@ -367,8 +429,17 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
           options: full,
         });
         if (call !== openCalls) return;
+        let restored = session as SavedSession | null;
+        if (photo !== null) {
+          // The picture is shown in the grid instead of where the album was
+          // left: none of the saved filters or search can hide it.
+          const id = await findPhoto(photo);
+          if (call !== openCalls) return;
+          if (id !== null) restored = { view: "grid", selected_id: id };
+          else wantedPhoto = { path: photo, call, tries: 0 };
+        }
         // Before the review screen is drawn, so the first query is the restored one.
-        restoreSession(session as SavedSession | null);
+        restoreSession(restored);
         const { phase, found, done, failed: unread } = status.scan;
         set({
           opening: null,
@@ -431,6 +502,7 @@ export const useAlbumStore = create<AlbumState>()((set, get) => {
         const status = await api().invoke("album_status");
         if (call !== openCalls || get().opening !== null) return;
         took(status);
+        if (status !== null && wantedPhoto !== null) void lookForWanted(status.scanning);
         if (status !== null && !status.scanning)
           set({ reading: null, readStart: null });
       } catch {

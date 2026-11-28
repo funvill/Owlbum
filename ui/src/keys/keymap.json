@@ -32,6 +32,8 @@
   { "id": "browse.before", "place": "browse", "keys": ["\\"], "hold": true },
   { "id": "browse.copy", "place": "browse", "keys": ["Ctrl+C"] },
   { "id": "browse.trash", "place": "browse", "keys": ["Delete"] },
+  { "id": "browse.toggle_grid", "place": "browse", "keys": ["T"] },
+  { "id": "browse.toggle_details", "place": "browse", "keys": ["I"] },
 
   { "id": "viewer.previous", "place": "viewer", "keys": ["ArrowLeft"], "repeat": true },
   { "id": "viewer.next", "place": "viewer", "keys": ["ArrowRight"], "repeat": true },

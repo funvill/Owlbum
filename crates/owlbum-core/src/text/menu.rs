@@ -14,6 +14,9 @@ pub const QUIT: &str = "&Quit";
 pub const FULL_SCREEN: &str = "Toggle &full screen";
 pub const RELOAD: &str = "&Reload";
 pub const DEVELOPER_TOOLS: &str = "Toggle &developer tools";
+pub const THUMBNAILS: &str = "&Thumbnails";
+pub const DETAILS: &str = "&Details panel";
+pub const THUMBNAILS_BOTTOM: &str = "Thumbnails at the &bottom";
 
 pub const SHORTCUTS: &str = "&Keyboard shortcuts";
 pub const CHECK_FOR_UPDATES: &str = "Check for &updates…";

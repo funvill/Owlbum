@@ -151,7 +151,7 @@ An event is pushed from Rust to the page. There is no polling anywhere.
 | `tagging_progress` | `{ total, done, failed, paused, running, not_working, problem }` | While tagging runs, and on any state change. |
 | `download_progress` | `{ model, received, total, error, finished }` | While a model downloads. |
 | `edit_save_progress` | `{ done, total, current }` | While Save all runs. `current` is the id of the photo being saved. |
-| `open_folder` | `{ path }` | A second launch, the File menu, or a folder dropped on the window asked for a folder. A folder given on the command line at start, or one that arrived before the page called `app_startup`, is returned by `app_startup` instead, so it cannot arrive before the page listens. |
+| `open_folder` | `{ path, photo }` | A second launch, the File menu, or a folder dropped on the window asked for a folder. `photo` is the picture a second launch named, to show once the folder is open (#184), else null. A folder given on the command line at start, or one that arrived before the page called `app_startup`, is returned by `app_startup` instead, so it cannot arrive before the page listens. |
 | `folder_drop` | `{ phase }` | Something is dragged over the window (`over`), the drag left or was dropped (`left`), or a drop held nothing that could be opened (`refused`). The page draws the drop outline from it; a drop that opens a folder sends `left`, then `open_folder`. |
 | `app_menu` | `{ item }` | A menu item that the page carries out was chosen. |
 | `app_closing` | `{}` | The window is about to close; the page finishes what it is doing and answers with `app_close_ready`. |

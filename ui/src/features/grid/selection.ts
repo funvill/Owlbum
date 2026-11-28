@@ -327,3 +327,26 @@ export async function pickById(id: number, add: boolean): Promise<void> {
   if (!stillMine(mine, held) || located === null || !("index" in located)) return;
   clickAt({ id, index: located.index }, { ctrlKey: true, shiftKey: false });
 }
+
+/**
+ * Makes photo `id` the current photo, the whole selection and the anchor,
+ * and brings it into view: a picture opened from the file manager once the
+ * scan has reached it (docs/04-browsing.md, "Opening a picture"). Answers
+ * false when the result on screen does not show it as a tile (not there
+ * yet, or folded in a stack), and changes nothing then.
+ */
+export async function showPhoto(id: number): Promise<boolean> {
+  const held = token();
+  if (held === null) return false;
+  const mine = ++op;
+  let at;
+  try {
+    at = await api().invoke("query_locate", { token: held, id });
+  } catch {
+    return false;
+  }
+  if (!stillMine(mine, held) || at === null || !("index" in at)) return false;
+  commit({ current: { id, index: at.index }, anchor: { id, index: at.index }, selection: [id] });
+  useGridStore.setState((s) => ({ scroll: { to: "current", seq: (s.scroll?.seq ?? 0) + 1 } }));
+  return true;
+}

@@ -42,6 +42,8 @@ interface TileProps {
   /** Undefined until the row arrives: a placeholder. */
   row: Row | undefined;
   x: number;
+  /** In the bottom strip: `x` runs down the strip's height. */
+  across?: boolean;
   side: number;
   thumb: "s" | "m";
   selected: boolean;
@@ -58,6 +60,7 @@ export const Tile = memo(function Tile({
   index,
   row,
   x,
+  across = false,
   side,
   thumb,
   selected,
@@ -68,7 +71,7 @@ export const Tile = memo(function Tile({
   actions,
 }: TileProps) {
   const [, redraw] = useState(0);
-  const style: CSSProperties = { width: side, height: side, transform: `translateX(${x}px)` };
+  const style: CSSProperties = { width: side, height: side, transform: `translate${across ? "Y" : "X"}(${x}px)` };
   const classes = ["ow-tile"];
   if (selected) classes.push("ow-tile--selected");
   if (current) classes.push("ow-tile--current");

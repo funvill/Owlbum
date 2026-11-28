@@ -10,6 +10,10 @@ export const defaultSettings: Settings = {
   thumb_size: 160,
   "panel.grid_width": 420,
   "panel.details_width": 340,
+  "panel.grid_shown": true,
+  "panel.details_shown": true,
+  "panel.grid_place": "left",
+  "panel.strip_height": 200,
   sections: {},
   view: "grid",
   timeline_unit: null,
@@ -156,6 +160,10 @@ export const appHandlers: AreaHandlers<AppCommands> = {
   }),
   // Windows: files are dragged out and copied as files.
   app_capabilities: () => ({ drag_out: true, copy_files: "files" }),
+  // Windows, with Owlbum not yet opening pictures. Turning it on would open
+  // Windows' Default apps page; here it only answers.
+  app_associate_status: () => ({ available: true, on: false }),
+  app_associate: ({ on }) => ({ available: true, on }),
   app_close_ready: () => null,
   // Four countries by a box around them, enough for page tests; the real
   // lookup is the bundled outlines in Rust. At sea there is none.
@@ -225,6 +233,7 @@ export const appHandlers: AreaHandlers<AppCommands> = {
     settings: structuredClone(defaultSettings),
     recent: [],
     launch_folder: null,
+    launch_photo: null,
     reopen: null,
     show_update_notice: false,
     whats_new: [],

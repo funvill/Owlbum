@@ -14,18 +14,31 @@ import { Viewer, openViewer, useViewerStore } from "../viewer";
 import { viewOnlyReason } from "./banners";
 import { useAlbumStore } from "./session";
 import { useSettingsStore } from "../app";
-import { DETAILS_DEFAULT, DETAILS_MIN, GRID_DEFAULT, GRID_MIN, columnWidths } from "./columns";
+import { IconButton } from "../../controls";
+import { primaryKey } from "../../keys";
+import {
+  DETAILS_DEFAULT,
+  DETAILS_MIN,
+  GRID_DEFAULT,
+  GRID_MIN,
+  STRIP_DEFAULT,
+  STRIP_MIN,
+  columnWidths,
+  stripHeight,
+  type InRow,
+} from "./columns";
+import { toggleDetails, toggleGrid, usePanelKeys, usePanels, type Panels } from "./panels";
 import { Splitter } from "./Splitter";
 
-type Width = "panel.grid_width" | "panel.details_width";
+type Width = "panel.grid_width" | "panel.details_width" | "panel.strip_height";
 
 /**
  * The review row's column widths: the stored ones (settings), a width being
  * moved by a splitter until it is saved, and the row's measured width.
  */
-function useColumns() {
+function useColumns(inRow: InRow) {
   const ref = useRef<HTMLElement>(null);
-  const [room, setRoom] = useState<number | null>(null);
+  const [room, setRoom] = useState<{ width: number; height: number } | null>(null);
   const stored = useSettingsStore((s) => s.settings);
   const [moving, setMoving] = useState<Partial<Record<Width, number>>>({});
 
@@ -33,7 +46,14 @@ function useColumns() {
     const el = ref.current;
     if (el === null) return;
     // A row not laid out yet (width 0) counts as not measured.
-    const measure = () => setRoom(el.clientWidth > 0 ? el.clientWidth : null);
+    const measure = () =>
+      setRoom((r) =>
+        el.clientWidth <= 0
+          ? null
+          : r !== null && r.width === el.clientWidth && r.height === el.clientHeight
+            ? r
+            : { width: el.clientWidth, height: el.clientHeight },
+      );
     measure();
     if (typeof ResizeObserver === "undefined") {
       window.addEventListener("resize", measure);
@@ -46,6 +66,7 @@ function useColumns() {
 
   const grid = moving["panel.grid_width"] ?? stored?.["panel.grid_width"] ?? GRID_DEFAULT;
   const details = moving["panel.details_width"] ?? stored?.["panel.details_width"] ?? DETAILS_DEFAULT;
+  const strip = moving["panel.strip_height"] ?? stored?.["panel.strip_height"] ?? STRIP_DEFAULT;
   const move = useCallback((key: Width, width: number) => setMoving((m) => ({ ...m, [key]: width })), []);
   const save = useCallback(async (key: Width, width: number) => {
     setMoving((m) => ({ ...m, [key]: width }));
@@ -58,7 +79,39 @@ function useColumns() {
       return rest;
     });
   }, []);
-  return { ref, columns: columnWidths(room, grid, details), move, save };
+  return {
+    ref,
+    columns: columnWidths(room?.width ?? null, grid, details, inRow),
+    strip: stripHeight(room?.height ?? null, strip),
+    move,
+    save,
+  };
+}
+
+/**
+ * The panel buttons at the preview's top right (docs/04-browsing.md,
+ * "Hiding and moving the panels"): each shows or hides its panel, and is
+ * pressed while the panel shows.
+ */
+function PanelButtons({ panels }: { panels: Panels }) {
+  return (
+    <div className="ow-review__panels" role="toolbar" aria-label={albumText.panels}>
+      <IconButton
+        icon={panels.place === "bottom" ? "panel-bottom" : "panel-left"}
+        label={albumText.thumbnails}
+        shortcut={primaryKey("browse.toggle_grid")}
+        pressed={panels.grid}
+        onClick={() => void toggleGrid()}
+      />
+      <IconButton
+        icon="details"
+        label={albumText.details}
+        shortcut={primaryKey("browse.toggle_details")}
+        pressed={panels.details}
+        onClick={() => void toggleDetails()}
+      />
+    </div>
+  );
 }
 
 /**
@@ -66,6 +119,11 @@ function useColumns() {
  * column, the preview and the details column, with a splitter between each
  * two. The column widths are the stored settings `panel.grid_width` and
  * `panel.details_width`, narrowed to fit the row without changing them.
+ * The thumbnails and the details can be hidden, and the thumbnails can sit
+ * in a strip along the bottom instead (`panel.grid_shown`,
+ * `panel.details_shown`, `panel.grid_place`, `panel.strip_height`). Hidden
+ * thumbnails stay mounted, so their keys, the rows they ask for and the
+ * selection go on working; a hidden details panel is not drawn.
  *
  * The preview and the details panel show the page's one current photo,
  * which the grid store holds and every `query_run` settles, so they can
@@ -110,35 +168,50 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
   const view = useGridStore((s) => s.query.view);
   // The viewer belongs to the open album: it does not come back with the next one.
   useEffect(() => () => useViewerStore.setState({ open: false }), []);
-  const { ref, columns, move, save } = useColumns();
+  // T and I hide or show the thumbnails and the details panel.
+  usePanelKeys();
+  const panels = usePanels();
+  const bottom = panels.place === "bottom";
+  const { ref, columns, strip, move, save } = useColumns({ grid: panels.grid && !bottom, details: panels.details });
 
-  return (
-    <section ref={ref} className="ow-review" aria-label={albumText.photosRegion}>
-      <div className="ow-review__photos" style={{ width: columns.grid }} data-region="grid">
-        <ViewBar />
-        {view === "map" ? (
-          <MapView album={folder} onOpen={open} onMenu={openMarkerMenu} />
-        ) : (
-          <BrowseGrid
-            busy={busy}
-            onOpen={open}
-            onStar={writable ? (r) => void toggleTileStar(r) : undefined}
-            onStack={toggleStack}
-            onMenu={openMenu}
-            onPress={(at, e) => pressPhoto(at.id, e)}
-          />
-        )}
-      </div>
-      <Splitter
-        label={albumText.resizeGrid}
-        value={columns.grid}
-        min={GRID_MIN}
-        max={columns.gridMax}
-        dir={1}
-        reset={GRID_DEFAULT}
-        onMove={(w) => move("panel.grid_width", w)}
-        onSave={(w) => void save("panel.grid_width", w)}
-      />
+  const photos = (
+    <div
+      className={bottom ? "ow-review__photos ow-review__photos--strip" : "ow-review__photos"}
+      style={bottom ? { height: strip.height } : { width: columns.grid }}
+      data-region="grid"
+      hidden={!panels.grid}
+    >
+      <ViewBar />
+      {view === "map" ? (
+        <MapView album={folder} onOpen={open} onMenu={openMarkerMenu} />
+      ) : (
+        <BrowseGrid
+          busy={busy}
+          across={bottom}
+          onOpen={open}
+          onStar={writable ? (r) => void toggleTileStar(r) : undefined}
+          onStack={toggleStack}
+          onMenu={openMenu}
+          onPress={(at, e) => pressPhoto(at.id, e)}
+        />
+      )}
+    </div>
+  );
+  const row = (
+    <>
+      {!bottom && photos}
+      {!bottom && panels.grid && (
+        <Splitter
+          label={albumText.resizeGrid}
+          value={columns.grid}
+          min={GRID_MIN}
+          max={columns.gridMax}
+          dir={1}
+          reset={GRID_DEFAULT}
+          onMove={(w) => move("panel.grid_width", w)}
+          onSave={(w) => void save("panel.grid_width", w)}
+        />
+      )}
       <div className="ow-review__preview" data-region="preview">
         <Preview
           detail={detail.detail}
@@ -146,20 +219,55 @@ export function Review({ busy, onOpen }: { busy: () => boolean; onOpen?: (at: Ph
           onMenu={openMenu}
           onPress={(at, e) => pressPhoto(at.id, e)}
         />
+        <PanelButtons panels={panels} />
       </div>
-      <Splitter
-        label={albumText.resizeDetails}
-        value={columns.details}
-        min={DETAILS_MIN}
-        max={columns.detailsMax}
-        dir={-1}
-        reset={DETAILS_DEFAULT}
-        onMove={(w) => move("panel.details_width", w)}
-        onSave={(w) => void save("panel.details_width", w)}
-      />
-      <div className="ow-review__details" style={{ width: columns.details }} data-region="details">
-        <DetailsPanel current={shown} onNotFound={notFound} shared={detail} />
-      </div>
+      {panels.details && (
+        <>
+          <Splitter
+            label={albumText.resizeDetails}
+            value={columns.details}
+            min={DETAILS_MIN}
+            max={columns.detailsMax}
+            dir={-1}
+            reset={DETAILS_DEFAULT}
+            onMove={(w) => move("panel.details_width", w)}
+            onSave={(w) => void save("panel.details_width", w)}
+          />
+          <div className="ow-review__details" style={{ width: columns.details }} data-region="details">
+            <DetailsPanel current={shown} onNotFound={notFound} shared={detail} />
+          </div>
+        </>
+      )}
+    </>
+  );
+
+  return (
+    <section
+      ref={ref}
+      className={bottom ? "ow-review ow-review--bottom" : "ow-review"}
+      aria-label={albumText.photosRegion}
+    >
+      {bottom ? (
+        <>
+          <div className="ow-review__row">{row}</div>
+          {panels.grid && (
+            <Splitter
+              across
+              label={albumText.resizeStrip}
+              value={strip.height}
+              min={STRIP_MIN}
+              max={strip.max}
+              dir={-1}
+              reset={STRIP_DEFAULT}
+              onMove={(h) => move("panel.strip_height", h)}
+              onSave={(h) => void save("panel.strip_height", h)}
+            />
+          )}
+          {photos}
+        </>
+      ) : (
+        row
+      )}
       <Viewer detail={detail.detail} onMenu={openMenu} />
       {menu !== null && <PhotoMenu at={menu.at} photoId={menu.photoId} onClose={closeMenu} />}
     </section>

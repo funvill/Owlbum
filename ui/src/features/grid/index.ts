@@ -17,6 +17,7 @@ export {
   selectById,
   selectGroup,
   selectNone,
+  showPhoto,
   step,
   stepToEnd,
   type ClickKeys,

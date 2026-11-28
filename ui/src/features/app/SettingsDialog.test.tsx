@@ -53,7 +53,7 @@ describe("the Settings dialog", () => {
   it("shows every section and passes the accessibility check", async () => {
     show();
     const dialog = await screen.findByRole("dialog", { name: t.title });
-    for (const name of [t.general, t.maps, t.tagging, t.updates]) {
+    for (const name of [t.general, t.view, t.maps, t.tagging, t.updates]) {
       expect(within(dialog).getByRole("region", { name })).toBeInTheDocument();
     }
     expect(await within(dialog).findByText(t.cacheUses(SIZE))).toBeInTheDocument();
@@ -114,6 +114,36 @@ describe("the Settings dialog", () => {
     await user.click(screen.getByRole("button", { name: t.clear }));
     await waitFor(() => expect(fake.calls.some((c) => c.command === "app_cache_clear")).toBe(true));
     expect(await screen.findByText(t.cleared(SIZE))).toBeInTheDocument();
+  });
+
+  it("makes Owlbum the program that opens pictures, and stops", async () => {
+    const user = userEvent.setup();
+    const { fake } = show();
+    const box = await screen.findByRole("checkbox", { name: t.openPictures });
+    expect(box).not.toBeChecked();
+    await user.click(box);
+    await waitFor(() => expect(box).toBeChecked());
+    expect(await screen.findByText(t.openPicturesConfirm)).toBeInTheDocument();
+    await user.click(box);
+    await waitFor(() => expect(box).not.toBeChecked());
+    const asked = fake.calls.filter((c) => c.command === "app_associate").map((c) => c.args);
+    expect(asked).toEqual([{ on: true }, { on: false }]);
+  });
+
+  it("leaves Open pictures out where it is not offered", async () => {
+    setApi(createFakeApi({ app_associate_status: () => ({ available: false, on: false }) }));
+    render(<SettingsDialog open onClose={() => {}} />);
+    await screen.findByRole("checkbox", { name: t.reopenLast });
+    await waitFor(() => expect(screen.queryByRole("checkbox", { name: t.openPictures })).toBeNull());
+  });
+
+  it("moves the thumbnails to the bottom", async () => {
+    const user = userEvent.setup();
+    const { fake } = show();
+    await user.click(await screen.findByRole("radio", { name: t.gridBottom }));
+    await waitFor(() =>
+      expect(setCalls(fake)).toContainEqual({ patch: { "panel.grid_place": "bottom", "panel.grid_shown": true } }),
+    );
   });
 
   it("closes from its Close button", async () => {

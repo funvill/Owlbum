@@ -6,7 +6,7 @@
 //! page send `app_menu`; the others act here.
 
 use owlbum_core::app::{AppMenu, MenuItem as PageItem};
-use owlbum_core::appdata::AppData;
+use owlbum_core::appdata::{AppData, GridPlace, Settings};
 use owlbum_core::text::menu as text;
 use serde_json::json;
 use tauri::menu::{
@@ -73,6 +73,11 @@ pub const DATA_FOLDER: &str = "file.data_folder";
 pub const CHECK_AUTOMATICALLY: &str = "help.check_automatically";
 pub const WHATS_NEW: &str = "help.whats_new";
 pub const UPDATE: &str = "help.update";
+pub const GRID_BOTTOM: &str = "view.grid_bottom";
+/// The View menu's panel items, whose keys the page handles (docs/04,
+/// "Hiding and moving the panels").
+pub const TOGGLE_GRID: &str = "browse.toggle_grid";
+pub const TOGGLE_DETAILS: &str = "browse.toggle_details";
 
 /// Every line of the menu bar, in order.
 pub const ENTRIES: &[Entry] = &[
@@ -83,6 +88,19 @@ pub const ENTRIES: &[Entry] = &[
     item(Bar::File, DATA_FOLDER, text::OPEN_DATA_FOLDER),
     separator(Bar::File),
     item(Bar::File, "app.quit", text::QUIT),
+    Entry {
+        kind: Kind::Check,
+        ..item(Bar::View, TOGGLE_GRID, text::THUMBNAILS)
+    },
+    Entry {
+        kind: Kind::Check,
+        ..item(Bar::View, TOGGLE_DETAILS, text::DETAILS)
+    },
+    Entry {
+        kind: Kind::Check,
+        ..item(Bar::View, GRID_BOTTOM, text::THUMBNAILS_BOTTOM)
+    },
+    separator(Bar::View),
     item(Bar::View, "app.full_screen", text::FULL_SCREEN),
     Entry {
         dev: true,
@@ -128,30 +146,46 @@ pub fn label(entry: &Entry) -> String {
 pub struct MenuState<R: Runtime> {
     close_folder: MenuItem<R>,
     rescan: MenuItem<R>,
-    auto: CheckMenuItem<R>,
     update: MenuItem<R>,
+    /// Every checkbox item, by id.
+    checks: Vec<(&'static str, CheckMenuItem<R>)>,
 }
 
 /// The items [`MenuState`] keeps, found while building.
 struct Found<R: Runtime> {
     close_folder: Option<MenuItem<R>>,
     rescan: Option<MenuItem<R>>,
-    auto: Option<CheckMenuItem<R>>,
     update: Option<MenuItem<R>>,
+    checks: Vec<(&'static str, CheckMenuItem<R>)>,
+}
+
+/// Whether the checkbox item `id` is ticked for these settings.
+pub fn checked(id: &str, settings: &Settings) -> bool {
+    match id {
+        CHECK_AUTOMATICALLY => settings.updates_auto,
+        TOGGLE_GRID => settings.panel_grid_shown,
+        TOGGLE_DETAILS => settings.panel_details_shown,
+        GRID_BOTTOM => settings.panel_grid_place == GridPlace::Bottom,
+        _ => false,
+    }
 }
 
 /// Builds the menu bar. Close folder and Rescan start disabled: no album is
-/// open yet.
-pub fn build<R: Runtime>(app: &AppHandle<R>, dev: bool, auto: bool) -> tauri::Result<Menu<R>> {
+/// open yet. The checkbox items start as `settings` say.
+pub fn build<R: Runtime>(
+    app: &AppHandle<R>,
+    dev: bool,
+    settings: &Settings,
+) -> tauri::Result<Menu<R>> {
     let mut found = Found {
         close_folder: None,
         rescan: None,
-        auto: None,
         update: None,
+        checks: Vec::new(),
     };
-    let file = submenu(app, Bar::File, text::FILE, dev, auto, &mut found)?;
-    let view = submenu(app, Bar::View, text::VIEW, dev, auto, &mut found)?;
-    let help = submenu(app, Bar::Help, text::HELP, dev, auto, &mut found)?;
+    let file = submenu(app, Bar::File, text::FILE, dev, settings, &mut found)?;
+    let view = submenu(app, Bar::View, text::VIEW, dev, settings, &mut found)?;
+    let help = submenu(app, Bar::Help, text::HELP, dev, settings, &mut found)?;
     let menu = MenuBuilder::new(app)
         .item(&file)
         .item(&view)
@@ -160,15 +194,15 @@ pub fn build<R: Runtime>(app: &AppHandle<R>, dev: bool, auto: bool) -> tauri::Re
     if let Found {
         close_folder: Some(close_folder),
         rescan: Some(rescan),
-        auto: Some(auto),
         update: Some(update),
+        checks,
     } = found
     {
         app.manage(MenuState {
             close_folder,
             rescan,
-            auto,
             update,
+            checks,
         });
     }
     Ok(menu)
@@ -179,7 +213,7 @@ fn submenu<R: Runtime>(
     bar: Bar,
     title: &str,
     dev: bool,
-    auto: bool,
+    settings: &Settings,
     found: &mut Found<R>,
 ) -> tauri::Result<Submenu<R>> {
     let mut sub = SubmenuBuilder::new(app, title);
@@ -188,10 +222,10 @@ fn submenu<R: Runtime>(
             Kind::Separator => sub.separator(),
             Kind::Check => {
                 let built = CheckMenuItemBuilder::with_id(entry.id, label(entry))
-                    .checked(auto)
+                    .checked(checked(entry.id, settings))
                     .build(app)?;
                 let sub = sub.item(&built);
-                found.auto = Some(built);
+                found.checks.push((entry.id, built));
                 sub
             }
             Kind::Item => {
@@ -225,8 +259,23 @@ pub fn album_open<R: Runtime>(app: &AppHandle<R>, open: bool) {
 
 /// `updates.auto` changed (here or in Settings): the checkbox follows.
 pub fn updates_auto<R: Runtime>(app: &AppHandle<R>, auto: bool) {
+    if let Some(state) = app.try_state::<MenuState<R>>()
+        && let Some((_, check)) = state
+            .checks
+            .iter()
+            .find(|(id, _)| *id == CHECK_AUTOMATICALLY)
+    {
+        let _ = check.set_checked(auto);
+    }
+}
+
+/// The settings changed: every checkbox item follows them, so a check the
+/// menu ticked itself shows what was saved.
+pub fn follow_settings<R: Runtime>(app: &AppHandle<R>, settings: &Settings) {
     if let Some(state) = app.try_state::<MenuState<R>>() {
-        let _ = state.auto.set_checked(auto);
+        for (id, check) in &state.checks {
+            let _ = check.set_checked(checked(id, settings));
+        }
     }
 }
 
@@ -277,6 +326,9 @@ pub fn action(id: &str) -> Option<Action> {
         UPDATE => Action::Update,
         "app.feedback" => Action::OpenFeedback,
         "app.about" => Action::Page(PageItem::About),
+        TOGGLE_GRID => Action::Page(PageItem::ToggleGrid),
+        TOGGLE_DETAILS => Action::Page(PageItem::ToggleDetails),
+        GRID_BOTTOM => Action::Page(PageItem::GridPlace),
         _ => return None,
     })
 }
@@ -408,6 +460,29 @@ mod tests {
         assert_eq!(action("app.feedback"), Some(Action::OpenFeedback));
         assert_eq!(action("app.about"), Some(Action::Page(PageItem::About)));
         assert_eq!(action("nothing"), None);
+    }
+
+    #[test]
+    fn the_view_menu_shows_and_moves_the_panels() {
+        assert_eq!(
+            action(TOGGLE_GRID),
+            Some(Action::Page(PageItem::ToggleGrid))
+        );
+        assert_eq!(
+            action(TOGGLE_DETAILS),
+            Some(Action::Page(PageItem::ToggleDetails))
+        );
+        assert_eq!(action(GRID_BOTTOM), Some(Action::Page(PageItem::GridPlace)));
+        let mut s = Settings::default();
+        assert!(checked(TOGGLE_GRID, &s) && checked(TOGGLE_DETAILS, &s));
+        assert!(!checked(GRID_BOTTOM, &s));
+        s.panel_grid_shown = false;
+        s.panel_grid_place = GridPlace::Bottom;
+        assert!(!checked(TOGGLE_GRID, &s));
+        assert!(checked(GRID_BOTTOM, &s));
+        // The keys are the page's: shown beside the item, not accelerators.
+        assert_eq!(keymap::accelerator(TOGGLE_GRID), None);
+        assert!(keymap::row(TOGGLE_DETAILS).is_some());
     }
 
     #[test]

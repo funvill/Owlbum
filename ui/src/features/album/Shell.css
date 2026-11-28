@@ -156,6 +156,46 @@
   min-height: 0;
 }
 
+/* docs/04-browsing.md, "Hiding and moving the panels". Hidden thumbnails
+   stay in the page, so their keys and rows go on working. */
+.ow-review__photos[hidden] {
+  display: none;
+}
+
+/* Thumbnails at the bottom: the preview and the details over a strip as
+   wide as the window. */
+.ow-review--bottom {
+  flex-direction: column;
+}
+
+.ow-review__row {
+  display: flex;
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.ow-review__photos--strip {
+  min-width: 0;
+  min-height: 120px;
+}
+
+.ow-review__preview {
+  position: relative;
+}
+
+/* The panel buttons, over the preview's top right corner. */
+.ow-review__panels {
+  position: absolute;
+  top: var(--space-3);
+  right: var(--space-3);
+  z-index: var(--z-raised);
+  display: flex;
+  gap: var(--space-1);
+  padding: var(--space-1);
+  border-radius: var(--radius-md);
+  background: var(--panel);
+}
+
 /* docs/04-browsing.md, "Splitters"; docs/09-visual-design.md. */
 .ow-splitter {
   flex: none;
@@ -163,6 +203,13 @@
   background: var(--line-soft);
   cursor: col-resize;
   touch-action: none;
+}
+
+/* The row splitter over the bottom strip. */
+.ow-splitter--across {
+  width: auto;
+  height: var(--size-splitter);
+  cursor: row-resize;
 }
 
 .ow-splitter:hover,

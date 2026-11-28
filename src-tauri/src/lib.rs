@@ -5,6 +5,7 @@
 //! shell can do: windows, menus, dialogs, drag-out, trash, clipboard, reveal,
 //! the updater and single-instance handling.
 
+pub mod assoc;
 pub mod bindings;
 pub mod closing;
 pub mod commands;
@@ -173,11 +174,11 @@ pub fn run() {
 
     let launch = std::env::current_dir()
         .ok()
-        .and_then(|cwd| owlbum_core::app::launch_folder(std::env::args_os(), &cwd));
+        .and_then(|cwd| owlbum_core::app::launch(std::env::args_os(), &cwd));
 
-    let auto = data.settings().map(|s| s.updates_auto).unwrap_or(true);
+    let settings = data.settings().unwrap_or_default();
     let pubkey = update::public_key(context.config());
-    let saved_window = data.settings().map(|s| s.window).unwrap_or_default();
+    let saved_window = settings.window;
 
     let mut builder = tauri::Builder::default();
     // Step 3: one running copy per app data folder. Tests that set
@@ -191,7 +192,7 @@ pub fn run() {
         .setup(move |app| {
             use_bundled_ort(app.handle());
             // Step 6: the menu.
-            let menu = menu::build(app.handle(), dev, auto)?;
+            let menu = menu::build(app.handle(), dev, &settings)?;
             app.set_menu(menu)?;
             // Step 8: the window, hidden, with the restored geometry.
             let window = main_window(app, dev)?;
@@ -205,8 +206,17 @@ pub fn run() {
             app.manage(commands::file::DesktopShell(Arc::new(
                 desktop::NativeDesktop::new(app.handle().clone()),
             )));
-            if let Some(folder) = &launch {
-                handoff::deliver(app.handle(), folder);
+            // Settings > Open pictures with Owlbum (docs/08, "Opening
+            // pictures"): Windows only for now.
+            #[cfg(windows)]
+            if let Ok(exe) = std::env::current_exe() {
+                app.manage(assoc::FileTypes {
+                    registry: Arc::new(assoc::CurrentUser),
+                    exe,
+                });
+            }
+            if let Some(launch) = &launch {
+                handoff::deliver_launch(app.handle(), launch);
             }
             configure_updates(app.handle(), dev, pubkey.as_deref());
             let page = app.handle().clone();
@@ -308,15 +318,16 @@ pub fn show_window<R: Runtime>(app: &AppHandle<R>) {
 
 /// A second copy was started (docs/08-desktop-and-release.md, "Single
 /// instance and second launches"): it has handed over its arguments and
-/// exits. This copy comes to the front and opens the folder it named.
+/// exits. This copy comes to the front and opens the folder it named, with
+/// the picture selected when it named a file.
 fn second_launch<R: Runtime>(app: &AppHandle<R>, args: Vec<String>, cwd: String) {
     if let Some(window) = app.get_webview_window("main") {
         let _ = window.unminimize();
         let _ = window.show();
         let _ = window.set_focus();
     }
-    if let Some(folder) = owlbum_core::app::launch_folder(&args, std::path::Path::new(&cwd)) {
-        handoff::deliver(app, &folder);
+    if let Some(launch) = owlbum_core::app::launch(&args, std::path::Path::new(&cwd)) {
+        handoff::deliver_launch(app, &launch);
     }
 }
 

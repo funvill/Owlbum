@@ -23,7 +23,7 @@ const map = [
   ["timeline", "timeline"], ["map", "map"], ["map-pin", "map-pin"], ["stack", "layers"],
   ["search", "search"], ["filter", "funnel"], ["sort", "arrow-up-down"], ["calendar", "calendar"],
   ["person", "user"], ["zoom-in", "zoom-in"], ["zoom-out", "zoom-out"], ["fit", "maximize"],
-  ["details", "panel-right"],
+  ["details", "panel-right"], ["panel-left", "panel-left"], ["panel-bottom", "panel-bottom"],
   // New: video
   ["video", "video"], ["play", "play"], ["pause", "pause"], ["volume", "volume-2"],
   ["volume-off", "volume-x"],

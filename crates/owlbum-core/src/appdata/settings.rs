@@ -55,6 +55,18 @@ pub enum EditTarget {
     File,
 }
 
+/// Where the thumbnails sit (`panel.grid_place`, docs/04-browsing.md,
+/// "Hiding and moving the panels").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize, TS)]
+#[serde(rename_all = "snake_case")]
+pub enum GridPlace {
+    /// A column at the left of the window.
+    #[default]
+    Left,
+    /// A strip along the bottom, under the preview, that scrolls sideways.
+    Bottom,
+}
+
 /// The `window` setting: the window's bounds when it is not maximised, in
 /// physical pixels, and whether it was maximised
 /// (docs/08-desktop-and-release.md, "The window"). A missing number means
@@ -98,6 +110,18 @@ pub struct Settings {
     /// The details panel's width.
     #[serde(rename = "panel.details_width")]
     pub panel_details_width: u32,
+    /// The thumbnails are shown (false: hidden, the preview takes the room).
+    #[serde(rename = "panel.grid_shown")]
+    pub panel_grid_shown: bool,
+    /// The details panel is shown.
+    #[serde(rename = "panel.details_shown")]
+    pub panel_details_shown: bool,
+    /// Where the thumbnails sit: left or bottom.
+    #[serde(rename = "panel.grid_place")]
+    pub panel_grid_place: GridPlace,
+    /// The bottom strip's height.
+    #[serde(rename = "panel.strip_height")]
+    pub panel_strip_height: u32,
     /// Which details sections are folded: section id to open (true) or
     /// folded (false). A missing id counts as open.
     pub sections: BTreeMap<String, bool>,
@@ -145,6 +169,10 @@ impl Default for Settings {
             thumb_size: 160,
             panel_grid_width: 420,
             panel_details_width: 340,
+            panel_grid_shown: true,
+            panel_details_shown: true,
+            panel_grid_place: GridPlace::Left,
+            panel_strip_height: 200,
             sections: BTreeMap::new(),
             view: SettingsView::Grid,
             timeline_unit: None,
@@ -173,6 +201,10 @@ pub const KEYS: &[(&str, Check)] = &[
     ("thumb_size", |v| int_in(v, 96, 320)),
     ("panel.grid_width", |v| int_in(v, 1, MAX_PIXELS)),
     ("panel.details_width", |v| int_in(v, 1, MAX_PIXELS)),
+    ("panel.grid_shown", Value::is_boolean),
+    ("panel.details_shown", Value::is_boolean),
+    ("panel.grid_place", |v| one_of(v, &["left", "bottom"])),
+    ("panel.strip_height", |v| int_in(v, 1, MAX_PIXELS)),
     ("sections", |v| {
         v.as_object()
             .is_some_and(|m| m.values().all(Value::is_boolean))
@@ -323,6 +355,10 @@ mod tests {
                 "thumb_size": 160,
                 "panel.grid_width": 420,
                 "panel.details_width": 340,
+                "panel.grid_shown": true,
+                "panel.details_shown": true,
+                "panel.grid_place": "left",
+                "panel.strip_height": 200,
                 "sections": {},
                 "view": "grid",
                 "timeline_unit": null,
@@ -370,6 +406,9 @@ mod tests {
             &patch(json!({
                 "thumb_size": 240,
                 "panel.details_width": 300,
+                "panel.grid_shown": false,
+                "panel.grid_place": "bottom",
+                "panel.strip_height": 260,
                 "sections": { "histogram": false },
                 "view": "map",
                 "timeline_unit": "month",
@@ -386,6 +425,10 @@ mod tests {
         assert_eq!(s.thumb_size, 240);
         assert_eq!(s.panel_details_width, 300);
         assert_eq!(s.panel_grid_width, 420, "untouched keys keep their default");
+        assert!(!s.panel_grid_shown);
+        assert!(s.panel_details_shown, "untouched keys keep their default");
+        assert_eq!(s.panel_grid_place, GridPlace::Bottom);
+        assert_eq!(s.panel_strip_height, 260);
         assert_eq!(s.sections.get("histogram"), Some(&false));
         assert_eq!(s.view, SettingsView::Map);
         assert_eq!(s.timeline_unit, Some(SettingsTimelineUnit::Month));
@@ -444,6 +487,10 @@ mod tests {
             ("thumb_size", json!(null)),
             ("panel.grid_width", json!(0)),
             ("panel.details_width", json!(-5)),
+            ("panel.grid_shown", json!("no")),
+            ("panel.details_shown", json!(null)),
+            ("panel.grid_place", json!("right")),
+            ("panel.strip_height", json!(0)),
             ("sections", json!({ "histogram": "no" })),
             ("sections", json!(["histogram"])),
             ("view", json!("list")),

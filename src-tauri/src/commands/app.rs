@@ -7,6 +7,7 @@ use crate::handoff::Handoff;
 use crate::session::Session;
 use crate::{area, command};
 use owlbum_core::album::reopen;
+use owlbum_core::app::assoc::{self, Association};
 use owlbum_core::app::fatal::AppFatal;
 use owlbum_core::app::update::{self as update_rules, UpdateMessage, UpdateState};
 use owlbum_core::app::whats_new::{self, WhatsNewEntry};
@@ -26,6 +27,8 @@ area! {
     prefix: "app",
     commands: [
         app_about,
+        app_associate,
+        app_associate_status,
         app_cache_clear,
         app_cache_usage,
         app_capabilities,
@@ -383,6 +386,64 @@ command! {
     }
 }
 
+/// Whether Owlbum opens pictures, by the registry: off where it is not
+/// offered.
+fn association<R: Runtime>(app: &AppHandle<R>) -> Association {
+    match app.try_state::<crate::assoc::FileTypes>() {
+        Some(types) => Association {
+            available: true,
+            on: assoc::is_registered(types.registry.as_ref(), &types.exe),
+        },
+        None => Association {
+            available: false,
+            on: false,
+        },
+    }
+}
+
+command! {
+    /// Whether Owlbum is the program that opens pictures, for Settings
+    /// (docs/08-desktop-and-release.md, "Opening pictures"). Read from the
+    /// registry each time, so a change made outside Owlbum shows.
+    pub fn app_associate_status<R: Runtime>(; app: AppHandle<R>) -> Association {
+        Ok(association(&app))
+    }
+}
+
+command! {
+    /// Makes Owlbum a program that opens pictures for this user, then opens
+    /// Windows' Default apps page, where the user makes it the default
+    /// (Windows does not let a program do that itself); or, with `on`
+    /// false, removes the registration. Needs no administrator rights.
+    /// `internal` when the registry refused a change.
+    pub async fn app_associate<R: Runtime>(on: bool; app: AppHandle<R>) -> Association {
+        let Some(types) = app.try_state::<crate::assoc::FileTypes>().map(|t| t.inner().clone()) else {
+            return Ok(association(&app));
+        };
+        blocking(move || {
+            let reg = types.registry.as_ref();
+            let done = if on {
+                assoc::register(reg, &types.exe)
+            } else {
+                assoc::unregister(reg, &types.exe)
+            };
+            if let Err(e) = done {
+                tracing::warn!(target: "app", "associating pictures on={on}: {e}");
+                return Err(AppError::internal(text::appdata::ASSOCIATING)
+                    .with_details(serde_json::json!({ "cause": e })));
+            }
+            tracing::info!(target: "app", "associating pictures on={on} exe={}", types.exe.display());
+            if on {
+                // The page says what to do there; a page that did not open
+                // leaves the registration in place.
+                let _ = open_address(&app, assoc::DEFAULT_APPS);
+            }
+            Ok(association(&app))
+        })
+        .await
+    }
+}
+
 command! {
     /// The bytes the thumbnail cache holds and its limit, for Settings.
     pub fn app_cache_usage(; thumbs: State<'_, Thumbs>) -> CacheUsage {
@@ -512,8 +573,9 @@ command! {
             Ok(settings)
         })
         .await?;
-        // Help > Check automatically is the same setting.
-        crate::menu::updates_auto(&app, settings.updates_auto);
+        // Help > Check automatically and the View menu's panel items are
+        // the same settings.
+        crate::menu::follow_settings(&app, &settings);
         Ok(settings)
     }
 }
@@ -541,7 +603,11 @@ command! {
             let data = app.state::<AppData>();
             let settings = data.settings()?;
             let recent = data.recent()?;
-            let launch_folder = app.try_state::<Handoff>().and_then(|h| h.start());
+            let launch = app.try_state::<Handoff>().and_then(|h| h.start());
+            let (launch_folder, launch_photo) = match launch {
+                Some(open) => (Some(open.path), open.photo),
+                None => (None, None),
+            };
             let reopen = app::reopen(launch_folder.as_deref(), settings.reopen_last, &recent);
             let dev = crate::is_dev_build(cfg!(debug_assertions), &app.config().identifier);
             // What's new (docs/08, "What's new"): shown now and recorded
@@ -574,6 +640,7 @@ command! {
                 settings,
                 recent,
                 launch_folder,
+                launch_photo,
                 reopen,
             })
         })

@@ -63,6 +63,10 @@ tauri-plugin-opener = "2"
 drag = "2"
 uuid = { version = "1", features = ["v4"] }
 windows-sys = "0.61"
+# Owlbum as the program that opens pictures (docs/08-desktop-and-release.md,
+# "Opening pictures"): the current user's registry. The version Tauri
+# already depends on.
+windows-registry = "0.6"
 windows = "0.62"
 # Folder watching (docs/03-media-and-scanning.md, "Folder watching").
 # Without macOS FSEvents: Owlbum ships for Windows and Linux.

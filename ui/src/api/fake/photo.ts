@@ -109,6 +109,8 @@ export function fakeExif(): ExifField[] {
 export const photoHandlers: AreaHandlers<PhotoCommands> = {
   photo_detail: ({ id }) => fakeDetail(id),
   photo_exif: () => fakeExif(),
+  // A picture handed over by its path is not in the fake album.
+  photo_find: () => null,
   photo_histogram: () => fakeHistogram(),
   photo_set_info: ({ ids }) => ({ changed: ids, revision: 2 }),
   photo_nudge: ({ ids }) => ({ changed: ids, total: 55, revision: 2 }),

@@ -6,6 +6,7 @@ import type { AppClosing } from "./AppClosing";
 import type { AppFatal } from "./AppFatal";
 import type { AppMenu } from "./AppMenu";
 import type { AppVersion } from "./AppVersion";
+import type { Association } from "./Association";
 import type { CacheCleared } from "./CacheCleared";
 import type { CacheUsage } from "./CacheUsage";
 import type { Capabilities } from "./Capabilities";
@@ -23,6 +24,8 @@ import type { WhatsNewEntry } from "./WhatsNewEntry";
 
 export type AppCommands = {
   app_about: { args: Record<string, never>; result: About };
+  app_associate: { args: { on: boolean }; result: Association };
+  app_associate_status: { args: Record<string, never>; result: Association };
   app_cache_clear: { args: Record<string, never>; result: CacheCleared };
   app_cache_usage: { args: Record<string, never>; result: CacheUsage };
   app_capabilities: { args: Record<string, never>; result: Capabilities };

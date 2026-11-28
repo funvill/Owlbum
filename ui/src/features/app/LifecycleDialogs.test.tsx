@@ -43,6 +43,7 @@ function startup(extra: Partial<Startup>): Startup {
     settings: {} as Startup["settings"],
     recent: [],
     launch_folder: null,
+    launch_photo: null,
     reopen: null,
     show_update_notice: false,
     whats_new: [],

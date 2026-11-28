@@ -35,6 +35,12 @@ recent: Array<Recent>,
  */
 launch_folder: string | null, 
 /**
+ * The picture the launch named, when it named a file rather than a
+ * folder (Owlbum opening a picture from the file manager): it is
+ * selected and shown once its folder is open.
+ */
+launch_photo: string | null, 
+/**
  * The folder to reopen ([`reopen`]), when there is no launch folder.
  */
 reopen: string | null, 

@@ -43,6 +43,8 @@ export const KEY_IDS = [
   "browse.before",
   "browse.copy",
   "browse.trash",
+  "browse.toggle_grid",
+  "browse.toggle_details",
   "viewer.previous",
   "viewer.next",
   "viewer.first",

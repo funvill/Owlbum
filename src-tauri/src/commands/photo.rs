@@ -16,7 +16,7 @@ use tauri::{AppHandle, Manager, Runtime, State};
 
 area! {
     prefix: "photo",
-    commands: [photo_detail, photo_exif, photo_histogram, photo_set_info, photo_nudge, photo_score],
+    commands: [photo_detail, photo_exif, photo_find, photo_histogram, photo_set_info, photo_nudge, photo_score],
     events: [],
 }
 
@@ -34,6 +34,24 @@ command! {
                 d.tags = Some(t.photo_tags(open.album, id)?);
             }
             Ok(d)
+        })
+        .await
+    }
+}
+
+command! {
+    /// The photo whose file is `path` (a full path, as a launch that named
+    /// a picture hands over) in the open album: its id, or null when it is
+    /// not in the album or not scanned yet (docs/08-desktop-and-release.md,
+    /// "Opening pictures"). `no_album` when no album is open.
+    pub async fn photo_find<R: Runtime>(path: String; app: AppHandle<R>) -> Option<i64> {
+        let (scanner, _) = app.state::<Session>().queries()?;
+        off_main(text::photo::READING_DETAIL, move || {
+            let album = scanner.open().album;
+            let root = album.location().root.clone();
+            album
+                .db()
+                .read(|c| owlbum_core::album::reopen::photo_at(c, &root, std::path::Path::new(&path)))
         })
         .await
     }

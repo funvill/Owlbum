@@ -1,5 +1,6 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { api, toAppError } from "../../api";
+import type { Association } from "../../api/bindings/Association";
 import type { CacheUsage } from "../../api/bindings/CacheUsage";
 import type { SettingsPatch } from "../../api";
 import { Button, Checkbox, Dialog, RadioGroup, TextField, showToast } from "../../controls";
@@ -36,6 +37,44 @@ export function lastChecked(ms: number | null, now: Date = new Date()): string {
     year: "numeric",
   });
   return t.onDay(day, time);
+}
+
+/**
+ * Open pictures with Owlbum (docs/08-desktop-and-release.md, "Opening
+ * pictures"): read from the registry when the dialog opens; shown only
+ * where it is offered (Windows).
+ */
+function OpenPictures() {
+  const [state, setState] = useState<Association | null>(null);
+  const [busy, setBusy] = useState(false);
+  useEffect(() => {
+    api()
+      .invoke("app_associate_status")
+      .then(setState)
+      .catch(() => setState(null));
+  }, []);
+  if (state === null || !state.available) return null;
+  const change = async (on: boolean) => {
+    setBusy(true);
+    try {
+      const now = await api().invoke("app_associate", { on });
+      setState(now);
+      if (now.on) showToast({ kind: "info", message: t.openPicturesConfirm });
+    } catch (e) {
+      showToast({ kind: "error", message: t.couldNotKeep(toAppError(e).message) });
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <Checkbox
+      label={t.openPictures}
+      description={t.openPicturesNote}
+      checked={state.on}
+      disabled={busy}
+      onChange={(on) => void change(on)}
+    />
+  );
 }
 
 /** Saves a change; a refused one shows "Couldn't keep the setting: <reason>". */
@@ -197,6 +236,7 @@ function SettingsBody() {
           checked={settings.reopen_last}
           onChange={(on) => void save({ reopen_last: on })}
         />
+        <OpenPictures />
         <h4 className="ow-settings__subheading">{t.cache}</h4>
         <CacheControls key={settings["cache.limit_gb"]} limitGb={settings["cache.limit_gb"]} />
         <RadioGroup
@@ -216,6 +256,19 @@ function SettingsBody() {
               // What waits to be saved depends on the setting.
               if (ok) void refreshEditStatus();
             });
+          }}
+        />
+      </Section>
+      <Section title={t.view}>
+        <RadioGroup
+          label={t.gridPlace}
+          value={settings["panel.grid_place"]}
+          options={[
+            { value: "left", label: t.gridLeft },
+            { value: "bottom", label: t.gridBottom },
+          ]}
+          onChange={(v) => {
+            if (v === "left" || v === "bottom") void save({ "panel.grid_place": v, "panel.grid_shown": true });
           }}
         />
       </Section>

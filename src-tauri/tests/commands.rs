@@ -162,3 +162,98 @@ fn app_country_at_names_the_country_of_a_point() {
     .expect("app_country_at answers at sea");
     assert_eq!(reply.deserialize::<Option<String>>().unwrap(), None);
 }
+
+/// A registry hive in memory, so no test touches the real one.
+#[derive(Default)]
+struct MapRegistry {
+    keys: std::sync::Mutex<std::collections::BTreeMap<(String, String), String>>,
+}
+
+impl owlbum_core::app::assoc::Registry for MapRegistry {
+    fn set(&self, key: &str, name: &str, value: &str) -> Result<(), String> {
+        let mut keys = self.keys.lock().unwrap();
+        keys.insert((key.to_owned(), name.to_owned()), value.to_owned());
+        Ok(())
+    }
+    fn get(&self, key: &str, name: &str) -> Option<String> {
+        let keys = self.keys.lock().unwrap();
+        keys.get(&(key.to_owned(), name.to_owned())).cloned()
+    }
+    fn delete_value(&self, key: &str, name: &str) -> Result<(), String> {
+        let mut keys = self.keys.lock().unwrap();
+        keys.remove(&(key.to_owned(), name.to_owned()));
+        Ok(())
+    }
+    fn delete_tree(&self, key: &str) -> Result<(), String> {
+        let below = format!(r"{key}\");
+        let mut keys = self.keys.lock().unwrap();
+        keys.retain(|(k, _), _| k != key && !k.starts_with(&below));
+        Ok(())
+    }
+}
+
+#[test]
+fn opening_pictures_with_owlbum_registers_it_and_opens_default_apps() {
+    use owlbum_core::app::assoc::Association;
+    use std::sync::{Arc, Mutex};
+    use tauri::Manager;
+    let (_app, window) = app_window();
+    let status = |window: &tauri::WebviewWindow<tauri::test::MockRuntime>| -> Association {
+        invoke(window, "app_associate_status", serde_json::json!({}))
+            .unwrap()
+            .deserialize()
+            .unwrap()
+    };
+    // Not offered without a registry (Linux, for now).
+    assert_eq!(
+        status(&window),
+        Association {
+            available: false,
+            on: false
+        }
+    );
+
+    let registry = Arc::new(MapRegistry::default());
+    let opened = Arc::new(Mutex::new(Vec::<String>::new()));
+    let seen = Arc::clone(&opened);
+    let handle = window.app_handle();
+    handle.manage(owlbum_lib::commands::app::Browser(Arc::new(move |url| {
+        seen.lock().unwrap().push(url.to_owned());
+        Ok(())
+    })));
+    handle.manage(owlbum_lib::assoc::FileTypes {
+        registry: registry.clone(),
+        exe: std::path::PathBuf::from(r"C:\Owlbum\owlbum.exe"),
+    });
+    assert!(!status(&window).on);
+
+    let on: Association = invoke(&window, "app_associate", serde_json::json!({ "on": true }))
+        .unwrap()
+        .deserialize()
+        .unwrap();
+    assert_eq!(
+        on,
+        Association {
+            available: true,
+            on: true
+        }
+    );
+    assert!(status(&window).on);
+    assert_eq!(*opened.lock().unwrap(), ["ms-settings:defaultapps"]);
+    assert!(!registry.keys.lock().unwrap().is_empty());
+
+    let off: Association = invoke(&window, "app_associate", serde_json::json!({ "on": false }))
+        .unwrap()
+        .deserialize()
+        .unwrap();
+    assert!(!off.on);
+    assert!(
+        registry.keys.lock().unwrap().is_empty(),
+        "turning it off removes every entry"
+    );
+    assert_eq!(
+        opened.lock().unwrap().len(),
+        1,
+        "Default apps opens only to turn it on"
+    );
+}

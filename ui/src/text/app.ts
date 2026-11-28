@@ -13,6 +13,11 @@ export const settingsText = {
   close: "Close",
   general: "General",
   reopenLast: "Reopen the last album at start",
+  /** Owlbum as the program that opens pictures (issue 184). */
+  openPictures: "Open pictures with Owlbum",
+  openPicturesNote:
+    "Offers Owlbum for every kind of picture it can show. Windows then opens Default apps, where you choose Owlbum to make it the default.",
+  openPicturesConfirm: "Choose Owlbum in Default apps to finish.",
   cache: "Thumbnail cache",
   cacheLimit: "Cache limit in GB",
   cacheUses: (used: string) => `Uses ${used} of`,
@@ -30,6 +35,11 @@ export const settingsText = {
   editAlbumNote: "Done is the save. The photo file is never touched.",
   editFile: "Save edits into the photo file",
   editFileNote: "An edit waits as “not saved” until Save writes it into the file.",
+  /** Where the thumbnails sit (issue 185). */
+  view: "View",
+  gridPlace: "Thumbnails",
+  gridLeft: "At the left",
+  gridBottom: "Along the bottom, under the preview",
   maps: "Maps",
   mapsOnline: "Load maps from the internet",
   mapsNote: "Map pictures come from OpenStreetMap. Your photos and their locations are never sent.",

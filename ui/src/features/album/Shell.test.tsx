@@ -146,7 +146,7 @@ describe("opening a folder", () => {
   it("shows Opening… until album_open answers, then never the filter's empty text", async () => {
     const answer = deferred<{ status: AlbumStatus; session: null }>();
     const fake = await shell({ album_open: () => answer.promise });
-    act(() => fake.emit("open_folder", { path: "D:\\Photos\\Trip" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Photos\\Trip", photo: null }));
     expect(await screen.findByText(albumText.opening("Trip"))).toBeInTheDocument();
     expect(screen.queryByText(/No photos match/)).toBeNull();
     await act(async () => answer.resolve({ status: fakeStatus("D:\\Photos\\Trip"), session: null }));
@@ -156,7 +156,7 @@ describe("opening a folder", () => {
   it("goes from Looking for photos to No photos in this folder when the scan ends empty", async () => {
     let status = fakeStatus("D:\\Empty");
     const fake = await shell({ album_open: () => ({ status, session: null }), album_status: () => status });
-    act(() => fake.emit("open_folder", { path: "D:\\Empty" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Empty", photo: null }));
     await bodySays(albumText.lookingForPhotos);
     status = { ...status, scanning: false };
     act(() => fake.emit("scan_progress", progress({ phase: "idle", finished: true })));
@@ -170,7 +170,7 @@ describe("opening a folder", () => {
       album_open: () => ({ status, session: null }),
       album_status: () => status,
     });
-    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
     await bodySays(albumText.lookingForPhotos);
     expect(screen.queryByRole("search", { name: "Filter photos" })).toBeNull();
     status = { ...status, photos: 3 };
@@ -183,9 +183,9 @@ describe("opening a folder", () => {
 
   it("does nothing when the folder already open is opened again", async () => {
     const fake = await shell();
-    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
     await bodySays(albumText.lookingForPhotos);
-    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
     await act(async () => {});
     expect(opens(fake)).toHaveLength(1);
   });
@@ -196,8 +196,8 @@ describe("opening a folder", () => {
       album_open: ({ path }) =>
         path === "D:\\Old" ? first.promise : { status: fakeStatus(path, { photos: 2 }), session: null },
     });
-    act(() => fake.emit("open_folder", { path: "D:\\Old" }));
-    act(() => fake.emit("open_folder", { path: "D:\\New" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Old", photo: null }));
+    act(() => fake.emit("open_folder", { path: "D:\\New", photo: null }));
     await screen.findByRole("region", { name: albumText.photosRegion });
     await act(async () => first.resolve({ status: fakeStatus("D:\\Old"), session: null }));
     expect(useAlbumStore.getState().status?.folder).toBe("D:\\New");
@@ -207,7 +207,7 @@ describe("opening a folder", () => {
     const answer = deferred<{ status: AlbumStatus; session: null }>();
     const done = fakeStatus("D:\\Small", { scanning: false, photos: 0 });
     const fake = await shell({ album_open: () => answer.promise, album_status: () => done });
-    act(() => fake.emit("open_folder", { path: "D:\\Small" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Small", photo: null }));
     await screen.findByText(albumText.opening("Small"));
     act(() => fake.emit("scan_progress", progress({ phase: "idle", finished: true })));
     await act(async () => answer.resolve({ status: fakeStatus("D:\\Small"), session: null }));
@@ -238,7 +238,7 @@ describe("opening a folder", () => {
 
   it("closes the folder and shows the start screen", async () => {
     const fake = await shell();
-    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
     await userEvent.click(await screen.findByRole("button", { name: albumText.closeFolder }));
     expect(fake.calls.some((c) => c.command === "album_close")).toBe(true);
     expect(screen.getByRole("heading", { level: 1, name: albumText.startHeading })).toBeInTheDocument();
@@ -255,7 +255,7 @@ describe("the grid in the window", () => {
       ...album.handlers,
       album_open: () => ({ status: { ...fakeStatus("D:\\Trip"), photos: 2 }, session: null }),
     });
-    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
     const region = await screen.findByRole("region", { name: albumText.photosRegion });
     const grid = await within(region).findByRole("grid", { name: gridText.label });
     await waitFor(() => expect(within(grid).getAllByRole("gridcell")).toHaveLength(2));
@@ -263,6 +263,69 @@ describe("the grid in the window", () => {
 
     await userEvent.click(screen.getByRole("button", { name: albumText.closeFolder }));
     await waitFor(() => expect(useGridStore.getState().result).toBeNull());
+  });
+});
+
+describe("opening a picture (Owlbum opening pictures from the file manager)", () => {
+  const trip = () =>
+    createQueryFake([
+      { id: 1, rel_path: "a.jpg", date: "2024-01-01T00:00:01" },
+      { id: 2, rel_path: "b.jpg", date: "2024-01-01T00:00:02" },
+      { id: 3, rel_path: "c.jpg", date: "2024-01-01T00:00:03" },
+    ]);
+  const byPath: Record<string, number> = { "D:\\Trip\\b.jpg": 2, "D:\\Trip\\c.jpg": 3 };
+
+  it("opens the folder a launch named with the picture current, whatever the saved session said", async () => {
+    const album = trip();
+    await shell({
+      ...album.handlers,
+      app_startup: () => ({
+        ...defaultHandlers.app_startup({}),
+        launch_folder: "D:\\Trip",
+        launch_photo: "D:\\Trip\\b.jpg",
+      }),
+      album_open: () => ({
+        status: { ...fakeStatus("D:\\Trip"), photos: 3, scanning: false },
+        session: { view: "map", selected_id: 3, search: "beach" },
+      }),
+      photo_find: ({ path }) => byPath[path] ?? null,
+    });
+    await waitFor(() => expect(useGridStore.getState().current).toEqual({ id: 2, index: 1 }));
+    expect(useGridStore.getState().query.view).toBe("grid");
+    expect(useGridStore.getState().query.search).toBeNull();
+  });
+
+  it("shows the picture a second launch hands to the folder already open", async () => {
+    const album = trip();
+    const fake = await shell({
+      ...album.handlers,
+      album_open: () => ({ status: { ...fakeStatus("D:\\Trip"), photos: 3, scanning: false }, session: null }),
+      photo_find: ({ path }) => byPath[path] ?? null,
+    });
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
+    await waitFor(() => expect(useGridStore.getState().current?.id).toBe(1));
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: "D:\\Trip\\c.jpg" }));
+    await waitFor(() => expect(useGridStore.getState().current).toEqual({ id: 3, index: 2 }));
+    expect(opens(fake)).toHaveLength(1);
+    expect(useGridStore.getState().selection).toEqual([3]);
+  });
+
+  it("shows a picture the scan had not reached yet once it is found", async () => {
+    const album = trip();
+    let found = false;
+    let status = { ...fakeStatus("D:\\Trip"), photos: 3 };
+    const fake = await shell({
+      ...album.handlers,
+      album_open: () => ({ status, session: null }),
+      album_status: () => status,
+      photo_find: () => (found ? 3 : null),
+    });
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: "D:\\Trip\\c.jpg" }));
+    await waitFor(() => expect(useGridStore.getState().current?.id).toBe(1));
+    found = true;
+    status = { ...status, scanning: false };
+    act(() => fake.emit("scan_progress", progress({ phase: "idle", finished: true })));
+    await waitFor(() => expect(useGridStore.getState().current).toEqual({ id: 3, index: 2 }));
   });
 });
 
@@ -276,7 +339,7 @@ describe("the accessibility baseline", () => {
       ...album.handlers,
       album_open: () => ({ status: { ...fakeStatus("D:\\Trip"), photos: 2 }, session: null }),
     });
-    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
     const grid = await screen.findByRole("grid", { name: gridText.label });
     await waitFor(() => expect(within(grid).getAllByRole("gridcell")).toHaveLength(2));
     return grid;
@@ -359,7 +422,7 @@ describe("questions when opening", () => {
 
   it("asks about a stale lock with Open view-only focused, and Esc chooses it", async () => {
     const fake = await shell(asking(stale));
-    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByText(stale.message)).toBeInTheDocument();
     expect(within(dialog).getByRole("button", { name: albumText.openViewOnly })).toHaveFocus();
@@ -374,7 +437,7 @@ describe("questions when opening", () => {
 
   it("opens anyway by taking the lock", async () => {
     const fake = await shell(asking(stale));
-    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
     await userEvent.click(await screen.findByRole("button", { name: albumText.openAnyway }));
     expect(opens(fake).at(-1)).toMatchObject({ options: { take_lock: true } });
   });
@@ -384,13 +447,13 @@ describe("questions when opening", () => {
       backup_date: "2026-11-24",
     });
     const fake = await shell(asking(damaged));
-    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).getByRole("button", { name: albumText.cancel })).toHaveFocus();
     await userEvent.click(within(dialog).getByRole("button", { name: albumText.restoreBackup }));
     expect(opens(fake).at(-1)).toMatchObject({ options: { restore_backup: true } });
 
-    act(() => fake.emit("open_folder", { path: "D:\\Other" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Other", photo: null }));
     await userEvent.click(await screen.findByRole("button", { name: albumText.cancel }));
     expect(opens(fake)).toHaveLength(3);
     expect(screen.getByRole("heading", { level: 1, name: albumText.startHeading })).toBeInTheDocument();
@@ -398,7 +461,7 @@ describe("questions when opening", () => {
 
   it("has no Restore backup when there is none", async () => {
     const fake = await shell(asking(appError("album_damaged", "No backup.", { backup_date: null })));
-    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
     const dialog = await screen.findByRole("dialog");
     expect(within(dialog).queryByRole("button", { name: albumText.restoreBackup })).toBeNull();
     await userEvent.click(within(dialog).getByRole("button", { name: albumText.openViewOnly }));
@@ -444,7 +507,7 @@ describe("start-up", () => {
 describe("top bar and banners", () => {
   async function openWith(status: AlbumStatus, extra: Partial<FakeHandlers> = {}) {
     const fake = await shell(withStatus(status, extra));
-    act(() => fake.emit("open_folder", { path: status.folder }));
+    act(() => fake.emit("open_folder", { path: status.folder, photo: null }));
     await screen.findByRole("button", { name: albumText.closeFolder });
     return fake;
   }
@@ -499,7 +562,7 @@ describe("top bar and banners", () => {
   it("reads the status again when album_changed says it changed", async () => {
     let status = fakeStatus("D:\\Trip", { scanning: false });
     const fake = await shell({ album_open: () => ({ status, session: null }), album_status: () => status });
-    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
     await screen.findByRole("button", { name: albumText.closeFolder });
     status = { ...status, view_only: "locked", lock_host: "THERE" };
     act(() => fake.emit("album_changed", { revision: 1, reason: "status" }));
@@ -515,7 +578,7 @@ describe("top bar and banners", () => {
     expect(await screen.findByText(albumText.notWatching)).toBeInTheDocument();
     useToasts.setState({ toasts: [] });
     act(() => fake.emit("album_changed", { revision: 1, reason: "status" }));
-    act(() => fake.emit("open_folder", { path: "D:\\Other" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Other", photo: null }));
     await act(async () => {});
     expect(screen.queryByText(albumText.notWatching)).toBeNull();
   });
@@ -526,7 +589,7 @@ describe("reading bar", () => {
     vi.useFakeTimers({ shouldAdvanceTime: true });
     try {
       const fake = await shell(withStatus(fakeStatus("D:\\Trip", { scanning: false, photos: 4 })));
-      act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+      act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
       await screen.findByRole("region", { name: albumText.photosRegion });
       expect(screen.queryByRole("progressbar")).toBeNull();
 
@@ -550,7 +613,7 @@ describe("reading bar", () => {
 describe("the menu bar and the top bar's gear (docs/08-desktop-and-release.md)", () => {
   it("acts on the menu items that act in the page", async () => {
     const fake = await shell();
-    act(() => fake.emit("open_folder", { path: "D:\\Trip" }));
+    act(() => fake.emit("open_folder", { path: "D:\\Trip", photo: null }));
     await waitFor(() => expect(useAlbumStore.getState().status).not.toBeNull());
     act(() => fake.emit("app_menu", { item: "rescan" }));
     await waitFor(() => expect(fake.calls.some((c) => c.command === "album_rescan")).toBe(true));

@@ -9,6 +9,23 @@ the window's title shows the version that is running.
 
 ## [Unreleased]
 
+### Added
+
+- Owlbum can be the program that opens your pictures: Settings > Open
+  pictures with Owlbum offers it for every kind of picture it shows, then
+  opens Windows' Default apps, where you choose Owlbum. Turning it off
+  removes it again. No administrator rights are needed.
+- Opening a picture with Owlbum (double-click in File Explorer, or a
+  picture on the command line) opens its folder with that picture
+  selected and shown. With Owlbum already running, the picture goes to its
+  window.
+- The thumbnails and the details panel can each be hidden and shown again:
+  with the buttons at the preview's top right, with T and I, or from the
+  View menu. Owlbum remembers the choice.
+- The thumbnails can sit in a strip along the bottom, under the preview,
+  that scrolls sideways (View > Thumbnails at the bottom, or Settings >
+  View). Drag the line above the strip to make it taller or shorter.
+
 ## [0.1.4] - 2026-11-27
 
 ### Added

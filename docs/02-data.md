@@ -264,6 +264,9 @@ Settings keys (each has a default in code; an unknown key is ignored and kept). 
 |---|---|---|
 | `thumb_size` | 160 | Tile size in the grid, 96 to 320. |
 | `panel.grid_width`, `panel.details_width` | 420, 340 | Column widths. |
+| `panel.grid_shown`, `panel.details_shown` | true, true | Whether the thumbnails and the details panel are shown (docs/04, "Hiding and moving the panels"). |
+| `panel.grid_place` | `left` | Where the thumbnails sit: `left` (a column) or `bottom` (a strip under the preview that scrolls sideways). |
+| `panel.strip_height` | 200 | The bottom strip's height in pixels. |
 | `sections` | all open | Which details sections are folded. |
 | `view` | `grid` | `grid`, `timeline` or `map`. Used for an album with no saved session; a reopened album uses its session's view. |
 | `timeline_unit` | unset | `day` or `month`, once the user has picked one. |

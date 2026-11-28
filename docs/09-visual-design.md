@@ -369,7 +369,7 @@ Drawing rules:
 |---|---|
 | Carried over | `star`, `eye`, `eye-off`, `x`, `check`, `plus`, `folder`, `undo`, `redo`, `rotate-cw`, `crop`, `swap` (swap crop sides), `trash`, `copy`, `image`, `grid`, `download`, `alert`, `info`, `lock`, `sparkle` (tagging) |
 | Arrows | `chevron-up`, `chevron-down`, `chevron-left`, `chevron-right`, `arrow-up`, `arrow-down` (score nudge) |
-| New: browsing | `timeline`, `map`, `map-pin`, `stack`, `search`, `filter`, `sort`, `calendar`, `person`, `zoom-in`, `zoom-out`, `fit`, `details` (show or hide the details panel) |
+| New: browsing | `timeline`, `map`, `map-pin`, `stack`, `search`, `filter`, `sort`, `calendar`, `person`, `zoom-in`, `zoom-out`, `fit`, `details` (show or hide the details panel), `panel-left`, `panel-bottom` (show or hide the thumbnails, at the left or the bottom) |
 | New: video | `video` (a tile is a video), `play`, `pause`, `volume`, `volume-off` |
 | New: editing | `rotate-ccw`, `flip-h`, `flip-v`, `straighten`, `sliders` (light and colour), `reset` |
 | New: program | `star-filled`, `minus`, `settings` (a gear; the old program used a text character), `keyboard` (shortcut overlay), `rescan`, `tidy`, `close-album`, `warning` (a triangle with an exclamation mark, for banners; `alert` is a circle with one, for errors), `external` (opens outside Owlbum), `reveal` (show in file manager), `path` (copy path), `more` |
@@ -400,7 +400,9 @@ When the window narrows, space is taken in this order:
 
 Shrinking this way does not change the widths the user chose. When the window grows again the columns return to them. Dragging a splitter does change them, and a drag cannot push any column below its minimum.
 
-All three columns always show. With nothing selected (Ctrl+D) the details column stays in place, empty, as [Browsing](04-browsing.md#the-details-panel) says; the preview is never narrower than 300 px.
+All three columns show unless the user hides the thumbnails or the details panel (owner's feedback, #185, [Browsing](04-browsing.md#hiding-and-moving-the-panels)); a hidden column gives its room and its splitter to the preview. With nothing selected (Ctrl+D) the details column stays in place, empty, as [Browsing](04-browsing.md#the-details-panel) says; the preview is never narrower than 300 px.
+
+The thumbnails can also sit in a strip along the bottom of the window (`panel.grid_place` `bottom`): the strip is as wide as the window, 200 px tall by default, at least 120 px, and never so tall that the preview above it is under 200 px. Then the row above it holds only the preview and the details panel.
 
 ### The bars
 

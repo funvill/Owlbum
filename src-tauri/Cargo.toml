@@ -38,6 +38,8 @@ ts-rs.workspace = true
 [target.'cfg(windows)'.dependencies]
 clipboard-win.workspace = true
 drag.workspace = true
+windows-registry.workspace = true
+windows-sys = { workspace = true, features = ["Win32_UI_Shell"] }
 
 [dev-dependencies]
 image.workspace = true
